@@ -53,7 +53,9 @@ export function pickTab(tabs: ReadonlyArray<TabDef>, requested: string | undefin
 /** Tabs that are screens on the job page, plus the honest placeholders a pack may name. */
 export type JobTabValue =
   | JobTab | 'team' | 'rfis' | 'client-view' | 'equipment' | 'agreement' | 'parts' | 'warranty-claim'
-  | 'capital-stack' | 'bom' | 'tm-tickets' | 'receiving' | 'productivity';
+  | 'capital-stack' | 'bom' | 'tm-tickets' | 'receiving' | 'productivity'
+  | 'portal' | 'home' | 'change-events' | 'submittals' | 'meetings' | 'buyout' | 'closeout' | 'safety' | 'flooring-job'
+  | 'design-project' | 'development';
 
 export interface JobTabDef {
   value: JobTabValue;
@@ -91,7 +93,7 @@ export const TAB_KINDS: Readonly<Record<JobTabKind, KindSpec>> = {
   documents: { value: 'documents', label: () => 'Documents' },
   activity: { value: 'activity', label: () => 'Activity' },
   team: { value: 'team', label: () => 'People' },
-  rfis: { value: 'rfis', modules: ['rfis_submittals'], label: () => 'RFIs & submittals', later: true },
+  rfis: { value: 'rfis', label: () => 'RFIs' },
   client_view: { value: 'client-view', modules: ['client_approvals'], label: () => 'Client view', later: true },
   equipment: { value: 'equipment', label: () => 'Equipment', later: true },
   agreement: { value: 'agreement', label: () => 'Agreement', later: true },
@@ -99,9 +101,21 @@ export const TAB_KINDS: Readonly<Record<JobTabKind, KindSpec>> = {
   warranty_claim: { value: 'warranty-claim', label: () => 'Warranty claim', later: true },
   capital_stack: { value: 'capital-stack', modules: ['lender_draws'], label: () => 'Capital stack', later: true },
   bom: { value: 'bom', modules: ['production'], label: () => 'BOM & cut list', later: true },
-  tm_tickets: { value: 'tm-tickets', label: () => 'T&M tickets', later: true },
+  tm_tickets: { value: 'tm-tickets', label: () => 'T&M tickets' },
   receiving: { value: 'receiving', modules: ['commitments', 'procurement_markup'], label: () => 'Receiving', later: true },
-  productivity: { value: 'productivity', modules: ['budget', 'time'], label: () => 'Production', later: true },
+  productivity: { value: 'productivity', modules: ['budget', 'time'], label: () => 'Productivity' },
+  // Wave B job screens (1118–1122)
+  portal: { value: 'portal', label: () => 'Portal' },
+  home: { value: 'home', label: () => 'Home' },
+  change_events: { value: 'change-events', modules: ['change_orders'], label: () => 'Changes' },
+  submittals: { value: 'submittals', label: () => 'Submittals' },
+  meetings: { value: 'meetings', label: () => 'Meetings' },
+  buyout: { value: 'buyout', modules: ['commitments'], label: () => 'Buyout' },
+  closeout: { value: 'closeout', label: () => 'Closeout' },
+  safety: { value: 'safety', label: () => 'Safety & inspections' },
+  flooring_job: { value: 'flooring-job', label: () => 'Measure to install' },
+  design_project: { value: 'design-project', label: () => 'Rooms & items' },
+  development: { value: 'development', label: () => 'Pro forma & capital' },
 };
 
 const ALL_VALUES: ReadonlySet<string> = new Set(Object.values(TAB_KINDS).map((k) => k.value));

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Page, PageHead, count } from '@meritbooks/merit-ui';
+import { ButtonLink, Page, PageHead, count } from '@meritbooks/merit-ui';
 import { opsScope, has, jobRefs } from '@/lib/pm/ops/scope';
 import { loadProduction } from '@/lib/pm/ops/production-queries';
 import { shopLoad, weeksText } from '@/lib/pm/ops/shop-math';
@@ -42,7 +42,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: {
     <>
       <PageLine facts={[o.where, { label: `${count(open)} open orders`, strong: true }, ...(load.weeks != null ? [`${weeksText(load.weeks)} of shop backlog`] : []), ...(late ? [`${count(late)} late`] : [])]} />
       <Page>
-        <PageHead eyebrow={o.where} title="Production" />
+        <PageHead eyebrow={o.where} title="Production" actions={<>
+          <ButtonLink variant="quiet" href="/production/kiosk">Shop station</ButtonLink>
+          <ButtonLink variant="quiet" href="/production/backlog">Backlog</ButtonLink>
+          <ButtonLink variant="quiet" href="/production/cad">CAD imports</ButtonLink>
+          <ButtonLink variant="quiet" href="/production/materials">Material</ButtonLink>
+          <ButtonLink variant="quiet" href="/production/remakes">Remakes</ButtonLink>
+          <ButtonLink variant="quiet" href="/production/installs">Installs</ButtonLink>
+        </>} />
         <ProductionView
           orders={data.orders}
           load={data.load}

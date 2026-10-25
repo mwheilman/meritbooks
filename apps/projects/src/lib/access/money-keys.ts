@@ -200,6 +200,37 @@ export const MONEY_KEYS = {
     ],
     financials: ['unit_cost_cents', 'unitCostCents', 'cost_cents', 'costCents', 'margin_cents', 'marginCents', 'gm_pct'],
   },
+  /**
+   * Commercial depth (1120: cm_change_events, PCOs, RFQs, exposure). Owner-side figures (ROM
+   * revenue, PCO price, exposure with the owner) are contract; sub pricing and cost are cost;
+   * markup is a margin figure (both).
+   */
+  change_event: {
+    contract_value: [
+      'rom_revenue_cents', 'amount_cents', 'approved_cents', 'pending_cents', 'pending_over_30_cents', 'rejected_cents',
+      'unpriced_rom_cents', 'owner_co_without_sub_co_cents', 'markup_cents', 'romRevenueCents', 'amountCents',
+    ],
+    financials: ['rom_cost_cents', 'cost_cents', 'total_cents', 'markup_cents', 'sub_co_without_owner_co_cents', 'romCostCents', 'costCents'],
+  },
+  /** WIP schedule and EAC forecasts (1120 cm_v_wip, cm_eac_forecasts / lines). */
+  wip: {
+    contract_value: [
+      'contract_original_cents', 'approved_co_cents', 'contract_cents', 'billed_cents', 'pending_co_cents', 'backlog_cents',
+      'gp_cents',
+    ],
+    financials: [
+      'eac_cents', 'cost_to_date_cents', 'uninstalled_materials_cents', 'earned_cents', 'over_billed_cents', 'under_billed_cents',
+      'gp_cents', 'loss_provision_cents', 'total_budget_cents', 'total_actual_cents', 'total_ctc_cents', 'total_eac_cents',
+      'prior_eac_cents', 'budget_cents', 'committed_cents', 'actual_cents', 'pending_cents', 'ctc_cents',
+    ],
+  },
+  /** Sub pay applications (1120 cm_sub_pay_apps, 1118 portal_pay_apps): what the GC pays subs — cost. */
+  sub_pay_app: {
+    financials: [
+      'scheduled_value_cents', 'gross_this_period_cents', 'work_to_date_cents', 'retainage_this_period_cents', 'net_due_cents',
+      'gross_cents', 'retainage_cents', 'net_cents', 'this_period_cents',
+    ],
+  },
   /** Service agreements: the customer's contract price. */
   agreement: {
     contract_value: ['price_cents', 'priceCents'],

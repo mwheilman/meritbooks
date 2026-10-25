@@ -11,6 +11,7 @@
  * Then the SAME ai_decisions row is updated to APPROVED, and module switches are recorded
  * as pm.pack_overrides (RFC 6901 pointers) so a later re-plan keeps them.
  */
+import { seedIndustryDepth } from '@/lib/onboarding/seed';
 import { approveDecision } from '@/lib/ai/decisions';
 import { getMe } from '@/lib/pm/people';
 import { buildApplyPayload, buildPlan, PlanCompileError } from '@/lib/onboarding/plan';
@@ -84,6 +85,9 @@ export async function POST(req: Request) {
       const { error: ovErr } = await pm.from('pack_overrides').insert(rows);
       if (ovErr) console.warn('[onboarding/apply] pack_overrides insert failed', ovErr.message);
     }
+
+    // industry depth that comes with the pack (commercial templates, residential defaults). Best effort.
+    await seedIndustryDepth(ctx.db, plan.location_id, [plan.primary_pack.key, ...plan.addon_packs.map((x) => x.key)]);
 
     const res: ApplyResponse = { installId: installId as string, planHash: plan.plan_hash, decisionApproved, nextStep: 'bring_work' };
     return json(res);

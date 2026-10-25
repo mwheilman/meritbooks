@@ -18,6 +18,9 @@ const u16 = (b: Uint8Array, o: number) => b[o] | (b[o + 1] << 8);
 const u32 = (b: Uint8Array, o: number) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
 const utf8 = new TextDecoder('utf-8');
 
+/** A workbook has a few dozen parts; far more is a hostile archive (security review). */
+export const MAX_ZIP_ENTRIES = 2000;
+
 function readCentralDirectory(buf: Uint8Array): ZipEntry[] {
   if (buf.length < 22) return [];
   let eocd = -1;
@@ -28,6 +31,7 @@ function readCentralDirectory(buf: Uint8Array): ZipEntry[] {
   if (eocd < 0) return [];
   const cdOffset = u32(buf, eocd + 16);
   const total = u16(buf, eocd + 10);
+  if (total > MAX_ZIP_ENTRIES) return [];
   const entries: ZipEntry[] = [];
   let p = cdOffset;
   for (let n = 0; n < total && p + 46 <= buf.length; n++) {

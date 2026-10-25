@@ -21,6 +21,19 @@ import { JobTabsNav } from '@/components/job/JobTabsNav';
 import { OverviewTab, type OpenItem } from '@/components/job/OverviewTab';
 import { JobRail } from '@/components/job/JobRail';
 import { JobDocumentsPanel } from '@/components/job/JobDocumentsPanel';
+import { ButtonLink } from '@meritbooks/merit-ui';
+import { opsScope, jobRefs } from '@/lib/pm/ops/scope';
+import { loadChangeBoard, loadMeetings, loadRfis, loadSubmittals } from '@/lib/commercial/server';
+import { ChangeEventsView } from '@/components/commercial/ChangeEventsView';
+import { RfisView } from '@/components/commercial/RfisView';
+import { SubmittalsView } from '@/components/commercial/SubmittalsView';
+import { MeetingsView } from '@/components/commercial/MeetingsView';
+import { SiteRecords, type SiteLogRef, type TmTicketRef } from '@/components/commercial/SiteRecords';
+import { BuyoutTab, CloseoutTab, ProductivityTab, SafetyTab } from '@/components/job/tabs/CommercialTabs';
+import { PortalTab } from '@/components/job/tabs/PortalTab';
+import { FlooringJob } from '@/components/flooring/FlooringJob';
+import { DesignProject } from '@/components/design/DesignProject';
+import { DevProject } from '@/components/development/DevProject';
 import { JobActivity } from '@/components/job/JobActivity';
 import { headerFigures } from '@/components/job/header-figures';
 import { jobAttention } from '@/components/job/job-attention';
@@ -125,11 +138,17 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
     parts: ['projects.store:view'],
     'warranty-claim': ['projects.store:view'],
     receiving: ['projects.commitments:view'],
-    productivity: ['projects.financials:view'],
+    productivity: ['projects.jobs:view'],
+    'change-events': ['projects.change_orders:view'],
+    buyout: ['projects.financials:view'],
+    'design-project': ['projects.selections:view'],
+    development: ['projects.financials:view'],
+    portal: ['projects.jobs:view'],
   };
   // Money tabs also need the money their figures are made of: commitments are cost, billing and draws contract.
   const TAB_MONEY: Partial<Record<JobTabValue, boolean>> = {
-    commitments: mv.cost, receiving: mv.cost, billing: mv.contract, draws: mv.contract, 'capital-stack': mv.contract, productivity: mv.cost,
+    commitments: mv.cost, receiving: mv.cost, billing: mv.contract, draws: mv.contract, 'capital-stack': mv.contract, buyout: mv.cost,
+    development: mv.cost,
   };
   const resolved = resolveJobTabs({
     experience: experience?.experience,
@@ -265,6 +284,77 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
         {tie && <JobTieoutPanel load={tie} jobId={list.job_id} />}
       </>
     );
+  } else if (tab.value === 'change-events' || tab.value === 'rfis' || tab.value === 'submittals' || tab.value === 'meetings' || tab.value === 'tm-tickets') {
+    // The commercial screens (1120), narrowed to this job.
+    const o = await opsScope();
+    const jobs = o ? jobRefs(o, (id) => id === list.job_id) : [];
+    if (!o || jobs.length === 0) {
+      body = <LaterTab label={tab.label} what="This job is not in the companies in view. Switch to its company to work it here." />;
+    } else if (tab.value === 'change-events') {
+      const [board, vendors, commitments] = await Promise.all([
+        loadChangeBoard(db, [list.job_id], { contract: mv.contract, cost: mv.cost }),
+        mv.cost ? pm(db).from('v_core_vendors_masked').select('id, name, display_name').order('name').limit(500) : Promise.resolve({ data: [], error: null }),
+        mv.cost ? pm(db).from('commitments').select('id, number, vendor_id, job_id').eq('job_id', list.job_id).in('status', ['APPROVED', 'EXECUTED']).eq('commitment_type', 'SUBCONTRACT').limit(500) : Promise.resolve({ data: [], error: null }),
+      ]);
+      body = (
+        <ChangeEventsView
+          events={board.events} pcos={board.pcos} rfqs={board.rfqs} exposure={board.exposure} jobs={jobs} today={today}
+          vendors={((vendors.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((v) => ({ id: v.id, name: v.display_name || v.name }))}
+          commitments={((commitments.data ?? []) as Array<{ id: string; number: string | null; vendor_id: string | null; job_id: string }>).map((c) => ({ id: c.id, number: c.number, vendorId: c.vendor_id, jobId: c.job_id }))}
+        />
+      );
+    } else if (tab.value === 'rfis') {
+      body = <RfisView rfis={await loadRfis(db, [list.job_id])} jobs={jobs} today={today} initialId={null} />;
+    } else if (tab.value === 'submittals') {
+      body = <SubmittalsView submittals={await loadSubmittals(db, [list.job_id])} jobs={jobs} today={today} initialId={null} />;
+    } else if (tab.value === 'meetings') {
+      const { meetings, items } = await loadMeetings(db, [list.job_id]);
+      body = <MeetingsView meetings={meetings} items={items} jobs={jobs} today={today} initialId={null} />;
+    } else {
+      const [siteLogs, tickets] = await Promise.all([
+        pm(db).from('cm_daily_logs').select('id, job_id, log_date, status, signed_by_name, amended_count').eq('job_id', list.job_id).order('log_date', { ascending: false }).limit(60),
+        pm(db).from('cm_tm_tickets').select('id, job_id, number, work_date, description, status, signer_name, signed_at, disputed_reason, change_event_id, billed_request_id').eq('job_id', list.job_id).neq('status', 'VOID').order('work_date', { ascending: false }).limit(200),
+      ]);
+      body = <SiteRecords logs={(siteLogs.data ?? []) as SiteLogRef[]} tickets={(tickets.data ?? []) as TmTicketRef[]} jobs={jobs} today={today} initialTab="tm" initialItem={null} />;
+    }
+  } else if (tab.value === 'productivity') {
+    body = <ProductivityTab jobId={list.job_id} />;
+  } else if (tab.value === 'buyout') {
+    body = <BuyoutTab jobId={list.job_id} canSeed={may('projects.commitments:edit') && !scope.readOnly} />;
+  } else if (tab.value === 'closeout') {
+    body = <CloseoutTab jobId={list.job_id} canEdit={may('projects.jobs:edit') && !scope.readOnly} />;
+  } else if (tab.value === 'safety') {
+    body = <SafetyTab jobId={list.job_id} />;
+  } else if (tab.value === 'portal') {
+    const audiences = jobType.archetype === 'development' && modules.has('lender_draws') ? (['customer', 'vendor', 'lender', 'investor'] as const) : (['customer', 'vendor'] as const);
+    body = <PortalTab jobId={list.job_id} companyId={list.location_id} canEdit={may('projects.jobs:edit')} audiences={audiences} />;
+  } else if (tab.value === 'home') {
+    body = (
+      <div className="surface">
+        <p className="t-cap" style={{ marginBottom: 12 }}>The lot, plan and options, the purchase agreement, design-center decisions, the start package and the buyer walk live on the home’s own page.</p>
+        <span className="btn-row">
+          <ButtonLink variant="primary" href={`/homes/${list.job_id}`}>Open the home</ButtonLink>
+          <ButtonLink href={`/homes/${list.job_id}?tab=decisions`}>Design-center decisions</ButtonLink>
+        </span>
+      </div>
+    );
+  } else if (tab.value === 'flooring-job') {
+    body = <FlooringJob jobId={list.job_id} companyId={list.location_id} today={today} />;
+  } else if (tab.value === 'design-project') {
+    const [vres, cres] = await Promise.all([
+      pm(db).from('v_core_vendors_masked').select('id, name, display_name').eq('is_active', true).order('name').limit(500),
+      list.customer_id ? db.schema('core').from('contacts').select('id, first_name, last_name, email').eq('customer_id', list.customer_id).not('email', 'is', null).limit(20) : Promise.resolve({ data: [] }),
+    ]);
+    body = (
+      <DesignProject
+        jobId={list.job_id}
+        today={today}
+        vendors={((vres.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((v) => ({ id: v.id, name: v.display_name || v.name }))}
+        contacts={((cres.data ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; email: string | null }>).map((c) => ({ id: c.id, name: [c.first_name, c.last_name].filter(Boolean).join(' ') || (c.email ?? 'Contact') }))}
+      />
+    );
+  } else if (tab.value === 'development') {
+    body = <DevProject jobId={list.job_id} today={today} />;
   } else if (tab.value === 'documents') {
     body = <JobDocumentsPanel jobId={list.job_id} canDrawings={may('projects.documents:view')} />;
   } else if (tab.value === 'team') {

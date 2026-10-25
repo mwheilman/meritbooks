@@ -1,5 +1,6 @@
 'use client';
 
+import { PortalAccessPanel } from '@/components/portal/staff/PortalAccessPanel';
 import { useMemo, useState } from 'react';
 import {
   Button, Check, Field, InlineNotice, Input, KV, MoneyInput, Panel, PanelSection, QueueTable, Select, WidgetState, count, money, pct, shortDate,
@@ -122,6 +123,15 @@ export function DrawsView(p: DrawsViewProps) {
           )}
 
           <LoanBudget schedule={sched} lines={budgetLines} status={lines} revisions={revisions} today={p.today} />
+
+          {(() => {
+            const company = p.jobs.find((j) => j.id === sched.job_id)?.companyId ?? null;
+            return company ? (
+              <Section title="Lender portal" meta={`${sched.lender_name} reviews draws, inspections and documents in the portal`}>
+                <PortalAccessPanel key={sched.id} companyId={company} audience="lender" jobId={sched.job_id} />
+              </Section>
+            ) : null;
+          })()}
 
           {sched.status === 'ACTIVE' && (
             <Section title="Draws" meta={`${count(draws.filter((d) => d.status === 'FUNDED').length)} funded`}

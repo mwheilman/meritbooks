@@ -1,0 +1,4 @@
+Contract #,Cust #,Customer Name,Serial #,Date Out,Due In,Rate,Deposit,Status
+RC-2201,100231,Prairie Acres Farm,KBTKX040A9999,10/21/2026,10/28/2026,$385.00,$500.00,Out
+RC-2203,100260,City of Clive Parks,STH-AUG-0042,10/24/2026,10/25/2026,$95.00,$0.00,Out
+RC-2190,100245,Jeff Norgaard,KBTSVL75A20011,10/01/2026,10/03/2026,$410.00,$250.00,Overdue

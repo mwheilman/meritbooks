@@ -68,6 +68,8 @@ export interface FileRow {
   title: string;
   kind: DocKind;
   money_cap: MoneyCap | null;
+  /** 1118: portal audiences the document is shared with (pm.portal_share_document). */
+  portal_audiences?: Array<'customer' | 'vendor' | 'lender' | 'investor'> | null;
   description: string | null;
   tags: string[];
   subject_table: string | null;

@@ -1,0 +1,4 @@
+Job,PO #,Title,Performed By,Status,Total Cost,Paid,Bill Amount
+BT-1043,PO-1043-01,Cabinet package,Hawkeye Lumber Supply,Approved,"$18,450.00","$9,200.00","$9,200.00"
+BT-1043,PO-1043-02,Rough plumbing,Prairie Plumbing LLC,Released,"$4,800.00",$0.00,$0.00
+BT-1044,PO-1044-01,Electrical rough-in,Capitol Electric,Approved,"$5,600.00","$2,800.00","$2,800.00"

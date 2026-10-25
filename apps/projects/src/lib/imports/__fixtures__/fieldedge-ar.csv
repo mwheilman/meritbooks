@@ -1,0 +1,4 @@
+Invoice #,Customer Number,Customer Name,Invoice Date,Invoice Total,Balance Due
+FE-INV-301,FE-1002,Oak Hills HOA,9/1/2026,"$2,400.00","$2,400.00"
+FE-INV-305,FE-1001,Becky Lane,9/18/2026,$165.00,$65.00
+FE-INV-306,FE-1003,Mark Ito,9/22/2026,$420.00,$420.00

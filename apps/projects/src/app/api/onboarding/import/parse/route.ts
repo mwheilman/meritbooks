@@ -9,7 +9,7 @@
  * model sees the UNMAPPED header names + 5 sample rows and may answer only field-key-or-null.
  * Nothing is stored; the file never leaves this request.
  */
-import { inflateRawSync } from 'node:zlib';
+import { boundedInflate } from '@/lib/imports/inflate';
 import { FEATURE_IMPORT_MAP, runAiSafe } from '@/lib/ai/gateway';
 import { proposeDecision } from '@/lib/ai/decisions';
 import { MAP_SYSTEM, buildMapTool, mapPrompt, validateMapAnswer } from '@/lib/onboarding/import/ai-map';
@@ -22,7 +22,6 @@ import { denyUnless } from '@/lib/access/route-guard';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
-const inflate = (d: Uint8Array): Uint8Array => new Uint8Array(inflateRawSync(d));
 
 export async function POST(req: Request) {
   return withOnboarding(req, null, async (_body, ctx) => {
@@ -36,7 +35,7 @@ export async function POST(req: Request) {
     if (file.size > MAX_UPLOAD_BYTES) throw new RouteError(413, 'TOO_BIG', 'That file is over 4 MB. Export open jobs only, or split it, and drop it again.');
 
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const grid = gridFromUpload(file.name, file.type, bytes, inflate);
+    const grid = gridFromUpload(file.name, file.type, bytes, boundedInflate());
     if (!Array.isArray(grid)) throw new RouteError(422, 'UNREADABLE', grid.message);
     const table = tableFromGrid(grid, file.name);
     if (!table.ok) throw new RouteError(422, 'NO_ROWS', table.message);

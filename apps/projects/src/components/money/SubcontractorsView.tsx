@@ -1,5 +1,6 @@
 'use client';
 
+import { PortalAccessPanel } from '@/components/portal/staff/PortalAccessPanel';
 import { useState } from 'react';
 import Link from 'next/link';
 import {
@@ -21,7 +22,7 @@ export interface VendorRowView {
 
 type Band = 'attention' | 'expiring' | 'current';
 
-export function SubcontractorsView({ vendors, today }: { vendors: VendorRowView[]; today: string }) {
+export function SubcontractorsView({ vendors, today, companyId = null }: { vendors: VendorRowView[]; today: string; /** The company in view (portal invitations are per company). */ companyId?: string | null }) {
   const v = useVocab();
   const status = (r: VendorRowView) => {
     const marks = r.docs.map((d) => ({ d, mk: complianceMark(d, today) }));
@@ -100,6 +101,11 @@ export function SubcontractorsView({ vendors, today }: { vendors: VendorRowView[
                   </li>
                 ))}
               </ul>
+            </PanelSection>
+            <PanelSection title="Sub portal">
+              {companyId
+                ? <PortalAccessPanel key={cursor.id} companyId={companyId} audience="vendor" vendorId={cursor.id} />
+                : <p className="t-cap">Switch to one company to invite this vendor to its portal.</p>}
             </PanelSection>
           </Panel>
         )}

@@ -40,8 +40,9 @@ describe('modules → rail gating', () => {
     expect(hrefs({ modules: [], counts: { overdueTasks: 3 } })).toContain('/schedule');
   });
 
-  it('WIP needs Merit Books', () => {
-    expect(hrefs({ booksPresent: false })).not.toContain('/wip');
+  it('WIP is Projects-native (1120 computes it from job cost and billings), with or without Merit Books', () => {
+    expect(hrefs({ booksPresent: false })).toContain('/wip');
+    expect(hrefs({ booksPresent: true })).toContain('/wip');
   });
 
   it('workspace rail: Work and Insights; Compare only with more than one company', () => {

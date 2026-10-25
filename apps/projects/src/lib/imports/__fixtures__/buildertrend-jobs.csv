@@ -1,0 +1,4 @@
+Job Name,Job Number,Job Prefix,Owner Name,Owner Email,Owner Phone,Street Address,City,State,Zip,Job Group,Project Type,Contract Price,Projected Start,Projected Completion,Job Status,Project Manager,Billed To Date,Deposits Received
+Holt Kitchen Remodel,BT-1043,HOLT,Dana & Chris Holt,dana.holt@example.com,(515) 555-0141,418 Grand Ave,Des Moines,IA,50309,Remodel,Kitchen Remodel,"$86,450.00",3/4/2026,6/30/2026,Open,Alex Kim,"$43,225.00","$10,000.00"
+Reyes Basement Finish,BT-1044,REYES,Morgan Reyes,m.reyes@example.com,515-555-0177,92 Oak Ridge Dr,Ankeny,IA,50023,Remodel,Basement Finish,"$58,900.00",04/15/2026,08/01/2026,In Progress,Alex Kim,"$11,780.00",
+Lot 12 Custom Home,BT-0990,LOT12,Priya Nair,,,12 Prairie View,Ames,IA,50010,New Homes,Custom Home,"$612,000.00",2025-09-01,2026-12-15,Closed,Jamie Fox,"$612,000.00",

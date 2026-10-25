@@ -1,30 +1,37 @@
 'use client';
 
 import { useEffect, useState, type MutableRefObject } from 'react';
-import { Button, ButtonLink, Icon, InlineNotice, PageHead, Select, money, toast } from '@meritbooks/merit-ui';
-import type { CommitRowResult, CompanyBrief, ParseResponse } from '@/lib/onboarding/types';
-import { postForm, postJson } from './api';
+import { Button, ButtonLink, InlineNotice, PageHead, Select, count, money, toast } from '@meritbooks/merit-ui';
+import type { CompanyBrief } from '@/lib/onboarding/types';
+import { ENTITY_DEFS } from '@/lib/imports/fields';
+import { KIND_LABEL, OpeningPanel } from '@/components/imports/OpeningPanel';
+import { ImportProgressPill } from '@/components/imports/ImportProgressPill';
+import { SourcesPanel, type CommittedFile } from '@/components/imports/SourcesPanel';
+import type { OpeningKind } from '@/lib/imports/types';
+import { postJson } from './api';
 import type { CompanyFlow } from './flow';
-import { ImportReview } from './import-review';
 
 type AdoptState =
   | { kind: 'idle' } | { kind: 'busy' } | { kind: 'error'; message: string }
   | { kind: 'needs_rpc'; waiting: number } | { kind: 'done'; adopted: number; failed: number };
 
-/** Step 3 — "Bring your work": Books jobs · a file · a sample job · start fresh. */
-export function BringStep({ company, flow, onPatch, onContinue, primaryRef }: {
+/**
+ * Step 4 — "Where does your work live today?": jobs already in Books · your old system (logo tiles,
+ * one export at a time, imports keep running in the background) · a sample job · start fresh. What
+ * came in shows as cards; mid-stream work, agreements and units hand their opening balances to Books.
+ */
+export function BringStep({ company, flow, booksUrl, onPatch, onImported, onContinue, primaryRef }: {
   company: CompanyBrief;
   flow: CompanyFlow;
+  booksUrl: string;
   onPatch: (p: Partial<CompanyFlow>) => void;
+  onImported: (f: CommittedFile) => void;
   onContinue: () => void;
   primaryRef: MutableRefObject<(() => void) | null>;
 }) {
   const [adopt, setAdopt] = useState<AdoptState>({ kind: 'idle' });
   const [adoptType, setAdoptType] = useState('');
-  const [reviewing, setReviewing] = useState(false);
-  const [imported, setImported] = useState<number | null>(null);
-  const [fileBusy, setFileBusy] = useState(false);
-  const [fileError, setFileError] = useState<string | null>(null);
+  const [showSources, setShowSources] = useState(flow.imported.length > 0);
   const [sampleBusy, setSampleBusy] = useState(false);
   const [sampleError, setSampleError] = useState<string | null>(null);
   useEffect(() => { primaryRef.current = onContinue; });
@@ -43,19 +50,6 @@ export function BringStep({ company, flow, onPatch, onContinue, primaryRef }: {
     const first = r.data.results.find((x) => x.ok)?.jobId;
     if (first && !flow.firstJobId) onPatch({ firstJobId: first });
     if (r.data.adopted > 0) toast(`Brought over ${r.data.adopted} ${r.data.adopted === 1 ? 'job' : 'jobs'} from Merit Books`);
-  };
-
-  const parse = async (file: File) => {
-    setFileBusy(true);
-    setFileError(null);
-    const form = new FormData();
-    form.set('file', file);
-    form.set('companyId', company.id);
-    const r = await postForm<ParseResponse>('/api/onboarding/import/parse', form);
-    setFileBusy(false);
-    if (!r.ok) { setFileError(r.error); return; }
-    onPatch({ file: r.data });
-    setReviewing(true);
   };
 
   const loadSample = async () => {
@@ -77,20 +71,21 @@ export function BringStep({ company, flow, onPatch, onContinue, primaryRef }: {
     toast(r.data.cancelled > 0 ? 'Cancelled the sample job (Books already points at it)' : 'Removed the sample job');
   };
 
-  const onImported = (results: CommitRowResult[]) => {
-    const created = results.filter((r) => r.status === 'created');
-    setImported(created.length);
-    const first = created[0]?.jobId ?? null;
-    if (first && !flow.firstJobId) onPatch({ firstJobId: first });
+  const importedCount = flow.imported.reduce((a, f) => a + (f.result.counts.CREATED ?? 0) + (f.result.counts.MATCHED ?? 0), 0);
+  const openingKinds = [...new Set(flow.imported.map((f) => f.openingKind).filter((k): k is OpeningKind => k !== null))];
+  const imported = (f: CommittedFile) => {
+    onImported(f);
+    if (f.result.first_job_id && !flow.firstJobId) onPatch({ firstJobId: f.result.first_job_id });
   };
 
-  const anything = flow.sampleJobId || (imported ?? 0) > 0 || (adopt.kind === 'done' && adopt.adopted > 0);
+  const anything = flow.sampleJobId || importedCount > 0 || (adopt.kind === 'done' && adopt.adopted > 0);
 
   return (
     <>
-      <PageHead eyebrow={['Set up', company.name]} title="Bring your work">
-        <p className="ob-lede">{company.name} is set up. Now put real {jobsWord} in it. Pick any of these, or more than one.</p>
+      <PageHead eyebrow={['Set up', company.name]} title="Where does your work live today?">
+        <p className="ob-lede">{company.name} is set up. Now put real {jobsWord} in it. Pick any of these, or more than one. You can change this anytime.</p>
       </PageHead>
+      <div className="imp-head-row"><span className="sp" /><ImportProgressPill /></div>
 
       <div className="ob-bring">
         {/* (a) Jobs already in Books */}
@@ -126,22 +121,13 @@ export function BringStep({ company, flow, onPatch, onContinue, primaryRef }: {
           </div>
         </section>
 
-        {/* (b) Drop a file */}
-        <section className={`ob-card${(imported ?? 0) > 0 ? ' is-done' : ''}`} aria-labelledby="ob-b2">
-          <div className="ob-card-h"><h3 id="ob-b2">Drop a file</h3></div>
+        {/* (b) The old system */}
+        <section className={`ob-card${importedCount > 0 ? ' is-done' : ''}`} aria-labelledby="ob-b2">
+          <div className="ob-card-h"><h3 id="ob-b2">From your old system</h3></div>
           <div className="ob-card-b">
-            <p>A job list from Buildertrend, JobTread, simPRO, Innergy, RFMS or any spreadsheet. We match the columns; you check only the unsure ones.</p>
-            {imported !== null ? (
-              <p><b>{imported}</b> {imported === 1 ? 'job' : 'jobs'} brought in.</p>
-            ) : flow.file && !reviewing ? (
-              <div className="act"><Button variant="primary" onClick={() => setReviewing(true)}>Use {flow.file.fileName}</Button></div>
-            ) : null}
-            <label className="ob-drop" style={{ marginTop: 'auto' }}>
-              <input type="file" accept=".csv,.xlsx,.xlsm,.txt,.tsv" aria-label="Choose a job list" onChange={(e) => { const f = e.currentTarget.files?.[0]; if (f) void parse(f); }} />
-              <Icon name="upload" />
-              <span className="l1">{fileBusy ? 'Reading the file…' : flow.file ? 'Choose another file' : 'Choose or drop a file'}</span>
-            </label>
-            {fileError && <InlineNotice tone="neg" title={fileError} />}
+            <p>Buildertrend, JobTread, CoConstruct, ServiceTitan, FieldEdge, simPRO, Housecall Pro, Jobber, c-Systems, Procore, QuickBooks or any spreadsheet. Customers are matched to the ones you have; jobs under way keep their numbers.</p>
+            {importedCount > 0 && <p><b className="tnum">{count(importedCount)}</b> records brought in.</p>}
+            <div className="act"><Button variant="primary" onClick={() => setShowSources(true)}>{showSources ? 'Pick below' : 'Pick your old system'}</Button></div>
           </div>
         </section>
 
@@ -178,14 +164,31 @@ export function BringStep({ company, flow, onPatch, onContinue, primaryRef }: {
         </section>
       </div>
 
-      {reviewing && flow.file && imported === null && (
-        <ImportReview
-          companyId={company.id}
-          file={flow.file}
-          jobTypes={flow.jobTypes}
-          onDone={onImported}
-          onCancel={() => { setReviewing(false); onPatch({ file: null }); }}
-        />
+      {showSources && (
+        <div id="imp-sources" style={{ marginTop: 24 }}>
+          <SourcesPanel companyId={company.id} booksUrl={booksUrl} onCommitted={imported} />
+        </div>
+      )}
+
+      {flow.imported.length > 0 && (
+        <div className="imp-whatcame" aria-label="What came in">
+          {flow.imported.map((f) => (
+            <section key={f.result.batch_id} className="ob-card">
+              <div className="ob-card-h"><h3>{ENTITY_DEFS[f.entity].label}</h3></div>
+              <div className="ob-card-b">
+                <span className="ob-big">{count((f.result.counts.CREATED ?? 0) + (f.result.counts.MATCHED ?? 0) + (f.result.counts.REFERENCE ?? 0) + (f.result.counts.FACT ?? 0) + (f.result.counts.ROSTER ?? 0))}</span>
+                <span className="t-cap">{f.fileName}{(f.result.counts.MATCHED ?? 0) > 0 ? ` · ${count(f.result.counts.MATCHED ?? 0)} matched to existing` : ''}{(f.result.counts.ERROR ?? 0) > 0 ? ` · ${count(f.result.counts.ERROR ?? 0)} need a look` : ''}</span>
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+
+      {openingKinds.length > 0 && (
+        <div className="ob-stack" style={{ marginTop: 24 }} aria-label="Opening balances for Merit Books">
+          {openingKinds.map((k) => <OpeningPanel key={k} companyId={company.id} kind={k} booksUrl={booksUrl} />)}
+          <p className="t-cap">{openingKinds.map((k) => KIND_LABEL[k]).join(' · ')}: Merit Books records these opening balances through its own import. Projects never posts to the ledger.</p>
+        </div>
       )}
 
       <div className="ob-foot">

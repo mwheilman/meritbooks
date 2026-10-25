@@ -55,7 +55,7 @@ export default async function StockPage({ searchParams }: { searchParams: { unit
         ]}
       />
       <Page>
-        <PageHead eyebrow={o.where} title="Stock" actions={<ButtonLink variant="quiet" href="/stock/settings">Store settings</ButtonLink>} />
+        <PageHead eyebrow={o.where} title="Stock" actions={<><ButtonLink variant="quiet" href="/stock/kpis">Scorecard</ButtonLink><ButtonLink variant="quiet" href="/stock/programs">Programs</ButtonLink><ButtonLink variant="quiet" href="/stock/settings">Store settings</ButtonLink></>} />
         <StockView
           units={list.units}
           vendors={list.vendors}

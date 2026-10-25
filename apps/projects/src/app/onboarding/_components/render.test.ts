@@ -13,6 +13,13 @@ import { DescribeStep } from './describe-step';
 import { WorkspaceStep } from './workspace-step';
 import { BringStep } from './bring-step';
 import { TeamStep } from './team-step';
+import { FirstJobStep } from './first-job-step';
+import { MoneyStep } from './money-step';
+import { CrewStep } from './crew-step';
+import { GoLiveStep } from './go-live-step';
+import { FileImport } from '@/components/imports/FileImport';
+import { OpeningPanel } from '@/components/imports/OpeningPanel';
+import { SourcesPanel } from '@/components/imports/SourcesPanel';
 import { SelectStep } from './select-step';
 import { ImportReview } from './import-review';
 import type { CompanyFlow } from './flow';
@@ -50,7 +57,7 @@ const flow: CompanyFlow = {
   step: 'preview', description: 'We install and service furnaces and AC, 12 trucks', tile: null, file: null,
   classification: cls, plan: inputs, preview,
   jobTypes: preview.jobTypes.map((j) => ({ key: j.key, label: j.label, archetype: j.archetype })),
-  sampleJobId: null, firstJobId: null,
+  sampleJobId: null, firstJobId: null, imported: [],
 };
 
 const file: ParseResponse = {
@@ -100,7 +107,8 @@ describe('onboarding steps render', () => {
     expect(html).toContain('Nothing is deleted');
   });
   it('bring work and import review', () => {
-    ok(renderToString(h(BringStep, { company, flow: { ...flow, step: 'bring_work', file }, onPatch: noop, onContinue: noop, primaryRef: ref })));
+    const brought = ok(renderToString(h(BringStep, { company, flow: { ...flow, step: 'bring_work', file }, booksUrl: 'https://books', onPatch: noop, onImported: noop, onContinue: noop, primaryRef: ref })));
+    expect(brought).toContain('Where does your work live today?');
     const html = ok(renderToString(h(ImportReview, { companyId: LOC, file, jobTypes: flow.jobTypes, onDone: noop, onCancel: noop })));
     expect(html).toContain('14,850.00');
     expect(html).toContain('1 finished or cancelled left out');
@@ -108,5 +116,15 @@ describe('onboarding steps render', () => {
   it('team (empty and listed)', () => {
     ok(renderToString(h(TeamStep, { company, team: [], booksTeamUrl: 'https://books/team', busy: false, error: null, onFinish: noop, onBack: noop, primaryRef: ref })));
     ok(renderToString(h(TeamStep, { company, team: [{ id: '1', name: 'Dana Lee', title: 'PM', email: 'd@x.co', role: 'business_user' }], booksTeamUrl: 'https://books/team', busy: false, error: null, onFinish: noop, onBack: noop, primaryRef: ref })));
+  });
+  it('steps 6–9 and the import components render their first state', () => {
+    ok(renderToString(h(FirstJobStep, { company, flow: { ...flow, step: 'first_job' }, imported: [], onPatch: noop, onContinue: noop, onBack: noop, primaryRef: ref })));
+    expect(ok(renderToString(h(MoneyStep, { company, firstJobId: null, booksUrl: 'https://books', onContinue: noop, onBack: noop, primaryRef: ref })))).toContain('Pick or add a job first');
+    ok(renderToString(h(MoneyStep, { company, firstJobId: LOC, booksUrl: 'https://books', onContinue: noop, onBack: noop, primaryRef: ref })));
+    ok(renderToString(h(CrewStep, { company, booksTeamUrl: 'https://books/team', busy: false, error: null, onFinish: noop, onBack: noop, primaryRef: ref })));
+    expect(ok(renderToString(h(GoLiveStep, { company, busy: false, error: null, onFinish: noop, onBack: noop, primaryRef: ref })))).toContain('Go live');
+    expect(ok(renderToString(h(FileImport, { companyId: LOC, source: 'SERVICETITAN', entity: 'agreement', label: 'Memberships' })))).toContain('Drop the memberships export');
+    ok(renderToString(h(OpeningPanel, { companyId: LOC, kind: 'JOB_WIP', booksUrl: 'https://books' })));
+    expect(renderToString(h(SourcesPanel, { companyId: LOC, booksUrl: 'https://books' }))).toContain('Loading the tools we read');
   });
 });

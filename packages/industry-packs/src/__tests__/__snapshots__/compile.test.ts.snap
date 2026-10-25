@@ -559,10 +559,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           },
           {
             "label": "Changes",
-            "tab": "change_orders",
+            "tab": "change_events",
           },
           {
-            "label": "RFIs & submittals",
+            "label": "RFIs",
             "tab": "rfis",
           },
           {
@@ -570,16 +570,40 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
             "tab": "billing",
           },
           {
+            "label": null,
+            "tab": "submittals",
+          },
+          {
             "label": "Daily reports",
             "tab": "logs",
+          },
+          {
+            "label": null,
+            "tab": "meetings",
+          },
+          {
+            "label": null,
+            "tab": "buyout",
+          },
+          {
+            "label": null,
+            "tab": "closeout",
+          },
+          {
+            "label": "Directory",
+            "tab": "team",
+          },
+          {
+            "label": "Safety & inspections",
+            "tab": "safety",
           },
           {
             "label": null,
             "tab": "documents",
           },
           {
-            "label": "Directory",
-            "tab": "team",
+            "label": "Owner portal",
+            "tab": "portal",
           },
         ],
       },
@@ -596,7 +620,11 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           },
           {
             "label": "Changes",
-            "tab": "change_orders",
+            "tab": "change_events",
+          },
+          {
+            "label": "T&M tickets",
+            "tab": "tm_tickets",
           },
           {
             "label": null,
@@ -663,6 +691,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
+          "item": "compliance",
+          "label": null,
+        },
+        {
           "item": "customers",
           "label": null,
         },
@@ -672,6 +704,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
         },
         {
           "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "portals",
           "label": null,
         },
         {
@@ -723,6 +759,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
+          "item": "wip",
+          "label": null,
+        },
+        {
           "item": "margin",
           "label": "Insights",
         },
@@ -731,7 +771,7 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
-          "item": "wip",
+          "item": "compliance",
           "label": null,
         },
         {
@@ -761,12 +801,24 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
-          "item": "change_orders",
+          "item": "change_events",
           "label": "Change events",
+        },
+        {
+          "item": "rfis",
+          "label": null,
+        },
+        {
+          "item": "submittals",
+          "label": null,
         },
         {
           "item": "billing",
           "label": "Pay apps",
+        },
+        {
+          "item": "meetings",
+          "label": null,
         },
         {
           "item": "documents",
@@ -826,6 +878,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
         },
         {
           "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "rfis",
           "label": null,
         },
         {
@@ -1265,7 +1321,7 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
     "self_perform": false,
     "uses_retainage": true,
   },
-  "plan_hash": "4be548f6d96983f69d58edb54a3564d3860dc41d6ea07599408758f4ba2b9a5e",
+  "plan_hash": "78db63400a6e2dd7e363406b7453169a18506bb525cf6fb9d3f7a6ab5da74092",
   "price_book": [],
   "primary_pack": {
     "key": "commercial_gc",
@@ -2126,6 +2182,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "label": "Service",
         },
         {
+          "item": "tech_board",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -2139,7 +2199,15 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
         },
         {
           "item": "parts",
-          "label": "Parts counter",
+          "label": "Parts",
+        },
+        {
+          "item": "parts_counter",
+          "label": null,
+        },
+        {
+          "item": "price_files",
+          "label": null,
         },
         {
           "item": "rentals",
@@ -2147,6 +2215,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
         },
         {
           "item": "warranty",
+          "label": null,
+        },
+        {
+          "item": "warranty_deadlines",
           "label": null,
         },
         {
@@ -2198,6 +2270,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "label": null,
         },
         {
+          "item": "store_scorecard",
+          "label": null,
+        },
+        {
           "item": "work_orders",
           "label": "Service",
         },
@@ -2224,6 +2300,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "label": "Service",
         },
         {
+          "item": "tech_board",
+          "label": null,
+        },
+        {
           "item": "my_jobs",
           "label": null,
         },
@@ -2232,15 +2312,27 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "label": "Units",
         },
         {
-          "item": "parts",
-          "label": "Parts counter",
+          "item": "parts_counter",
+          "label": null,
         },
         {
           "item": "warranty",
           "label": null,
         },
         {
+          "item": "warranty_deadlines",
+          "label": null,
+        },
+        {
           "item": "rentals",
+          "label": null,
+        },
+        {
+          "item": "programs",
+          "label": null,
+        },
+        {
+          "item": "store_scorecard",
           "label": null,
         },
         {
@@ -2273,6 +2365,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "item": "deals",
           "label": null,
         },
+        {
+          "item": "programs",
+          "label": null,
+        },
       ],
       "supervisor": [
         {
@@ -2282,6 +2378,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
         {
           "item": "work_orders",
           "label": "Service board",
+        },
+        {
+          "item": "tech_board",
+          "label": null,
         },
         {
           "item": "my_jobs",
@@ -2772,7 +2872,7 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
     "uses_retainage": false,
     "warranty_labor_rate_cents": 9500,
   },
-  "plan_hash": "73d7d63326631d2b88cc913a8ea70bb4a9114a31a4af38847b6c078e2e37195a",
+  "plan_hash": "5c4e8d94b2c10e5f38b7715a20b4cba68ee6576a3f325727ccccec52cb20bccf",
   "price_book": [
     {
       "code": "OP-DIAG",
@@ -5437,8 +5537,8 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
             "tab": "overview",
           },
           {
-            "label": "Measure & diagram",
-            "tab": "selections",
+            "label": "Measure to install",
+            "tab": "flooring_job",
           },
           {
             "label": "Quote",
@@ -5459,6 +5559,14 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           {
             "label": "Callbacks",
             "tab": "punch",
+          },
+          {
+            "label": "Selections",
+            "tab": "selections",
+          },
+          {
+            "label": "Customer portal",
+            "tab": "portal",
           },
         ],
       },
@@ -5497,6 +5605,10 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           "label": null,
         },
         {
+          "item": "flooring",
+          "label": null,
+        },
+        {
           "item": "selections",
           "label": "Measures",
         },
@@ -5514,6 +5626,14 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
         },
         {
           "item": "work_orders",
+          "label": "Install tickets",
+        },
+        {
+          "item": "flooring_rolls",
+          "label": null,
+        },
+        {
+          "item": "flooring_catalog",
           "label": null,
         },
         {
@@ -5565,6 +5685,10 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           "label": null,
         },
         {
+          "item": "flooring",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -5591,12 +5715,12 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           "label": null,
         },
         {
-          "item": "leads",
+          "item": "flooring",
           "label": null,
         },
         {
-          "item": "selections",
-          "label": "Measures",
+          "item": "leads",
+          "label": null,
         },
         {
           "item": "estimates",
@@ -5611,8 +5735,16 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           "label": "Install schedule",
         },
         {
+          "item": "flooring_rolls",
+          "label": null,
+        },
+        {
           "item": "commitments",
           "label": "Special orders",
+        },
+        {
+          "item": "flooring_pay",
+          "label": null,
         },
         {
           "item": "work_orders",
@@ -5637,11 +5769,15 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
           "label": null,
         },
         {
-          "item": "selections",
-          "label": "Measures",
+          "item": "flooring",
+          "label": null,
         },
         {
           "item": "estimates",
+          "label": null,
+        },
+        {
+          "item": "flooring_catalog",
           "label": null,
         },
         {
@@ -5668,6 +5804,10 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
         },
         {
           "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "flooring_rolls",
           "label": null,
         },
         {
@@ -5998,7 +6138,7 @@ exports[`compilePlan(flooring, defaults) > matches the golden snapshot 1`] = `
     "tracks_roll_inventory": true,
     "uses_retainage": false,
   },
-  "plan_hash": "128fdc8d84aa8dd70a0eeb809cedf38d0b77f6bc8f951ea2c7683b3ca40a0e6f",
+  "plan_hash": "79570915febf71725d0ede10df27ad2a5e50036b8935beb738957316df2fb2ea",
   "price_book": [
     {
       "code": "L-CPT",
@@ -6753,6 +6893,10 @@ exports[`compilePlan(general, defaults) > matches the golden snapshot 1`] = `
             "label": "Files",
             "tab": "documents",
           },
+          {
+            "label": "Client portal",
+            "tab": "portal",
+          },
         ],
       },
     },
@@ -7230,7 +7374,7 @@ exports[`compilePlan(general, defaults) > matches the golden snapshot 1`] = `
   "params": {
     "uses_retainage": false,
   },
-  "plan_hash": "ad763f61dc9c5d73c49b6b22f7e5e8a37bce653764eef239b1bda9e7c800969a",
+  "plan_hash": "f8569ee6ebd4eb297bade46cb819d94dadf4aa24573630a566ab8bf7362df1b3",
   "price_book": [],
   "primary_pack": {
     "key": "general",
@@ -8029,6 +8173,10 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           },
           {
             "label": null,
+            "tab": "home",
+          },
+          {
+            "label": null,
             "tab": "schedule",
           },
           {
@@ -8059,6 +8207,10 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
             "label": null,
             "tab": "documents",
           },
+          {
+            "label": "Buyer portal",
+            "tab": "portal",
+          },
         ],
       },
       "spec_home": {
@@ -8067,6 +8219,10 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           {
             "label": null,
             "tab": "overview",
+          },
+          {
+            "label": null,
+            "tab": "home",
           },
           {
             "label": null,
@@ -8137,11 +8293,15 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
-          "item": "jobs",
+          "item": "homes",
           "label": null,
         },
         {
-          "item": "units",
+          "item": "communities",
+          "label": null,
+        },
+        {
+          "item": "jobs",
           "label": null,
         },
         {
@@ -8165,7 +8325,7 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
-          "item": "documents",
+          "item": "portals",
           "label": null,
         },
         {
@@ -8205,11 +8365,11 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
-          "item": "jobs",
+          "item": "homes",
           "label": null,
         },
         {
-          "item": "units",
+          "item": "communities",
           "label": null,
         },
         {
@@ -8239,6 +8399,10 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
+          "item": "homes",
+          "label": null,
+        },
+        {
           "item": "my_jobs",
           "label": null,
         },
@@ -8263,7 +8427,7 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": "Warranty",
         },
         {
-          "item": "units",
+          "item": "communities",
           "label": null,
         },
         {
@@ -8285,15 +8449,19 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
+          "item": "homes",
+          "label": null,
+        },
+        {
+          "item": "communities",
+          "label": null,
+        },
+        {
+          "item": "proposals",
+          "label": null,
+        },
+        {
           "item": "customers",
-          "label": null,
-        },
-        {
-          "item": "estimates",
-          "label": null,
-        },
-        {
-          "item": "my_jobs",
           "label": null,
         },
       ],
@@ -8697,7 +8865,7 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
     "uses_retainage": false,
     "warranty_program": "one_year",
   },
-  "plan_hash": "e929a9fe2b79ff3de136f3cd7868c280437ce528b9af3942d511b9f4d1cdcea5",
+  "plan_hash": "bde6a733ae390d5e53d52b796e32016b899e36a5941378998fb1c234529cfebe",
   "price_book": [],
   "primary_pack": {
     "key": "home_builder",
@@ -9544,7 +9712,7 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
           },
           {
             "label": "Rooms & items",
-            "tab": "selections",
+            "tab": "design_project",
           },
           {
             "label": null,
@@ -9567,17 +9735,21 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
             "tab": "billing",
           },
           {
-            "label": null,
-            "tab": "client_view",
+            "label": "Client view",
+            "tab": "portal",
+          },
+          {
+            "label": "Selections",
+            "tab": "selections",
           },
         ],
       },
       "procurement_order": {
-        "default_tab": "selections",
+        "default_tab": "design_project",
         "tabs": [
           {
-            "label": null,
-            "tab": "selections",
+            "label": "Items",
+            "tab": "design_project",
           },
           {
             "label": null,
@@ -9631,6 +9803,14 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
           "label": null,
         },
         {
+          "item": "design",
+          "label": null,
+        },
+        {
+          "item": "design_inbox",
+          "label": null,
+        },
+        {
           "item": "leads",
           "label": null,
         },
@@ -9660,6 +9840,10 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "time",
+          "label": null,
+        },
+        {
+          "item": "portals",
           "label": null,
         },
         {
@@ -9699,6 +9883,10 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
           "label": null,
         },
         {
+          "item": "design",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -9722,6 +9910,14 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
       "pm": [
         {
           "item": "home",
+          "label": null,
+        },
+        {
+          "item": "design",
+          "label": null,
+        },
+        {
+          "item": "design_inbox",
           "label": null,
         },
         {
@@ -9790,6 +9986,10 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "my_jobs",
+          "label": null,
+        },
+        {
+          "item": "design",
           "label": null,
         },
         {
@@ -10157,7 +10357,7 @@ exports[`compilePlan(interior_design, defaults) > matches the golden snapshot 1`
     "product_markup_pct": 0.35,
     "uses_retainage": false,
   },
-  "plan_hash": "7df0af244d501dff4f3490f42200b010adc0bbb5f5715594450f656df95f7da3",
+  "plan_hash": "3370b1030c7ac25fc4402a49f85599e41713d55ebc00af0b333c17b1101ccf45",
   "price_book": [
     {
       "code": "RATE-PRIN",
@@ -11109,12 +11309,20 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "cad_imports",
+          "label": null,
+        },
+        {
+          "item": "materials",
+          "label": null,
+        },
+        {
           "item": "commitments",
           "label": "Purchasing",
         },
         {
-          "item": "schedule",
-          "label": "Shipping & install",
+          "item": "installs",
+          "label": null,
         },
         {
           "item": "billing",
@@ -11169,16 +11377,16 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "shop_backlog",
+          "label": null,
+        },
+        {
           "item": "leads",
           "label": "Pipeline",
         },
         {
           "item": "margin",
           "label": "Insights",
-        },
-        {
-          "item": "backlog",
-          "label": null,
         },
         {
           "item": "settings",
@@ -11203,12 +11411,28 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "shop_backlog",
+          "label": null,
+        },
+        {
+          "item": "cad_imports",
+          "label": null,
+        },
+        {
+          "item": "materials",
+          "label": null,
+        },
+        {
           "item": "commitments",
           "label": "Purchasing",
         },
         {
-          "item": "schedule",
-          "label": "Shipping & install",
+          "item": "installs",
+          "label": null,
+        },
+        {
+          "item": "remakes",
+          "label": null,
         },
         {
           "item": "change_orders",
@@ -11255,7 +11479,19 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "station",
+          "label": null,
+        },
+        {
           "item": "production",
+          "label": null,
+        },
+        {
+          "item": "remakes",
+          "label": null,
+        },
+        {
+          "item": "installs",
           "label": null,
         },
         {
@@ -11263,15 +11499,7 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
-          "item": "schedule",
-          "label": null,
-        },
-        {
           "item": "crew_time",
-          "label": null,
-        },
-        {
-          "item": "punch",
           "label": null,
         },
         {
@@ -11610,7 +11838,7 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
     "shop_hours_per_week": 40,
     "uses_retainage": false,
   },
-  "plan_hash": "caf68c95d251c814a9c33e3a27bc9dea6dcd3624b3e4e7972993531fa6fbde9c",
+  "plan_hash": "505530b5c72e8663362eea28f9b2ac932f27179220b95b8edaee38b9009250b8",
   "price_book": [],
   "primary_pack": {
     "key": "manufacturing_eto",
@@ -13653,6 +13881,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
             "tab": "overview",
           },
           {
+            "label": "Pro forma & capital",
+            "tab": "development",
+          },
+          {
             "label": null,
             "tab": "budget",
           },
@@ -13670,10 +13902,6 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
           },
           {
             "label": null,
-            "tab": "capital_stack",
-          },
-          {
-            "label": null,
             "tab": "documents",
           },
           {
@@ -13683,6 +13911,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
           {
             "label": null,
             "tab": "change_orders",
+          },
+          {
+            "label": "Lender & investor portal",
+            "tab": "portal",
           },
         ],
       },
@@ -13715,6 +13947,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
           "label": null,
         },
         {
+          "item": "development",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -13736,6 +13972,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
         },
         {
           "item": "customers",
+          "label": null,
+        },
+        {
+          "item": "portals",
           "label": null,
         },
         {
@@ -13775,6 +14015,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
           "label": null,
         },
         {
+          "item": "development",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -13795,6 +14039,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
           "label": null,
         },
         {
+          "item": "portals",
+          "label": null,
+        },
+        {
           "item": "settings",
           "label": null,
         },
@@ -13802,6 +14050,10 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
       "pm": [
         {
           "item": "home",
+          "label": null,
+        },
+        {
+          "item": "development",
           "label": null,
         },
         {
@@ -14226,7 +14478,7 @@ exports[`compilePlan(real_estate_development, defaults) > matches the golden sna
     "retainage_pct": 0.1,
     "uses_retainage": true,
   },
-  "plan_hash": "b5a18747e333843d7a0174168bf15c4dd6545b8c1deb40dee2c3f7a9b9bcbe23",
+  "plan_hash": "20a77d584d389e9b75eaa07185ff169e42b97b94184a74c6adaee30c69b5a79e",
   "price_book": [],
   "primary_pack": {
     "key": "real_estate_development",
@@ -15223,8 +15475,8 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
             "tab": "logs",
           },
           {
-            "label": null,
-            "tab": "client_view",
+            "label": "Client view",
+            "tab": "portal",
           },
         ],
       },
@@ -15254,6 +15506,10 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
           {
             "label": null,
             "tab": "documents",
+          },
+          {
+            "label": "Client view",
+            "tab": "portal",
           },
         ],
       },
@@ -15292,7 +15548,7 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
           "label": null,
         },
         {
-          "item": "estimates",
+          "item": "proposals",
           "label": null,
         },
         {
@@ -15317,6 +15573,10 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
         },
         {
           "item": "documents",
+          "label": null,
+        },
+        {
+          "item": "portals",
           "label": null,
         },
         {
@@ -15398,7 +15658,7 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
           "label": null,
         },
         {
-          "item": "estimates",
+          "item": "proposals",
           "label": null,
         },
         {
@@ -15440,11 +15700,11 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
           "label": null,
         },
         {
-          "item": "customers",
+          "item": "proposals",
           "label": null,
         },
         {
-          "item": "estimates",
+          "item": "customers",
           "label": null,
         },
         {
@@ -15824,7 +16084,7 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
     "uses_retainage": false,
     "warranty_months": 12,
   },
-  "plan_hash": "7eba3e235a4e1f3bd758c7153e7678945c6d992eed7bd35666e0a71e59d77e14",
+  "plan_hash": "ef205cd0213d2881d13adfbeb87f06670c910b721bd3a43343ac3014cfa5d4c1",
   "price_book": [],
   "primary_pack": {
     "key": "residential_remodel",
@@ -16735,12 +16995,12 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
             "tab": "billing",
           },
           {
-            "label": "Production",
+            "label": "Productivity",
             "tab": "productivity",
           },
           {
             "label": "Changes",
-            "tab": "change_orders",
+            "tab": "change_events",
           },
           {
             "label": "T&M tickets",
@@ -16749,6 +17009,18 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           {
             "label": "Crew",
             "tab": "team",
+          },
+          {
+            "label": "RFIs",
+            "tab": "rfis",
+          },
+          {
+            "label": null,
+            "tab": "submittals",
+          },
+          {
+            "label": "Safety & inspections",
+            "tab": "safety",
           },
           {
             "label": null,
@@ -16765,6 +17037,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           {
             "label": null,
             "tab": "logs",
+          },
+          {
+            "label": null,
+            "tab": "closeout",
           },
         ],
       },
@@ -16789,7 +17065,7 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           },
           {
             "label": "Changes",
-            "tab": "change_orders",
+            "tab": "change_events",
           },
           {
             "label": null,
@@ -16853,6 +17129,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "retainage",
+          "label": null,
+        },
+        {
+          "item": "compliance",
           "label": null,
         },
         {
@@ -16958,7 +17238,15 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           "label": "Pay apps",
         },
         {
-          "item": "change_orders",
+          "item": "change_events",
+          "label": "Change events",
+        },
+        {
+          "item": "rfis",
+          "label": null,
+        },
+        {
+          "item": "submittals",
           "label": null,
         },
         {
@@ -17027,6 +17315,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "logs",
+          "label": null,
+        },
+        {
+          "item": "rfis",
           "label": null,
         },
         {
@@ -17375,7 +17667,7 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
     "union_labor": false,
     "uses_retainage": true,
   },
-  "plan_hash": "fb9ef9f2c328a20688282c0c45bcf486482774babb8481b7081ef8145d650d85",
+  "plan_hash": "46eb15b6209492aefe021a7f10119a2d190c6f4aa6918298ede155c641f2c9f5",
   "price_book": [],
   "primary_pack": {
     "key": "specialty_trade",

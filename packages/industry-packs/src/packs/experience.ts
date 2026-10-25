@@ -51,7 +51,7 @@ export const generalExperience: ExperienceSlots = {
     sales: ['new_leads', 'pipeline', 'my_jobs'],
   },
   jobTabs: {
-    '*': { tabs: ['overview', 'estimates', T('schedule', 'Tasks'), 'budget', 'time', 'billing', T('documents', 'Files')] },
+    '*': { tabs: ['overview', 'estimates', T('schedule', 'Tasks'), 'budget', 'time', 'billing', T('documents', 'Files'), T('portal', 'Client portal')] },
   },
   mobile: {
     actions: {
@@ -81,10 +81,10 @@ export const commercialGcExperience: ExperienceSlots = {
     ['Estimator', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', L('leads', 'Pipeline'), 'estimates', L('margin', 'Insights'), 'backlog', 'wip', 'settings'],
-    admin: ['home', 'inbox', 'estimates', 'jobs', 'schedule', L('billing', 'Pay apps'), 'retainage', 'customers', 'subcontractors', 'documents', 'settings'],
-    pm: ['home', 'my_jobs', 'estimates', 'schedule', 'commitments', L('change_orders', 'Change events'), L('billing', 'Pay apps'), 'documents', L('margin', 'Reports'), 'inbox'],
-    supervisor: ['today', 'my_jobs', L('schedule', 'Look-ahead'), 'crew_time', 'logs', 'punch', 'documents'],
+    management: ['home', 'inbox', 'approvals', 'jobs', L('leads', 'Pipeline'), 'estimates', 'wip', L('margin', 'Insights'), 'backlog', 'compliance', 'settings'],
+    admin: ['home', 'inbox', 'estimates', 'jobs', 'schedule', L('billing', 'Pay apps'), 'retainage', 'compliance', 'customers', 'subcontractors', 'documents', 'portals', 'settings'],
+    pm: ['home', 'my_jobs', 'estimates', 'schedule', 'commitments', L('change_events', 'Change events'), 'rfis', 'submittals', L('billing', 'Pay apps'), 'meetings', 'documents', L('margin', 'Reports'), 'inbox'],
+    supervisor: ['today', 'my_jobs', L('schedule', 'Look-ahead'), 'crew_time', 'logs', 'rfis', 'punch', 'documents'],
   },
   home: {
     management: ['weekly_brief', 'jobs_at_risk', 'over_under_billing', 'backlog_capacity', 'cash_ar', 'pipeline', 'approvals_queue'],
@@ -92,10 +92,11 @@ export const commercialGcExperience: ExperienceSlots = {
   },
   jobTabs: {
     '*': {
-      tabs: ['overview', 'budget', 'schedule', 'commitments', T('change_orders', 'Changes'), T('rfis', 'RFIs & submittals'),
-        T('billing', 'Pay apps'), T('logs', 'Daily reports'), 'documents', T('team', 'Directory')],
+      tabs: ['overview', 'budget', 'schedule', 'commitments', T('change_events', 'Changes'), T('rfis', 'RFIs'), T('billing', 'Pay apps'),
+        'submittals', T('logs', 'Daily reports'), 'meetings', 'buyout', 'closeout', T('team', 'Directory'),
+        T('safety', 'Safety & inspections'), 'documents', T('portal', 'Owner portal')],
     },
-    small_work: { tabs: ['overview', 'budget', T('change_orders', 'Changes'), 'time', 'billing', 'documents'] },
+    small_work: { tabs: ['overview', 'budget', T('change_events', 'Changes'), T('tm_tickets', 'T&M tickets'), 'time', 'billing', 'documents'] },
   },
   mobile: {
     actions: {
@@ -127,9 +128,9 @@ export const specialtyTradeExperience: ExperienceSlots = {
     ['Journeyman', 'projects_labor'], ['Apprentice', 'projects_labor'], ['Estimator', 'projects_sales'],
   ),
   nav: {
-    admin: ['home', 'inbox', L('estimates', 'Bids'), 'jobs', L('schedule', 'Crew schedule'), 'calls', 'dispatch', L('billing', 'Pay apps'), 'retainage', 'customers', 'price_book', 'documents', 'settings'],
-    pm: ['home', 'my_jobs', L('estimates', 'Bids'), L('schedule', 'Crew schedule'), L('billing', 'Pay apps'), 'change_orders', 'time', 'commitments', 'dispatch', 'price_book', 'inbox'],
-    supervisor: ['today', 'my_jobs', L('schedule', 'Crew board'), 'crew_time', 'logs', 'punch', 'documents'],
+    admin: ['home', 'inbox', L('estimates', 'Bids'), 'jobs', L('schedule', 'Crew schedule'), 'calls', 'dispatch', L('billing', 'Pay apps'), 'retainage', 'compliance', 'customers', 'price_book', 'documents', 'settings'],
+    pm: ['home', 'my_jobs', L('estimates', 'Bids'), L('schedule', 'Crew schedule'), L('billing', 'Pay apps'), L('change_events', 'Change events'), 'rfis', 'submittals', 'time', 'commitments', 'dispatch', 'price_book', 'inbox'],
+    supervisor: ['today', 'my_jobs', L('schedule', 'Crew board'), 'crew_time', 'logs', 'rfis', 'punch', 'documents'],
   },
   home: {
     pm: ['needs_you', 'productivity', 'my_jobs', 'pay_apps_due', 'week_schedule'],
@@ -137,10 +138,11 @@ export const specialtyTradeExperience: ExperienceSlots = {
   },
   jobTabs: {
     '*': {
-      tabs: ['overview', T('billing', 'SOV & pay apps'), T('productivity', 'Production'), T('change_orders', 'Changes'),
-        T('tm_tickets', 'T&M tickets'), T('team', 'Crew'), 'documents', 'budget', 'time', 'logs'],
+      tabs: ['overview', T('billing', 'SOV & pay apps'), T('productivity', 'Productivity'), T('change_events', 'Changes'),
+        T('tm_tickets', 'T&M tickets'), T('team', 'Crew'), T('rfis', 'RFIs'), 'submittals', T('safety', 'Safety & inspections'),
+        'documents', 'budget', 'time', 'logs', 'closeout'],
     },
-    tm_work: { tabs: ['overview', T('tm_tickets', 'T&M tickets'), 'time', 'billing', T('change_orders', 'Changes'), 'documents'] },
+    tm_work: { tabs: ['overview', T('tm_tickets', 'T&M tickets'), 'time', 'billing', T('change_events', 'Changes'), 'documents'] },
     trade_service_call: { tabs: ['work_orders', 'estimates', 'billing', 'time', T('activity', 'History'), 'overview'], defaultTab: 'work_orders' },
   },
   mobile: {
@@ -171,9 +173,10 @@ export const residentialRemodelExperience: ExperienceSlots = {
     ['Designer', 'projects_sales'], ['Salesperson', 'projects_sales'],
   ),
   nav: {
-    admin: ['home', 'inbox', 'leads', 'estimates', 'jobs', 'schedule', 'selections', 'billing', 'customers', 'documents', 'settings'],
-    pm: ['home', 'leads', 'estimates', 'my_jobs', 'schedule', 'selections', 'change_orders', 'billing', 'inbox'],
+    admin: ['home', 'inbox', 'leads', 'proposals', 'jobs', 'schedule', 'selections', 'billing', 'customers', 'documents', 'portals', 'settings'],
+    pm: ['home', 'leads', 'proposals', 'my_jobs', 'schedule', 'selections', 'change_orders', 'billing', 'inbox'],
     supervisor: ['today', 'my_jobs', 'schedule', 'crew_time', L('logs', 'Logs & photos'), L('punch', 'To-dos & punch'), 'documents'],
+    sales: ['home', 'inbox', 'leads', 'proposals', 'customers', 'my_jobs'],
   },
   home: {
     pm: ['needs_you', 'selections_queue', 'my_jobs', 'week_schedule', 'client_updates', 'billing_due'],
@@ -181,9 +184,9 @@ export const residentialRemodelExperience: ExperienceSlots = {
   jobTabs: {
     '*': {
       tabs: ['overview', T('estimates', 'Proposal'), 'selections', 'schedule', 'change_orders', 'budget', 'billing',
-        T('logs', 'Logs & photos'), 'client_view'],
+        T('logs', 'Logs & photos'), T('portal', 'Client view')],
     },
-    design_agreement: { tabs: ['overview', T('estimates', 'Proposal'), 'selections', 'time', 'billing', 'documents'] },
+    design_agreement: { tabs: ['overview', T('estimates', 'Proposal'), 'selections', 'time', 'billing', 'documents', T('portal', 'Client view')] },
     small_repair: { tabs: ['overview', T('estimates', 'Proposal'), 'billing', 'time', 'documents'] },
   },
   mobile: {
@@ -215,18 +218,19 @@ export const homeBuilderExperience: ExperienceSlots = {
     ['New home consultant', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', 'units', L('leads', 'Pipeline'), L('margin', 'Insights'), 'backlog', 'draws', 'settings'],
-    admin: ['home', 'inbox', 'leads', 'jobs', 'units', 'schedule', 'selections', 'commitments', 'draws', 'customers', 'documents', 'settings'],
-    pm: ['home', 'my_jobs', 'schedule', 'selections', 'commitments', 'draws', L('punch', 'Warranty'), 'units', 'inbox'],
+    management: ['home', 'inbox', 'approvals', 'homes', 'communities', L('leads', 'Pipeline'), L('margin', 'Insights'), 'backlog', 'draws', 'settings'],
+    admin: ['home', 'inbox', 'leads', 'homes', 'communities', 'jobs', 'schedule', 'selections', 'commitments', 'draws', 'customers', 'portals', 'settings'],
+    pm: ['home', 'homes', 'my_jobs', 'schedule', 'selections', 'commitments', 'draws', L('punch', 'Warranty'), 'communities', 'inbox'],
     supervisor: ['today', 'my_jobs', 'schedule', 'crew_time', 'logs', L('punch', 'Punch & warranty'), 'documents'],
+    sales: ['home', 'inbox', 'leads', 'homes', 'communities', 'proposals', 'customers'],
   },
   home: {
     pm: ['needs_you', 'my_jobs', 'draw_status', 'selections_queue', 'week_schedule'],
     supervisor: ['today_on_site', 'lookahead_constraints', 'open_punch', 'daily_report_status'],
   },
   jobTabs: {
-    '*': { tabs: ['overview', 'schedule', 'selections', 'budget', 'commitments', 'draws', 'logs', T('punch', 'Warranty'), 'documents'] },
-    spec_home: { tabs: ['overview', 'schedule', 'budget', 'commitments', 'draws', 'logs', T('punch', 'Warranty'), 'units', 'documents'] },
+    '*': { tabs: ['overview', 'home', 'schedule', 'selections', 'budget', 'commitments', 'draws', 'logs', T('punch', 'Warranty'), 'documents', T('portal', 'Buyer portal')] },
+    spec_home: { tabs: ['overview', 'home', 'schedule', 'budget', 'commitments', 'draws', 'logs', T('punch', 'Warranty'), 'units', 'documents'] },
   },
   mobile: {
     actions: {
@@ -313,10 +317,10 @@ export const manufacturingEtoExperience: ExperienceSlots = {
     ['Installer', 'projects_labor'], ['Estimator', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', 'production', L('leads', 'Pipeline'), L('margin', 'Insights'), 'backlog', 'settings'],
-    admin: ['home', 'inbox', 'leads', 'estimates', 'jobs', 'production', L('commitments', 'Purchasing'), L('schedule', 'Shipping & install'), 'billing', 'customers', 'settings'],
-    pm: ['home', 'my_jobs', 'estimates', 'production', L('commitments', 'Purchasing'), L('schedule', 'Shipping & install'), 'change_orders', 'billing', 'inbox'],
-    supervisor: ['today', 'production', 'my_jobs', 'schedule', 'crew_time', 'punch', 'documents'],
+    management: ['home', 'inbox', 'approvals', 'jobs', 'production', 'shop_backlog', L('leads', 'Pipeline'), L('margin', 'Insights'), 'settings'],
+    admin: ['home', 'inbox', 'leads', 'estimates', 'jobs', 'production', 'cad_imports', 'materials', L('commitments', 'Purchasing'), 'installs', 'billing', 'customers', 'settings'],
+    pm: ['home', 'my_jobs', 'estimates', 'production', 'shop_backlog', 'cad_imports', 'materials', L('commitments', 'Purchasing'), 'installs', 'remakes', 'change_orders', 'billing', 'inbox'],
+    supervisor: ['today', 'station', 'production', 'remakes', 'installs', 'my_jobs', 'crew_time', 'documents'],
   },
   home: {
     management: ['weekly_brief', 'backlog_capacity', 'jobs_at_risk', 'cash_ar', 'over_under_billing', 'approvals_queue'],
@@ -362,11 +366,12 @@ export const flooringExperience: ExperienceSlots = {
     ['Measure tech', 'projects_labor'], ['Flooring consultant', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', L('leads', 'Pipeline'), 'estimates', L('margin', 'Insights'), 'settings'],
-    admin: ['home', 'inbox', 'leads', L('selections', 'Measures'), 'estimates', 'jobs', L('dispatch', 'Install schedule'), 'work_orders', L('commitments', 'Special orders'), 'billing', 'customers', 'settings'],
-    pm: ['home', 'leads', L('selections', 'Measures'), 'estimates', 'my_jobs', L('dispatch', 'Install schedule'), L('commitments', 'Special orders'), 'work_orders', 'inbox'],
-    supervisor: ['today', L('dispatch', 'Install schedule'), 'my_jobs', 'work_orders', 'crew_time', L('punch', 'Callbacks'), 'documents'],
-    sales: ['home', 'inbox', 'leads', L('selections', 'Measures'), 'estimates', 'customers', 'my_jobs'],
+    management: ['home', 'inbox', 'approvals', 'flooring', 'jobs', L('leads', 'Pipeline'), 'estimates', L('margin', 'Insights'), 'settings'],
+    admin: ['home', 'inbox', 'leads', 'flooring', L('selections', 'Measures'), 'estimates', 'jobs', L('dispatch', 'Install schedule'), L('work_orders', 'Install tickets'), 'flooring_rolls', 'flooring_catalog', L('commitments', 'Special orders'), 'billing', 'customers', 'settings'],
+    pm: ['home', 'flooring', 'leads', 'estimates', 'my_jobs', L('dispatch', 'Install schedule'), 'flooring_rolls', L('commitments', 'Special orders'), 'flooring_pay', 'work_orders', 'inbox'],
+    supervisor: ['today', L('dispatch', 'Install schedule'), 'my_jobs', 'work_orders', 'flooring_rolls', 'crew_time', L('punch', 'Callbacks'), 'documents'],
+    labor: ['today', 'time', 'jobs', 'me'],
+    sales: ['home', 'inbox', 'leads', 'flooring', 'estimates', 'flooring_catalog', 'customers', 'my_jobs'],
   },
   home: {
     admin: ['needs_you', 'install_board', 'today_schedule', 'new_leads', 'billing_ready'],
@@ -374,11 +379,11 @@ export const flooringExperience: ExperienceSlots = {
   },
   jobTabs: {
     '*': {
-      tabs: ['overview', T('selections', 'Measure & diagram'), T('estimates', 'Quote'), T('commitments', 'Products & POs'),
-        'work_orders', T('billing', 'Deposits & billing'), T('punch', 'Callbacks')],
+      tabs: ['overview', T('flooring_job', 'Measure to install'), T('estimates', 'Quote'), T('commitments', 'Products & POs'),
+        'work_orders', T('billing', 'Deposits & billing'), T('punch', 'Callbacks'), T('selections', 'Selections'), T('portal', 'Customer portal')],
     },
     commercial_flooring: {
-      tabs: ['overview', 'estimates', 'budget', 'schedule', T('commitments', 'Products & POs'), 'work_orders', 'billing', 'change_orders', 'documents'],
+      tabs: ['overview', T('flooring_job', 'Measure to install'), 'estimates', 'budget', 'schedule', T('commitments', 'Products & POs'), 'work_orders', 'billing', 'change_orders', 'documents'],
     },
   },
   mobile: {
@@ -409,10 +414,10 @@ export const interiorDesignExperience: ExperienceSlots = {
     ['Design assistant', 'projects_labor'], ['Business development', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', L('leads', 'Pipeline'), L('margin', 'Insights'), 'time', 'settings'],
-    admin: ['home', 'inbox', 'leads', 'jobs', 'selections', 'estimates', L('commitments', 'Purchasing'), 'billing', 'customers', 'time', 'settings'],
-    pm: ['home', 'my_jobs', 'selections', 'estimates', L('commitments', 'Purchasing'), 'time', 'customers', 'billing', 'inbox'],
-    supervisor: ['today', 'my_jobs', 'selections', 'schedule', 'crew_time', 'punch', 'documents'],
+    management: ['home', 'inbox', 'approvals', 'design', 'jobs', L('leads', 'Pipeline'), L('margin', 'Insights'), 'time', 'settings'],
+    admin: ['home', 'inbox', 'design', 'design_inbox', 'leads', 'jobs', 'selections', 'estimates', L('commitments', 'Purchasing'), 'billing', 'customers', 'time', 'portals', 'settings'],
+    pm: ['home', 'design', 'design_inbox', 'my_jobs', 'selections', 'estimates', L('commitments', 'Purchasing'), 'time', 'customers', 'billing', 'inbox'],
+    supervisor: ['today', 'my_jobs', 'design', 'selections', 'schedule', 'crew_time', 'punch', 'documents'],
   },
   home: {
     management: ['weekly_brief', 'utilization', 'cash_ar', 'jobs_at_risk', 'pipeline', 'approvals_queue'],
@@ -420,10 +425,10 @@ export const interiorDesignExperience: ExperienceSlots = {
   },
   jobTabs: {
     '*': {
-      tabs: ['overview', T('selections', 'Rooms & items'), 'estimates', 'commitments', 'receiving', T('time', 'Time & fees'),
-        'billing', 'client_view'],
+      tabs: ['overview', T('design_project', 'Rooms & items'), 'estimates', 'commitments', 'receiving', T('time', 'Time & fees'),
+        'billing', T('portal', 'Client view'), T('selections', 'Selections')],
     },
-    procurement_order: { tabs: ['selections', 'estimates', 'commitments', 'receiving', 'billing', 'overview'], defaultTab: 'selections' },
+    procurement_order: { tabs: [T('design_project', 'Items'), 'estimates', 'commitments', 'receiving', 'billing', 'overview'], defaultTab: 'design_project' },
   },
   mobile: {
     actions: {
@@ -453,11 +458,11 @@ export const equipmentDealerExperience: ExperienceSlots = {
     ['Technician', 'projects_labor'], ['Salesperson', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', L('stock', 'Units'), 'deals', L('work_orders', 'Service'), 'jobs', L('margin', 'Insights'), 'settings'],
-    admin: ['home', 'inbox', L('work_orders', 'Service'), 'jobs', L('stock', 'Units'), 'deals', L('parts', 'Parts counter'), 'rentals', 'warranty', 'customers', 'settings'],
-    pm: ['home', L('work_orders', 'Service'), 'my_jobs', L('stock', 'Units'), L('parts', 'Parts counter'), 'warranty', 'rentals', 'inbox'],
-    supervisor: ['today', L('work_orders', 'Service board'), 'my_jobs', 'crew_time', 'parts', 'documents'],
-    sales: ['home', 'inbox', 'leads', 'customers', L('stock', 'Units'), 'deals'],
+    management: ['home', 'inbox', 'approvals', L('stock', 'Units'), 'deals', 'store_scorecard', L('work_orders', 'Service'), 'jobs', L('margin', 'Insights'), 'settings'],
+    admin: ['home', 'inbox', L('work_orders', 'Service'), 'tech_board', 'jobs', L('stock', 'Units'), 'deals', L('parts', 'Parts'), 'parts_counter', 'price_files', 'rentals', 'warranty', 'warranty_deadlines', 'customers', 'settings'],
+    pm: ['home', L('work_orders', 'Service'), 'tech_board', 'my_jobs', L('stock', 'Units'), 'parts_counter', 'warranty', 'warranty_deadlines', 'rentals', 'programs', 'store_scorecard', 'inbox'],
+    supervisor: ['today', L('work_orders', 'Service board'), 'tech_board', 'my_jobs', 'crew_time', 'parts', 'documents'],
+    sales: ['home', 'inbox', 'leads', 'customers', L('stock', 'Units'), 'deals', 'programs'],
   },
   home: {
     management: ['weekly_brief', 'unit_aging', 'cash_ar', 'jobs_at_risk', 'approvals_queue'],
@@ -502,9 +507,9 @@ export const realEstateDevelopmentExperience: ExperienceSlots = {
     ['Field staff', 'projects_labor'], ['Acquisitions manager', 'projects_sales'],
   ),
   nav: {
-    management: ['home', 'inbox', 'approvals', 'jobs', 'draws', L('job_cost', 'Budget'), L('margin', 'Insights'), 'documents', 'settings'],
-    admin: ['home', 'inbox', 'jobs', 'commitments', 'draws', 'units', 'documents', 'customers', 'settings'],
-    pm: ['home', 'my_jobs', L('job_cost', 'Budget'), 'commitments', 'draws', 'units', 'documents', 'change_orders', 'inbox'],
+    management: ['home', 'inbox', 'approvals', 'development', 'jobs', 'draws', L('job_cost', 'Budget'), L('margin', 'Insights'), 'documents', 'portals', 'settings'],
+    admin: ['home', 'inbox', 'development', 'jobs', 'commitments', 'draws', 'units', 'documents', 'customers', 'portals', 'settings'],
+    pm: ['home', 'development', 'my_jobs', L('job_cost', 'Budget'), 'commitments', 'draws', 'units', 'documents', 'change_orders', 'inbox'],
     supervisor: ['today', 'my_jobs', 'schedule', 'logs', 'punch', 'documents'],
   },
   home: {
@@ -513,7 +518,8 @@ export const realEstateDevelopmentExperience: ExperienceSlots = {
   },
   jobTabs: {
     '*': {
-      tabs: ['overview', 'budget', T('commitments', 'Contracts & COs'), 'draws', T('schedule', 'Milestones'), 'capital_stack', 'documents', 'units', 'change_orders'],
+      tabs: ['overview', T('development', 'Pro forma & capital'), 'budget', T('commitments', 'Contracts & COs'), 'draws', T('schedule', 'Milestones'),
+        'documents', 'units', 'change_orders', T('portal', 'Lender & investor portal')],
     },
   },
   mobile: {

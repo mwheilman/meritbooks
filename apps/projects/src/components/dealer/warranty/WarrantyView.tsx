@@ -46,7 +46,7 @@ export function WarrantyView(p: WarrantyViewProps) {
     void act(`c:${c.claim_id}`, 'post', `/api/ops/claims/${c.claim_id}`, { op: 'advance', to, amountCents: to === 'APPROVED' || to === 'PAID' ? amount[c.claim_id] ?? null : null }, label);
 
   const openCols: QueueColumn<WarrantyOutstandingRow>[] = [
-    { id: 'n', header: 'Claim', width: 140, cell: (c) => <><span className="l1 code">{c.claim_number ?? 'Draft'}</span><span className="l2">{c.serial_number ? `S/N ${c.serial_number}` : ' '}</span></> },
+    { id: 'n', header: 'Claim', width: 140, cell: (c) => <><Link className="l1 code nlink" href={`/warranty/${c.claim_id}`}>{c.claim_number ?? 'Draft'}</Link><span className="l2">{c.serial_number ? `S/N ${c.serial_number}` : ' '}</span></> },
     { id: 'ro', header: 'Repair order', width: 150, cell: (c) => <><Link className="l1 nlink" href={`/work-orders?wo=${c.work_order_id}`}>{c.ro_number ?? 'RO'}</Link><span className="l2">{d.customers[c.payer_customer_id] ?? 'Manufacturer'}</span></> },
     { id: 'st', header: 'Status', width: 170, cell: (c) => <><StatusMark mark={CLAIM_STATUS[c.status]} />{c.last_event_status && <span className="l2">{outboxMark(c.last_event_status).word}</span>}</> },
     { id: 'cl', header: 'Claimed', numeric: true, width: 110, cell: (c) => money(c.claimed_cents) },
@@ -103,6 +103,7 @@ export function WarrantyView(p: WarrantyViewProps) {
         <div style={{ width: 300 }}><Search aria-label="Find a claim" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Claim, RO or manufacturer" slashToFocus /></div>
         <span className="sp" />
         <span className="t-cap">Draft claims from a repair order’s warranty lines on the RO itself.</span>
+        <Link className="link" href="/warranty/credits">Deadlines and credit memos</Link>
       </div>
       {error && <Failure text={error} />}
       <Bands<Band> aria-label="Claims by status" value={band} onChange={setBand}

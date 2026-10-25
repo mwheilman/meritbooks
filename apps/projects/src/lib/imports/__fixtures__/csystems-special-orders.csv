@@ -1,0 +1,4 @@
+SO #,Cust #,Customer Name,Part #,Qty,Deposit,Ord Date,Status
+SO-7001,100245,Jeff Norgaard,K7561-71612,1,$150.00,10/10/2026,On order
+SO-7004,100231,Prairie Acres Farm,3C001-82470,2,$0.00,10/18/2026,On order
+SO-7006,100260,City of Clive Parks,103-6402,12,$240.00,10/21/2026,Received

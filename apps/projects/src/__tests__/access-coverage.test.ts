@@ -27,7 +27,15 @@ describe('every API route declares access (spec §4)', () => {
     const webhook = _rel.startsWith('webhooks/');
     const publicSign = _rel.startsWith('sign/public/') || _rel.startsWith('sign\\public\\');
     const publicWidget = _rel === 'fieldservice/widget/route.ts' || _rel === 'fieldservice\\widget\\route.ts';
-    if (publicWidget) {
+    const publicPortal = /^portal[\\/](?!staff[\\/])/.test(_rel);
+    if (publicPortal) {
+      // /api/portal/* (1118, except /api/portal/staff/*) has no Clerk session: the portal session
+      // cookie is the credential, checked by portal.* on the anon key. portalHandler() (same-origin
+      // writes, Zod), never route(), never the service role.
+      expect(wrapped).toBe(0);
+      expect(src.includes('portalHandler(')).toBe(true);
+      expect(/createAdminSupabase|SERVICE_ROLE/.test(src)).toBe(false);
+    } else if (publicWidget) {
       // /api/fieldservice/widget (1117) is the public online-booking widget: the token is the
       // credential, checked by public.fs_widget_* on the anon key. No route(), never the service role.
       expect(wrapped).toBe(0);

@@ -139,6 +139,7 @@ create table if not exists core.notification_event_types (
   severity             text not null default 'info',
   emit_rpc             boolean not null default false,
   sort                 integer not null default 100,
+  carries_secret       boolean not null default false,
   constraint notification_event_types_chk check (
     key ~ '^[a-z][a-z0-9_.]{1,63}$'
     and category in ('work','approvals','sales','schedule','time','documents','comments','customer')
@@ -147,6 +148,9 @@ create table if not exists core.notification_event_types (
     and batch_window_minutes between 0 and 1440
     and severity in ('info','attention','critical'))
 );
+alter table core.notification_event_types add column if not exists carries_secret boolean not null default false;
+comment on column core.notification_event_types.carries_secret is
+  '1114 (portals review): messages of this type may carry a sign-in link / one-time code. Their stored text is never shown to members or admins; the secret itself lives only in core.outbound_secrets until it is sent.';
 comment on table core.notification_event_types is
   '1114: notification event catalog (global). emit_rpc = the app may raise it through pm.notify_emit; the others are raised by triggers / the worker only (they cannot be spoofed).';
 
@@ -168,10 +172,30 @@ insert into core.notification_event_types as e (key, label, description, categor
   ('customer.change_order_ready', 'Change order ready to sign', 'Tells the customer a change order is ready for their signature.', 'customer', 'customer', null,                      false, 0,   'info',      true,  220),
   ('customer.selection_reminder', 'Selection reminder',      'Reminds the customer of a selection that is due.',                 'customer',  'customer', null,                      false, 0,   'info',      true,  230),
   ('customer.job_complete',       'Job complete',            'Tells the customer the work is complete (and asks for a review).', 'customer',  'customer', null,                      false, 0,   'info',      true,  240),
-  ('customer.message',            'Message to the customer', 'Any other message to a customer contact (field-service outbox, follow-ups).', 'customer', 'customer', null,               false, 0,   'info',      true,  250)
+  ('customer.message',            'Message to the customer', 'Any other message to a customer contact (field-service outbox, follow-ups).', 'customer', 'customer', null,               false, 0,   'info',      true,  250),
+  -- Wave B (same rows 1118 / 1119 / 1120 upsert; here so their role recipes can be seeded below)
+  ('portal.activity',            'Portal activity',      'A customer, sub, lender or investor acted in the portal (approved, declined, messaged, uploaded, proposed a date).', 'work', 'internal', null, true, 30, 'attention', false, 130),
+  ('change_order.requested',     'Change order requested from the field', 'A crew lead found something that needs a change order (work there is stopped until it is signed).', 'approvals', 'internal', null, true, 0, 'attention', false, 85),
+  ('trade.schedule_response',    'Trade answered a schedule request', 'A trade partner could not make a date or proposed another one.', 'schedule', 'internal', null, true, 0, 'attention', false, 45),
+  ('rfi.assigned',               'RFI waiting on you',          'An RFI''s ball in court moved to you.',                              'work',      'internal', null, true, 0,   'attention', false, 300),
+  ('submittal.review_requested', 'Submittal to review',         'A submittal review step is waiting on you.',                         'documents', 'internal', null, true, 0,   'attention', false, 310),
+  ('sub_pay_app.review',         'Sub pay application to review','A subcontractor pay application is at a step you approve.',         'approvals', 'internal', null, true, 0,   'attention', false, 320),
+  ('compliance.expiring',        'Insurance expiring',          'A subcontractor certificate of insurance is expiring or expired.',    'approvals', 'internal', null, true, 0,   'attention', false, 330),
+  ('eac.submitted',              'Cost forecast to approve',    'A project manager submitted the month''s cost forecast.',            'approvals', 'internal', null, true, 0,   'attention', false, 340),
+  ('meeting.minutes',            'Meeting minutes',             'Minutes of a meeting you attended were distributed.',                 'work',      'internal', null, true, 240, 'info',      false, 350),
+  ('meeting.item_assigned',      'Meeting action item',         'An action item from a meeting is yours.',                             'work',      'internal', null, true, 0,   'info',      false, 360),
+  ('observation.assigned',       'Observation assigned to you', 'A quality or safety observation was assigned to you.',                'work',      'internal', null, true, 0,   'attention', false, 370),
+  ('productivity.fade',          'Labor productivity fading',   'Earned hours fell behind hours used on a cost code.',                 'time',      'internal', null, true, 0,   'attention', false, 380),
+  ('tm.signature_needed',        'T&M ticket to sign',          'A T&M ticket is waiting for the GC''s signature.',                    'work',      'internal', null, true, 0,   'info',      false, 390),
+  -- Wave B outbound (audience customer: held until go-live, consent / STOP checked, no role recipes)
+  ('customer.portal_access',     'Portal access',        'Portal invitations, sign-in links and codes, and portal message alerts.', 'customer', 'customer', null, false, 0, 'info', false, 260),
+  ('trade.schedule_request',     'Schedule request to a trade', 'Texts a trade partner the date, address and scope with Confirm / Can''t / Propose a date.', 'schedule', 'customer', null, false, 0, 'info', false, 260),
+  ('trade.bid_invite',           'Bid invitation to a trade', 'Invites a trade partner to price a bid package by line.', 'work', 'customer', null, false, 0, 'info', false, 270),
+  ('trade.po_ready',             'Purchase order ready for a trade', 'Sends a trade partner their purchase order or work order to accept.', 'work', 'customer', null, false, 0, 'info', false, 280)
 on conflict (key) do update set label = excluded.label, description = excluded.description, category = excluded.category,
   audience = excluded.audience, money_cap = excluded.money_cap, mandatory = excluded.mandatory,
   batch_window_minutes = excluded.batch_window_minutes, severity = excluded.severity, emit_rpc = excluded.emit_rpc, sort = excluded.sort;
+update core.notification_event_types set carries_secret = true where key = 'customer.portal_access';
 
 -- ----------------------------------------------------------------------------
 -- 3. Recipes: channel defaults per persona × event (platform rows; org overrides)
@@ -218,7 +242,21 @@ begin
     ('lead.assigned',           array['I','I','I','I','P','I','I','I','I','P','I']),
     ('lead.sla_breach',         array['D','I','I','-','P','-','-','-','-','P','I']),
     ('document.sign_requested', array['P','P','P','P','P','P','P','P','P','P','I']),
-    ('comment.mention',         array['I','P','P','P','P','P','P','P','P','P','I'])
+    ('comment.mention',         array['I','P','P','P','P','P','P','P','P','P','I']),
+    -- Wave B (1118 / 1119 / 1120; every one mandatory, so the floor is I)
+    ('portal.activity',            array['D','I','I','I','I','I','P','I','I','I','I']),
+    ('change_order.requested',     array['I','I','I','I','I','I','P','I','I','I','I']),
+    ('trade.schedule_response',    array['I','I','I','I','I','I','P','P','I','I','I']),
+    ('rfi.assigned',               array['I','I','I','I','I','I','P','P','I','I','I']),
+    ('submittal.review_requested', array['I','I','I','I','I','I','P','P','I','I','I']),
+    ('sub_pay_app.review',         array['I','I','I','P','I','P','P','I','I','I','I']),
+    ('compliance.expiring',        array['D','D','I','I','I','P','I','I','I','I','I']),
+    ('eac.submitted',              array['P','P','I','I','I','I','I','I','I','I','I']),
+    ('meeting.minutes',            array['D','D','D','D','D','D','D','D','D','D','D']),
+    ('meeting.item_assigned',      array['I','I','I','I','I','I','P','P','P','I','I']),
+    ('observation.assigned',       array['I','I','I','I','I','I','P','P','P','I','I']),
+    ('productivity.fade',          array['D','I','I','I','I','I','P','P','I','I','I']),
+    ('tm.signature_needed',        array['I','I','I','I','I','I','I','P','I','I','I'])
   ) as t(event_type, codes) loop
     for i in 1 .. array_length(v_personas, 1) loop
       c := r.codes[i];
@@ -433,6 +471,20 @@ create index if not exists ix_outbound_member_cap on core.outbound_messages (mem
 create index if not exists ix_outbound_address_cap on core.outbound_messages (org_id, channel, to_address, created_at desc) where audience = 'customer';
 comment on table core.outbound_messages is
   '1114: the email / SMS / push queue. held = customer message waiting for the company''s go-live (or for texting to be set up); suppressed = no consent / STOP / bounce list; skipped = a frequency cap or a channel that is not configured. The worker (apps/projects lib/notify/dispatch.ts) claims queued rows whose not_before has passed.';
+
+-- One-time secrets (portal sign-in links / codes) for an outbound row: NEVER in
+-- core.outbound_messages (whose stored body is a fixed public sentence). Service role only, no
+-- member or admin access of any kind; deleted when the message is sent, finally fails, or expires.
+create table if not exists core.outbound_secrets (
+  outbound_id  uuid primary key references core.outbound_messages(id) on delete cascade,
+  subject      text,
+  body         text not null,
+  created_at   timestamptz not null default now(),
+  expires_at   timestamptz not null,
+  constraint outbound_secrets_chk check (length(body) between 1 and 4000 and coalesce(length(subject), 0) <= 300 and expires_at > created_at)
+);
+comment on table core.outbound_secrets is
+  '1114 (portals review CRITICAL): the real text of a secret-bearing message, read only by the worker (core.notify_outbound_claim) or a direct sender (core.notify_secret_take), then deleted. Service role only.';
 
 create table if not exists core.notification_digests (
   id            uuid primary key default gen_random_uuid(),
@@ -1025,6 +1077,11 @@ begin
    where o.status = 'sending' and o.claimed_at < now() - interval '15 minutes';
   update core.outbound_messages o set status = 'suppressed', status_reason = 'No text-message consent / STOP', updated_at = now()
    where o.status = 'queued' and o.channel = 'sms' and not core.notify_sms_consented(o.org_id, o.to_address);
+  -- one-time secrets: an expired (or missing) secret cancels its message — the placeholder is never sent
+  update core.outbound_messages o set status = 'cancelled', status_reason = 'The one-time link / code expired before it was sent', updated_at = now()
+   where o.status = 'queued' and coalesce(o.data ->> 'secret', '') = 'true'
+     and not exists (select 1 from core.outbound_secrets x where x.outbound_id = o.id and x.expires_at > now());
+  delete from core.outbound_secrets x where x.expires_at <= now();
   return query
   with due as (
     select q.id from core.outbound_messages q
@@ -1037,7 +1094,10 @@ begin
       from due where o.id = due.id
     returning o.*
   )
-  select c.id, c.org_id, c.channel, c.audience, c.membership_id, c.to_address, c.subject, c.body, c.deep_link, c.data, c.attempts,
+  select c.id, c.org_id, c.channel, c.audience, c.membership_id, c.to_address,
+         coalesce((select x.subject from core.outbound_secrets x where x.outbound_id = c.id), c.subject),
+         coalesce((select x.body from core.outbound_secrets x where x.outbound_id = c.id), c.body),
+         c.deep_link, c.data, c.attempts,
          case when c.channel = 'push' then
            coalesce((select array_agg(d.token order by d.last_seen_at desc) from core.push_devices d
                       where d.membership_id = c.membership_id and d.revoked_at is null), '{}'::text[]) end,
@@ -1071,6 +1131,63 @@ begin
   if p_status = 'sent' and o.notification_id is not null and o.channel = 'email' then
     update core.notifications n set emailed_at = coalesce(n.emailed_at, now()) where n.id = o.notification_id;
   end if;
+  delete from core.outbound_secrets x where x.outbound_id = p_id;   -- terminal: the secret goes
+end $$;
+
+-- ── Secret-bearing customer messages (portals: sign-in links, phone codes, any one-time code) ──
+-- Service / definer callers only (1118 portal.*). The outbound row keeps p_public_body (a fixed
+-- sentence with NO secret) for the audit trail; the secret text goes to core.outbound_secrets for at
+-- most p_ttl_minutes and only while the message is actually going out (queued). A held / suppressed
+-- / skipped message never stores the secret (a later release could not deliver a stale code anyway).
+-- Delivery: the worker substitutes the secret at claim time, or a direct sender takes it once with
+-- core.notify_secret_take. Members and admins never see either text (carries_secret / data.secret).
+create or replace function core.notify_customer_secret(
+  p_org uuid, p_location uuid, p_job uuid, p_event text, p_channel text, p_contact uuid,
+  p_subject text, p_public_body text, p_secret_body text, p_dedupe text, p_created_by text,
+  p_ttl_minutes integer default 20, p_secret_subject text default null)
+returns jsonb
+language plpgsql volatile security definer
+set search_path = core, public, pg_temp
+as $$
+declare v_id uuid; o record;
+begin
+  if p_secret_body is null or length(btrim(p_secret_body)) = 0 then raise exception 'PM_INVALID: the secret text is empty' using errcode = '22023'; end if;
+  if p_public_body is null or position(p_secret_body in p_public_body) > 0 then
+    raise exception 'PM_INVALID: the public text must not contain the secret' using errcode = '22023';
+  end if;
+  if coalesce(p_ttl_minutes, 0) not between 1 and 1440 then raise exception 'PM_INVALID: ttl between 1 and 1440 minutes' using errcode = '22023'; end if;
+  v_id := core.notify_customer(p_org, p_location, p_job, p_event, p_channel, p_contact, p_subject, p_public_body, null, p_dedupe, p_created_by);
+  update core.outbound_messages m set data = m.data || jsonb_build_object('secret', true), updated_at = now() where m.id = v_id;
+  select m.id, m.status, m.status_reason, m.not_before into o from core.outbound_messages m where m.id = v_id;
+  if o.status = 'queued' then
+    insert into core.outbound_secrets as x (outbound_id, subject, body, expires_at)
+    values (v_id, left(p_secret_subject, 300), left(p_secret_body, 4000), now() + make_interval(mins => p_ttl_minutes))
+    on conflict (outbound_id) do update set subject = excluded.subject, body = excluded.body, expires_at = excluded.expires_at;
+  end if;
+  return jsonb_build_object('outbound_id', o.id, 'status', o.status, 'reason', o.status_reason, 'not_before', o.not_before);
+end $$;
+
+-- Direct send (service / definer only): claim a queued secret message ONCE — returns where to send it
+-- and the secret text, marks it sending (the worker will not touch it) and deletes the secret. Report
+-- the provider outcome with core.notify_outbound_result. Null when there is nothing to send.
+create or replace function core.notify_secret_take(p_outbound uuid) returns jsonb
+language plpgsql volatile security definer
+set search_path = core, public, pg_temp
+as $$
+declare o record; x record;
+begin
+  select m.* into o from core.outbound_messages m where m.id = p_outbound and m.status = 'queued' and coalesce(m.data ->> 'secret', '') = 'true' for update;
+  if o.id is null then return null; end if;
+  delete from core.outbound_secrets s where s.outbound_id = o.id and s.expires_at > now() returning s.subject, s.body into x;
+  if x.body is null then
+    update core.outbound_messages m set status = 'cancelled', status_reason = 'The one-time link / code expired before it was sent', updated_at = now() where m.id = o.id;
+    delete from core.outbound_secrets s where s.outbound_id = o.id;
+    return null;
+  end if;
+  update core.outbound_messages m set status = 'sending', attempts = 5, claimed_at = now(), updated_at = now() where m.id = o.id;
+  return jsonb_build_object('outbound_id', o.id, 'channel', o.channel, 'to', o.to_address,
+    'from', case when o.channel = 'sms' then (core.notify_settings_row(o.org_id, o.location_id)).sms_from_number end,
+    'subject', coalesce(x.subject, o.subject), 'body', x.body);
 end $$;
 
 create or replace function core.notify_revoke_push_token(p_token text, p_reason text) returns void
@@ -1821,6 +1938,10 @@ begin
     if not pm.can('projects.settings', 'configure', o.location_id) then
       raise exception 'PM_FORBIDDEN: requires projects.settings:configure at this company' using errcode = '42501';
     end if;
+    if p_action = 'release' and (coalesce(o.data ->> 'secret', '') = 'true'
+        or exists (select 1 from core.notification_event_types e where e.key = o.event_type and e.carries_secret)) then
+      raise exception 'PM_INVALID: sign-in messages are not released later; the person asks for a new one' using errcode = '22023';
+    end if;
     if p_action = 'discard' then
       update core.outbound_messages m set status = 'cancelled', status_reason = 'Discarded by ' || coalesce(pm.current_user_id(), 'staff'), updated_at = now() where m.id = o.id;
       v_n := v_n + 1;
@@ -1920,11 +2041,13 @@ begin
   return query
   select o.id, o.location_id, o.channel, o.audience, o.event_type,
          case when o.audience = 'customer' then o.to_address end,
-         case when o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id) then o.subject end,
-         case when o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id) then o.body end,
-         not (o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id)),
+         case when not v_secret and o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id) then o.subject end,
+         case when not v_secret and o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id) then o.body end,
+         v_secret or not (o.audience = 'customer' and pm.can('projects.contract_value', 'view', o.location_id)),
          o.status, o.status_reason, o.job_id, o.created_at, o.sent_at
     from core.outbound_messages o
+    left join core.notification_event_types et on et.key = o.event_type
+    cross join lateral (select (coalesce(et.carries_secret, false) or coalesce(o.data ->> 'secret', '') = 'true') as v_secret) sx
    where o.org_id = public.get_org_id()
      and o.location_id is not null and pm.can('projects.settings', 'configure', o.location_id)
      and (p_status is null or o.status = p_status)
@@ -1975,6 +2098,12 @@ create policy member_read on core.sms_consents for select to authenticated
 create policy member_read on core.sms_sender_numbers for select to authenticated
   using (org_id = public.get_org_id() and (location_id is null or (select pm.can('projects.settings', 'configure', location_id))
                                            or (select pm.can('projects.settings', 'configure'))));
+-- secrets: service role only, nothing for members (not even select)
+alter table core.outbound_secrets enable row level security;
+drop policy if exists service_all on core.outbound_secrets;
+create policy service_all on core.outbound_secrets for all to service_role using (true) with check (true);
+revoke all on table core.outbound_secrets from public, anon, authenticated;
+grant select, insert, update, delete on table core.outbound_secrets to service_role;
 -- outbound text is read through pm.notify_outbound_messages (masked); members get delivery metadata only
 revoke select on core.outbound_messages from authenticated;
 grant select (id, org_id, location_id, channel, audience, event_type, notification_id, membership_id, job_id, status, status_reason,
@@ -2040,7 +2169,9 @@ insert into crm.access_rpc_registry as r (schema_name, function_name, kind, reas
   ('core', 'notify_revoke_push_token', 'helper', '1114: service only (worker)'),
   ('core', 'notify_verify_sender',     'helper', '1114: service only (after the provider confirms the number)'),
   ('core', 'notify_revoke_sender',     'helper', '1114: service only'),
-  ('core', 'notify_approval_eligible', 'helper', '1114: service / pm.notify_emit only')
+  ('core', 'notify_approval_eligible', 'helper', '1114: service / pm.notify_emit only'),
+  ('core', 'notify_customer_secret',   'helper', '1114: service / definer only; the secret never lands in outbound_messages'),
+  ('core', 'notify_secret_take',       'helper', '1114: service / definer only; one-time read, deletes the secret')
 on conflict (schema_name, function_name) do update set kind = excluded.kind, reason = excluded.reason;
 
 -- Function grants: nothing for PUBLIC / anon; core engine service-only; pm RPCs for members.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import {
-  Button, Check, ConfirmDialog, Field, Input, KV, MoneyInput, Panel, PanelSection, Select, Tag, Textarea, shortDate,
+  Button, ButtonLink, Check, ConfirmDialog, Field, Input, KV, MoneyInput, Panel, PanelSection, Select, Tag, Textarea, shortDate,
 } from '@meritbooks/merit-ui';
 import { useMoneyText } from '@/components/money/useMoneyText';
 import { METHOD_WORDS, SELECTION_STATUS } from '@/lib/pm/ops/labels';
@@ -65,6 +65,9 @@ export function SelectionPanel(p: SelectionPanelProps) {
         <div className="row" style={{ gap: 12, flexWrap: 'wrap' }}>
           <StatusMark mark={SELECTION_STATUS[s.status]} />
           {s.due_on && s.due_on < p.today && !decided && <Tag tone="neg">Past due</Tag>}
+          <span className="sp" />
+          {/* 1119: the full chooser — options side by side, allowance delta, room and install deadline */}
+          <ButtonLink href={`/selections/${s.id}`} variant={decided ? 'default' : 'primary'}>{decided ? 'Open' : 'Choose'}</ButtonLink>
         </div>
         <div style={{ marginTop: 12 }}>
           <KV items={[

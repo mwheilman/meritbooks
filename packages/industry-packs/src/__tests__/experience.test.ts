@@ -62,9 +62,10 @@ describe('manifest v2: every published pack validates and fills every slot', () 
 describe('Industry × experience table (UX seat §3a)', () => {
   it('commercial_gc: budget-first project tabs with pay apps, RFIs and directory', () => {
     expect(tabs('commercial_gc', 'lump_sum')).toEqual([
-      'overview', 'budget', 'schedule', 'commitments', 'Changes', 'RFIs & submittals', 'Pay apps', 'Daily reports', 'documents', 'Directory',
+      'overview', 'budget', 'schedule', 'commitments', 'Changes', 'RFIs', 'Pay apps', 'submittals', 'Daily reports', 'meetings',
+      'buyout', 'closeout', 'Directory', 'Safety & inspections', 'documents', 'Owner portal',
     ]);
-    expect(tabs('commercial_gc', 'small_work')).not.toContain('RFIs & submittals');
+    expect(tabs('commercial_gc', 'small_work')).not.toContain('RFIs');
     expect(navItems('commercial_gc', 'pm')).toEqual(expect.arrayContaining(['Change events', 'Pay apps', 'Reports']));
   });
 
@@ -85,7 +86,7 @@ describe('Industry × experience table (UX seat §3a)', () => {
     expect(tabs('equipment_dealer', 'customer_repair').slice(0, 3)).toEqual(['Lines', 'parts', 'Labor']);
     expect(tabs('equipment_dealer', 'warranty_repair')).toContain('warranty_claim');
     expect(tabs('equipment_dealer', 'customer_repair')).not.toContain('warranty_claim');
-    expect(navItems('equipment_dealer', 'admin')).toEqual(expect.arrayContaining(['Service', 'Units', 'Parts counter']));
+    expect(navItems('equipment_dealer', 'admin')).toEqual(expect.arrayContaining(['Service', 'Units', 'parts_counter', 'tech_board', 'warranty_deadlines']));
     expect(multiJobViewFor(exp('equipment_dealer'), 'admin')).toBe('service_board');
   });
 
@@ -138,14 +139,14 @@ describe('tenant overrides (pm.pack_overrides, RFC 6901)', () => {
     const idx = base.nav.pm!.findIndex((e) => e.item === 'change_orders');
     const r = applyExperienceOverrides(base, [
       { json_pointer: `/experience/nav/pm/${idx}/label`, op: 'replace', value: 'Change requests' },
-      { json_pointer: '/experience/job_tabs/*/tabs/8', op: 'remove' },
+      { json_pointer: '/experience/job_tabs/*/tabs/8', op: 'remove' }, // the portal tab ("Client view")
       { json_pointer: '/modules/selections', op: 'replace', value: false },
     ]);
     expect(r.skipped).toEqual([]);
     expect(r.applied).toHaveLength(2);
     expect(r.experience.nav.pm![idx]!.label).toBe('Change requests');
-    expect(r.experience.job_tabs['*']!.tabs.map((t) => t.tab)).not.toContain('client_view');
-    expect(base.job_tabs['*']!.tabs.map((t) => t.tab)).toContain('client_view');
+    expect(r.experience.job_tabs['*']!.tabs.map((t) => t.tab)).not.toContain('portal');
+    expect(base.job_tabs['*']!.tabs.map((t) => t.tab)).toContain('portal');
   });
 
   it('a delta that breaks the shape is skipped, never half-applied', () => {

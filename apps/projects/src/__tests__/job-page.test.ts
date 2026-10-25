@@ -46,10 +46,11 @@ describe('job tabs resolve per job type from the pack (manifest v2)', () => {
     }
   });
 
-  it('commercial GC lump sum: budget-first, the pack words, RFIs wait behind More', () => {
+  it('commercial GC lump sum: budget-first, the pack words, RFIs and pay apps in the row, the rest behind More', () => {
     const r = tabsFor('commercial_gc', 'lump_sum');
-    expect(labels(r)).toEqual(['Overview', 'Budget', 'Schedule', 'Commitments', 'Changes', 'Pay apps', 'Daily reports']);
-    expect(r.more.map((t) => t.label)).toEqual(expect.arrayContaining(['Directory', 'RFIs & submittals', 'Documents']));
+    expect(labels(r)).toEqual(['Overview', 'Budget', 'Schedule', 'Commitments', 'Changes', 'RFIs', 'Pay apps']);
+    expect(r.more.map((t) => t.label)).toEqual(expect.arrayContaining(['Submittals', 'Daily reports', 'Meetings', 'Buyout', 'Closeout', 'Directory', 'Safety & inspections', 'Documents', 'Owner portal']));
+    expect([...r.visible, ...r.more].filter((t) => t.later)).toEqual([]);
     expect(r.defaultTab).toBe('overview');
   });
 

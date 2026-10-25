@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { PortalAccessPanel } from '@/components/portal/staff/PortalAccessPanel';
 import { notFound, redirect } from 'next/navigation';
 import { Page, PageHead, Tag, count, shortDate } from '@meritbooks/merit-ui';
 import { pageScope } from '@/lib/scope';
@@ -65,6 +66,12 @@ export default async function CustomerPage({ params }: { params: { customerId: s
             booksUrl={scope.tenant.booksPresent ? `${booksUrl()}/customers/${c.id}` : null}
             readOnly={scope.readOnly}
           />
+          {at && (
+            <section className="sec" style={{ marginTop: 'var(--s4)' }}>
+              <div className="sec-h"><h2 className="t-section">Customer portal</h2></div>
+              <PortalAccessPanel companyId={at} audience="customer" customerId={c.id} />
+            </section>
+          )}
         </div>
       </Page>
     </>

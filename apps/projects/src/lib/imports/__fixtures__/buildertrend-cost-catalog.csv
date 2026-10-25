@@ -1,0 +1,4 @@
+Item ID,Cost Code,Title,Description,Unit,Unit Cost,Builder Cost,Markup,Client Price,Cost Type
+CAB-BASE-36,06-200,36in base cabinet,"Shaker, painted",EA,$412.00,$412.00,35%,$556.20,Material
+LAB-DEMO,02-100,Demolition labor,Per hour,HR,$48.00,$48.00,40%,$67.20,Labor
+TILE-SUB,09-300,Tile install (sub),Per sq ft,SF,$9.50,$9.50,25%,$11.88,Subcontractor

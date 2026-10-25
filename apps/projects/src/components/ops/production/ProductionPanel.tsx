@@ -69,6 +69,7 @@ export function ProductionPanel(p: ProductionPanelProps) {
           {(o.status === 'RELEASED' || o.status === 'IN_PROGRESS') && <Button onClick={() => setHoldOpen(true)}>Hold</Button>}
           {o.status === 'ON_HOLD' && <Button disabled={busy === 'resume'} onClick={() => void act('resume', 'post', url, { op: 'resume' }, `Resumed ${o.number}`)}>Resume</Button>}
           <span className="sp" />
+          {engineering && <Link className="link" href={`/production/release/${o.id}`}>All release gates</Link>}
           {engineering && <Button variant="primary" disabled={busy === 'release'} onClick={() => void release()}>Release to shop</Button>}
           {o.status === 'COMPLETE' && <Button variant="primary" disabled={busy === 'close'} onClick={() => void act('close', 'post', url, { op: 'close' }, `Closed ${o.number}`)}>Close</Button>}
         </div>

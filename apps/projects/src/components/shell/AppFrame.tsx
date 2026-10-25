@@ -1,5 +1,6 @@
 'use client';
 
+import { ImportProgressPill } from '@/components/imports/ImportProgressPill';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { UserButton } from '@clerk/nextjs';
@@ -185,6 +186,7 @@ export function AppFrame(p: AppFrameProps) {
             <span ref={cmdkRef} style={{ marginLeft: 'auto', display: 'flex' }}>
               <CmdkTrigger label={`Go to, do or find a ${p.vocab.job.toLowerCase()}…`} onOpen={() => setPaletteOpen((o) => !o)} />
             </span>
+            <ImportProgressPill />
             <BellSlot />
             <SyncStatus>{loadedAt ? `Loaded ${loadedAt}` : 'Loading…'}</SyncStatus>
           </Bar>

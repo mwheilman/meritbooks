@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   Button, Check, ConfirmDialog, Field, Figure, Input, KV, MoneyInput, Panel, PanelSection, Seg, Select, Textarea, WidgetState, api, count, pct, shortDate, useDebounce,
 } from '@meritbooks/merit-ui';
@@ -288,7 +289,7 @@ function ContractPanel({ c, unit, customer, billings, onClose }: { c: RentalCont
   return (
     <Panel eyebrow={['Rental', c.number]} title={unit ? `${unit.stock_number ?? ''} ${[unit.make, unit.model].filter(Boolean).join(' ')}`.trim() : 'Unit'} meta={customer ?? 'Customer'} onClose={onClose}>
       <PanelSection>
-        <StatusMark mark={RENTAL_STATUS[c.status]} />
+        <StatusMark mark={RENTAL_STATUS[c.status]} /> <Link className="link" href={`/rentals/${c.id}/inspection`}>Walk-around and damage compare</Link>
         <div style={{ marginTop: 12 }}>
           <KV items={[
             { term: 'Reserved', value: r ? `${when(new Date(r.start).toISOString())} to ${when(new Date(r.end).toISOString())}` : '—' },

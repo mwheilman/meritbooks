@@ -1,0 +1,4 @@
+Customer ID,Customer Name,Customer Type,Email,Phone,Street,City,State,Zip,Balance
+48817,Linda Park,Residential,linda.park@example.com,(515) 555-0700,2210 Beaver Ave,Des Moines,IA,50310,$0.00
+48818,Grand View Apartments,Commercial,maint@grandview.example,515-555-0710,1400 Grand View Ave,Des Moines,IA,50316,"$1,284.50"
+48819,Raj Mehta,Residential,raj.m@example.com,515-555-0720,16 Fox Run,Waukee,IA,50263,$389.00

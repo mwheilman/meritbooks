@@ -1,0 +1,4 @@
+Invoice #,Customer ID,Customer Name,Invoice Date,Due Date,Total,Balance,Job #
+INV-7712,48818,Grand View Apartments,9/14/2026,10/14/2026,$684.25,$684.25,ST-55013
+INV-7690,48818,Grand View Apartments,8/30/2026,9/29/2026,$600.25,$600.25,
+INV-7720,48819,Raj Mehta,9/20/2026,10/20/2026,$389.00,$389.00,ST-55020

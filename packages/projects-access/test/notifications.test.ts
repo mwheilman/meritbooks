@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { buildFixture, as, q, errorOf, type Fixture, type Persona, ORG_A, ORG_B, L1, LB, J1, J2, J3 } from './fixture';
+import { buildFixture, as, q, errorOf, type Fixture, type Persona, ORG_A, ORG_B, L1, L2, LB, J1, J2, J3 } from './fixture';
 import { applyMigration, listMigrationFiles } from './pg';
 import { recipeDefaults } from '../../../apps/projects/src/lib/notify/recipes';
 
@@ -588,5 +588,52 @@ describe('worker surface', () => {
     expect(st.find((x) => x.id === other?.id)).toMatchObject({ status: 'queued', later: true });
     await f.db.query(`select core.notify_revoke_push_token($1, 'DeviceNotRegistered')`, [TOKEN('gm')]);
     expect((await q(f.db, `select 1 from core.push_devices where token = $1 and revoked_at is not null`, [TOKEN('gm')]))).toHaveLength(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('secret-bearing customer messages (runs after the worker test: it claims the queue)', () => {
+  it('portals review CRITICAL: one-time codes never land in outbound_messages; admins never read them; deleted after send', async () => {
+    const mk = async (loc: string, code: string, dedupe: string) => (await q<{ r: { outbound_id: string; status: string } }>(f.db,
+      `select core.notify_customer_secret($1, $2, null, 'customer.portal_access', 'email', $3, 'Your sign-in code',
+              'Portal sign-in code (sent directly; the code is never stored).', $4, $5, 'portal') r`,
+      [ORG_A, loc, f.ids.contact, `Your code is ${code}. It expires in 20 minutes.`, dedupe]))[0].r;
+    const a = await mk(L1, '481516', 'sec-1');
+    expect(a.status).toBe('queued');
+    const row = await q<{ body: string; data: { secret?: boolean } }>(f.db, `select body, data from core.outbound_messages where id = $1`, [a.outbound_id]);
+    expect(row[0]?.body).not.toContain('481516');
+    expect(row[0]?.data.secret).toBe(true);
+    // members / admins: no table access to secrets; the admin log masks the text
+    expect(await as(f, 'owner', async () => errorOf(f.db, `select body from core.outbound_secrets`))).toMatch(/permission denied/);
+    expect(await as(f, 'owner', async () => errorOf(f.db, `select core.notify_secret_take($1)`, [a.outbound_id]))).toMatch(/permission denied/);
+    const log = await as(f, 'owner', async () => q<{ body: string | null; subject: string | null; body_masked: boolean }>(f.db,
+      `select body, subject, body_masked from pm.notify_outbound_messages(null, 500) where id = $1`, [a.outbound_id]));
+    expect(log).toEqual([{ body: null, subject: null, body_masked: true }]);
+    // the worker gets the real text at claim time; once sent the secret is gone
+    const claimed = await q<{ id: string; body: string }>(f.db, `select id, body from core.notify_outbound_claim(500) where id = $1`, [a.outbound_id]);
+    expect(claimed[0]?.body).toBe('Your code is 481516. It expires in 20 minutes.');
+    await f.db.query(`select core.notify_outbound_result($1, 'sent', 'resend', 'em_9', null)`, [a.outbound_id]);
+    expect(await q(f.db, `select 1 from core.outbound_secrets where outbound_id = $1`, [a.outbound_id])).toEqual([]);
+    // direct send: taken once, then nothing
+    const b = await mk(L1, '271828', 'sec-2');
+    const take = (await q<{ t: { body: string; to: string } | null }>(f.db, `select core.notify_secret_take($1) t`, [b.outbound_id]))[0]?.t;
+    expect(take?.body).toContain('271828');
+    expect(take?.to).toBe('pat@example.test');
+    expect((await q<{ t: unknown }>(f.db, `select core.notify_secret_take($1) t`, [b.outbound_id]))[0]?.t).toBeNull();
+    expect(await q(f.db, `select 1 from core.outbound_secrets where outbound_id = $1`, [b.outbound_id])).toEqual([]);
+    // expired before sending → cancelled, the placeholder is never sent
+    const c = await mk(L1, '314159', 'sec-3');
+    await f.db.query(`update core.outbound_secrets set created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' where outbound_id = $1`, [c.outbound_id]);
+    expect(await q(f.db, `select id from core.notify_outbound_claim(500) where id = $1`, [c.outbound_id])).toEqual([]);
+    expect((await q<{ status: string }>(f.db, `select status from core.outbound_messages where id = $1`, [c.outbound_id]))[0]?.status).toBe('cancelled');
+    // a held company (L2 not live) never stores the secret, and the message cannot be released later
+    const h = await mk(L2, '161803', 'sec-4');
+    expect(h.status).toBe('held');
+    expect(await q(f.db, `select 1 from core.outbound_secrets where outbound_id = $1`, [h.outbound_id])).toEqual([]);
+    await as(f, 'owner', async () => f.db.query(`select pm.notify_configure($1, '{"customer_messages_live":true}'::jsonb)`, [L2]));
+    expect(await as(f, 'owner', async () => errorOf(f.db, `select pm.notify_held_action($1::uuid[], 'release')`, [[h.outbound_id]]))).toMatch(/not released later/);
+    // a public text that leaks the secret is refused
+    expect(await errorOf(f.db, `select core.notify_customer_secret($1, $2, null, 'customer.portal_access', 'email', $3, 's', 'code 999', '999', null, 'portal')`,
+      [ORG_A, L1, f.ids.contact])).toMatch(/must not contain the secret/);
   });
 });

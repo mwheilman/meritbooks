@@ -1,0 +1,4 @@
+Job Number,Line,Description,Cost Code,Scheduled Value,Billed to Date,Stored Materials,Retainage
+GC-301,1,Sitework,02-000,"$420,000","$400,000",$0,"$20,000"
+GC-301,2,Building shell,04-000,"$1,725,000","$900,000","$40,000","$45,000"
+GC-301,3,MEP,15-000,"$1,000,000","$160,000",$0,"$10,000"

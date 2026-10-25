@@ -98,6 +98,7 @@ export function UnitPanel(p: UnitPanelProps) {
           {status ? <StatusMark mark={UNIT_STATUS[status]} /> : <Tag>Customer equipment</Tag>}
           {ageMark && <Status kind={ageMark.kind} pip={ageMark.pip}>{ageMark.word} in stock</Status>}
           {u.is_sample && <Tag>Sample</Tag>}
+          <ButtonLink variant="quiet" href={`/stock/units/${u.id}/timeline`}>Timeline</ButtonLink>
         </div>
         {u.sot_alert_at && (
           <div className="dl-note neg" style={{ marginTop: 12 }} role="alert">

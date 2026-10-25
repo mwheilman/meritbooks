@@ -79,6 +79,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: { c
   const workspaceAreas: AreaLink[] = [
     { key: 'team', name: 'Team and roles', desc: 'Who uses Merit Projects here, their role, and Preview as', status: team ? `${count(team.members.filter((m) => rolesAt(m, company.id).length).length)} people` : 'People and roles', href: href('team') },
     { key: 'onboarding', name: 'Company setup', desc: 'Set up the companies that do not run on Merit Projects yet', status: uninstalled.length ? `${count(uninstalled.length)} not set up` : 'All set up', attn: uninstalled.length > 0, href: href('onboarding') },
+    // Screens of their own (Wave A approvals 1113, Wave B imports 1121)
+    { key: 'approval-rules', name: 'Approval rules', desc: 'Who approves what, by amount, and the exceptions log', href: '/approvals/policies' },
+    ...(configures ? [{ key: 'imports', name: 'Imports', desc: 'Bring jobs, customers, vendors and open balances in from your old system', href: '/setup/imports' }] : []),
   ];
   const title = [...companyAreas, ...workspaceAreas].find((a) => a.key === area)!.name;
 

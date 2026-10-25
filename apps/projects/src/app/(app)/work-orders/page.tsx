@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { Page, PageHead, count, money } from '@meritbooks/merit-ui';
+import { isDealerVocab } from '@/lib/pm/ops/labels';
+import { ButtonLink, Page, PageHead, count, money } from '@meritbooks/merit-ui';
 import { opsScope, has, jobRefs, jobTypesWith, customerNames } from '@/lib/pm/ops/scope';
 import { loadTechSetup, loadWorkOrders } from '@/lib/pm/ops/field-queries';
 import { claimOutstanding, woBand, woVocab, type WoBand } from '@/lib/pm/ops/labels';
@@ -64,7 +65,7 @@ export default async function WorkOrdersPage({ searchParams }: { searchParams: {
         ]}
       />
       <Page>
-        <PageHead eyebrow={o.where} title={wv.many} />
+        <PageHead eyebrow={o.where} title={wv.many} actions={isDealerVocab(o.vocab) ? <ButtonLink variant="quiet" href="/work-orders/tech-board">Tech board</ButtonLink> : undefined} />
         <WorkOrderQueue
           orders={list.orders}
           assignments={list.assignments}

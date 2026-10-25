@@ -1,0 +1,4 @@
+Equipment ID,Customer ID,Customer Name,Location Address,Type,Manufacturer,Model,Serial Number,Install Date,Warranty Expiration
+EQ-1,48817,Linda Park,2210 Beaver Ave,Furnace,Carrier,59SC5A080E17,3417A51234,10/14/2019,10/14/2029
+EQ-2,48817,Linda Park,2210 Beaver Ave,AC Condenser,Carrier,24ACC636A003,2419E33321,10/14/2019,10/14/2029
+EQ-3,48818,Grand View Apartments,1400 Grand View Ave,Boiler,Weil-McLain,CGa-6,CG6-88812,2015-06-01,

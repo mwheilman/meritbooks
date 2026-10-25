@@ -6,6 +6,7 @@
  * get the big buttons: Started today, Finished today, % steps and Push a day / a week.
  * Billing amounts show only with projects.contract_value (masked server-side as well).
  */
+import { PortalVisibilityToggle } from '@/components/portal/staff/PortalVisibilityToggle';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, ConfirmDialog, Field, Input, KV, Panel, PanelSection, Seg, Select, Status, money, shortDate } from '@meritbooks/merit-ui';
 import { addWorkdays, workdaysBetween } from '@/lib/pm/schedule/calendar';
@@ -243,6 +244,10 @@ export function TaskPanel(p: TaskPanelProps) {
           )}
           {err && <span className="field-error" role="alert">{err}</span>}
         </div>
+      </PanelSection>
+
+      <PanelSection title="Customer portal">
+        <PortalVisibilityToggle key={t.id} table="tasks" id={t.id} canEdit={canEdit} label={t.is_milestone ? 'Show this milestone on the customer portal' : 'Show this task on the customer portal'} />
       </PanelSection>
 
       <PanelSection title="Links" meta={<span className="t-cap">{preds.length} before · {succs.length} after</span>}>

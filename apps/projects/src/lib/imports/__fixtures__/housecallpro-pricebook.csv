@@ -1,0 +1,4 @@
+Item Code,Name,Description,Price,Cost,Unit Of Measure,Category,Taxable
+DRAIN-CLR,Drain clearing,"Main line, up to 100 ft",$249.00,,job,Drain,No
+DISP-1/2,Disposal 1/2 hp,Installed,$425.00,$118.00,each,Plumbing,Yes
+,Trip charge,,$79.00,,each,Fees,No

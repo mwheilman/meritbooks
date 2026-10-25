@@ -90,6 +90,21 @@ const RULES: ReadonlyArray<readonly [string, Rule]> = [
   ['/dispatch/capacity', { all: ['projects.dispatch:view'] }],
   ['/dispatch/scorecards', { all: ['projects.jobs:view'] }],
   ['/dispatch/visit', { all: ['projects.jobs:view'] }],
+  // Wave B: portals (1118), residential (1119), commercial (1120), imports (1121), industry depth (1122)
+  ['/portal-access', { any: ['projects.customers:view', 'projects.commitments:view', 'projects.billing:view'] }],
+  ['/proposals', { all: ['projects.estimates:view'] }],
+  ['/homes', { all: ['projects.jobs:view'] }],
+  ['/communities', { all: ['projects.jobs:view'] }],
+  ['/change-events', { all: ['projects.change_orders:view'] }],
+  ['/rfis', { all: ['projects.jobs:view'] }],
+  ['/submittals', { all: ['projects.jobs:view'] }],
+  ['/meetings', { all: ['projects.jobs:view'] }],
+  ['/compliance', { all: ['projects.commitments:view', 'projects.financials:view'] }],
+  ['/setup/imports', { all: ['projects.settings:configure'] }],
+  ['/flooring/pay', { all: ['projects.time:view'] }],
+  ['/flooring', { all: ['projects.jobs:view'] }],
+  ['/design', { all: ['projects.selections:view'] }],
+  ['/development', { all: ['projects.financials:view'] }],
   ['/estimates', { all: ['projects.estimates:view'] }],
   ['/leads', { all: ['projects.leads:view'] }],
   ['/customers', { all: ['projects.customers:view'] }],
@@ -171,6 +186,24 @@ export function canReach(access: NavAccess, href: string, companyId?: string | n
  */
 export const DEALER_STORE_MODULE = 'dealer_store';
 
+/**
+ * Industry screens that are not pack modules follow the company's pack (Wave B depth): the key a
+ * rail item names as its module is switched on when a company in view runs one of these packs.
+ */
+export const PACK_SCREENS: Readonly<Record<string, ReadonlyArray<string>>> = {
+  'pack:residential': ['residential_remodel', 'home_builder'],
+  'pack:homes': ['home_builder', 'real_estate_development'],
+  'pack:commercial': ['commercial_gc', 'specialty_trade'],
+  'pack:flooring': ['flooring'],
+  'pack:design': ['interior_design'],
+  'pack:development': ['real_estate_development'],
+};
+
+export function packScreensInUse(packKeys: ReadonlyArray<string> | undefined): string[] {
+  const keys = new Set(packKeys ?? []);
+  return Object.entries(PACK_SCREENS).filter(([, packs]) => packs.some((p) => keys.has(p))).map(([m]) => m);
+}
+
 export function isDealerNav(i: Pick<NavInput, 'vocab' | 'packKeys' | 'archetypes'>): boolean {
   return (i.packKeys ?? []).includes('equipment_dealer') || (i.archetypes ?? []).includes('dealer_service') || isDealerVocab(i.vocab);
 }
@@ -178,7 +211,7 @@ export function isDealerNav(i: Pick<NavInput, 'vocab' | 'packKeys' | 'archetypes
 const COMPANY: ReadonlyArray<ShellContext> = ['client'];
 const ROLLUP: ReadonlyArray<ShellContext> = ['workspace', 'consolidated'];
 
-function a(label: string, href: string, module: ModuleKey | typeof DEALER_STORE_MODULE, extra: Partial<NavItem> = {}): NavItem {
+function a(label: string, href: string, module: ModuleKey | typeof DEALER_STORE_MODULE | keyof typeof PACK_SCREENS, extra: Partial<NavItem> = {}): NavItem {
   return { label, href, disclosure: 'A', module, ...extra };
 }
 
@@ -203,6 +236,37 @@ function items(i: NavInput) {
     priceBook: a('Price book', '/pricebook', 'dispatch'),
     capacity: a('Capacity', '/dispatch/capacity', 'dispatch'),
     scorecards: a('Scorecards', '/dispatch/scorecards', 'dispatch'),
+    // ---- Wave B
+    portals: { label: 'Portals', href: '/portal-access' } satisfies NavItem,
+    proposals: a('Proposals', '/proposals', 'pack:residential'),
+    homes: a('Homes', '/homes', 'pack:homes'),
+    communities: a('Communities', '/communities', 'pack:homes'),
+    changeEvents: a('Change events', '/change-events', 'pack:commercial'),
+    rfis: a('RFIs', '/rfis', 'rfis_submittals'),
+    submittals: a('Submittals', '/submittals', 'rfis_submittals'),
+    meetings: a('Meetings', '/meetings', 'pack:commercial'),
+    compliance: a('Compliance', '/compliance', 'compliance'),
+    imports: { label: 'Imports', href: '/setup/imports', disclosure: 'M' } satisfies NavItem,
+    flooring: a('Flooring', '/flooring', 'pack:flooring'),
+    flooringPay: a('Installer pay', '/flooring/pay', 'pack:flooring'),
+    flooringRolls: a('Rolls and remnants', '/flooring/rolls', 'pack:flooring'),
+    flooringCatalog: a('Catalog', '/flooring/catalog', 'pack:flooring'),
+    design: a('Design procurement', '/design', 'pack:design'),
+    designInbox: a('Vendor inbox', '/design/inbox', 'pack:design'),
+    development: a('Development', '/development', 'pack:development'),
+    partsCounter: a('Parts counter', '/parts/counter', DEALER_STORE_MODULE),
+    priceFiles: a('Price files', '/parts/price-files', DEALER_STORE_MODULE),
+    storeScorecard: a('Scorecard', '/stock/kpis', DEALER_STORE_MODULE),
+    programs: a('Programs', '/stock/programs', DEALER_STORE_MODULE),
+    warrantyDeadlines: a('Warranty deadlines', '/warranty?band=DRAFT', DEALER_STORE_MODULE),
+    warrantyCredits: a('Warranty credits', '/warranty/credits', DEALER_STORE_MODULE),
+    techBoard: a('Tech board', '/work-orders/tech-board', DEALER_STORE_MODULE),
+    station: a('Station', '/production/kiosk', 'production'),
+    shopBacklog: a('Shop backlog', '/production/backlog', 'production'),
+    cadImports: a('CAD imports', '/production/cad', 'production'),
+    materials: a('Material', '/production/materials', 'production'),
+    remakes: a('Remakes', '/production/remakes', 'production'),
+    installs: a('Installs', '/production/installs', 'production'),
     toReview: { label: 'To review', href: '/review', keys: 'g v', count: review, processing: true } satisfies NavItem,
     documents: { label: 'Documents', href: '/documents', keys: 'g d' } satisfies NavItem,
     me: { label: 'Me', href: '/me', keys: 'g m' } satisfies NavItem,
@@ -251,7 +315,10 @@ function items(i: NavInput) {
 type Items = ReturnType<typeof items>;
 
 function storeGroup(it: Items): NavGroup {
-  return { id: 'store', label: 'Store', contexts: COMPANY, items: [it.stock, it.deals, it.parts, it.rentals, it.warranty] };
+  return {
+    id: 'store', label: 'Store', contexts: COMPANY,
+    items: [it.stock, it.deals, it.parts, it.partsCounter, it.rentals, it.warranty, it.techBoard, it.warrantyDeadlines, it.warrantyCredits, it.priceFiles, it.programs, it.storeScorecard],
+  };
 }
 
 /** Management (owner, GM): every screen, Pipeline and Insights, Approvals at the top. */
@@ -260,18 +327,18 @@ function managementRail(i: NavInput, it: Items): NavGroup[] {
     { id: 'home', items: [it.home, it.inbox, { ...it.approvals, contexts: COMPANY }, { ...it.toReview, contexts: COMPANY }] },
     // ---- company rail ----
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates] },
-    { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.changeOrders, it.selections, it.units] },
+    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates, it.proposals] },
+    { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.homes, it.communities, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units] },
     {
       id: 'field', label: 'Field', contexts: COMPANY,
       items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.logs, it.punch, it.time, it.scorecards, it.campaigns],
     },
-    { id: 'make', label: 'Make', contexts: COMPANY, items: [it.production] },
-    { id: 'buy', label: 'Buy', contexts: COMPANY, items: [it.commitments, it.subcontractors] },
-    { id: 'bill', label: 'Bill', contexts: COMPANY, items: [it.billing, it.retainage, it.draws] },
-    { id: 'cost', label: 'Cost', contexts: COMPANY, items: [it.jobCost, ...(i.booksPresent ? [it.wip] : [])] },
+    { id: 'make', label: 'Make', contexts: COMPANY, items: [it.production, it.station, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs] },
+    { id: 'buy', label: 'Buy', contexts: COMPANY, items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls, it.flooringCatalog] },
+    { id: 'bill', label: 'Bill', contexts: COMPANY, items: [it.billing, it.retainage, it.draws, it.flooringPay] },
+    { id: 'cost', label: 'Cost', contexts: COMPANY, items: [it.jobCost, it.wip] },
     { id: 'insights-co', label: 'Insights', contexts: COMPANY, items: [it.margin, it.backlog] },
-    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.documents, it.activity, it.aiDecisions, it.settings, it.approvalRules, it.outOfOffice, it.companyMessages] },
+    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.documents, it.portals, it.activity, it.aiDecisions, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages] },
     // ---- workspace / consolidated rail ----
     { id: 'work', label: 'Work', contexts: ROLLUP, items: [{ ...it.jobs }, it.schedule, it.approvals] },
     { id: 'pipeline', label: 'Pipeline', contexts: ROLLUP, items: [it.leads, it.customers] },
@@ -288,12 +355,12 @@ function pmRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
-    { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.changeOrders, it.selections, it.units, it.jobCost] },
-    { id: 'sell', label: 'Customers', items: [it.customers, it.leads] },
-    { id: 'field', label: 'Schedule', items: [it.schedule, it.dispatch, it.capacity, it.workOrders, it.logs, it.punch, it.time, it.production, it.priceBook, it.scorecards] },
+    { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.homes, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units, it.jobCost, it.wip] },
+    { id: 'sell', label: 'Customers', items: [it.customers, it.leads, it.proposals, it.communities] },
+    { id: 'field', label: 'Schedule', items: [it.schedule, it.dispatch, it.capacity, it.workOrders, it.logs, it.punch, it.time, it.production, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs, it.priceBook, it.scorecards] },
     { id: 'away', items: [it.outOfOffice] },
-    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
-    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws] },
+    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls] },
+    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws, it.flooringPay] },
   ];
 }
 
@@ -302,13 +369,14 @@ function adminRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
-    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates] },
-    { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.changeOrders, it.selections, it.units] },
+    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates, it.proposals] },
+    { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.homes, it.communities, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units] },
     { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.time, it.campaigns] },
-    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors] },
-    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws] },
-    { id: 'cost', label: 'Cost', items: [it.jobCost, ...(i.booksPresent ? [it.wip] : [])] },
-    { id: 'controls', label: 'Controls', items: [it.documents, it.activity, it.settings, it.approvalRules, it.outOfOffice, it.companyMessages] },
+    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls, it.flooringCatalog] },
+    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws, it.flooringPay] },
+    { id: 'cost', label: 'Cost', items: [it.jobCost, it.wip] },
+    { id: 'make', label: 'Make', items: [it.production, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs] },
+    { id: 'controls', label: 'Controls', items: [it.documents, it.portals, it.activity, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages] },
   ];
 }
 
@@ -355,6 +423,13 @@ const NAV_ITEM_DEST: Readonly<Record<NavItemKey, keyof Items>> = {
   documents: 'documents', stock: 'stock', deals: 'deals', parts: 'parts', rentals: 'rentals', warranty: 'warranty',
   calls: 'calls', campaigns: 'campaigns', price_book: 'priceBook', capacity: 'capacity', scorecards: 'scorecards',
   out_of_office: 'outOfOffice', approval_rules: 'approvalRules', company_messages: 'companyMessages',
+  portals: 'portals', proposals: 'proposals', homes: 'homes', communities: 'communities', change_events: 'changeEvents',
+  rfis: 'rfis', submittals: 'submittals', meetings: 'meetings', compliance: 'compliance', imports: 'imports',
+  flooring: 'flooring', flooring_pay: 'flooringPay', flooring_rolls: 'flooringRolls', flooring_catalog: 'flooringCatalog',
+  design: 'design', design_inbox: 'designInbox', development: 'development', parts_counter: 'partsCounter',
+  price_files: 'priceFiles', store_scorecard: 'storeScorecard', programs: 'programs', warranty_deadlines: 'warrantyDeadlines',
+  warranty_credits: 'warrantyCredits', tech_board: 'techBoard', station: 'station', shop_backlog: 'shopBacklog',
+  cad_imports: 'cadImports', materials: 'materials', remakes: 'remakes', installs: 'installs',
 };
 
 export function navDestination(key: NavItemKey, i: NavInput): NavItem {
@@ -362,7 +437,7 @@ export function navDestination(key: NavItemKey, i: NavInput): NavItem {
 }
 
 function modulesInUse(i: NavInput): ReadonlyArray<string> {
-  return isDealerNav(i) ? [...i.modules, DEALER_STORE_MODULE] : i.modules;
+  return [...i.modules, ...(isDealerNav(i) ? [DEALER_STORE_MODULE] : []), ...packScreensInUse(i.packKeys)];
 }
 
 /** filterNav's activation rule (A items show when their module is in use or they hold open work). */

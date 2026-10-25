@@ -50,7 +50,7 @@ export default async function DealPage({ params }: { params: { dealId: string } 
         <PageHead
           eyebrow={[where, 'Deal']}
           title={`${w.deal.number}${w.customer ? ` · ${w.customer}` : ''}`}
-          actions={<ButtonLink variant="quiet" href="/deals">All deals</ButtonLink>}
+          actions={<><ButtonLink variant="quiet" href={`/deals/${w.deal.id}/desk`}>Payment options</ButtonLink><ButtonLink variant="quiet" href="/deals">All deals</ButtonLink></>}
         />
         <DealDesk initial={w} stock={stock.units} today={todayIso()} />
       </Page>

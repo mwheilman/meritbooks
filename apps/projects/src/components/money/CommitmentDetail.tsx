@@ -1,5 +1,6 @@
 'use client';
 
+import { PortalPayApps } from '@/components/job/tabs/PortalTab';
 import { approvalOutcome, chainPending } from '@/lib/approvals/outcome';
 import { useState } from 'react';
 import {
@@ -18,7 +19,7 @@ import type { CommitmentListRow, OwnerCoOption } from './CommitmentsTab';
 import { VendorPicker, type VendorAdd } from './VendorPicker';
 import { vendorKindFor } from '@/lib/pm/parties/schemas';
 
-type Section = 'lines' | 'changes' | 'receipts' | 'compliance';
+type Section = 'lines' | 'changes' | 'receipts' | 'compliance' | 'pay-apps';
 
 export interface CommitmentDetailProps {
   row: CommitmentListRow;
@@ -117,6 +118,7 @@ export function CommitmentDetail(p0: CommitmentDetailProps) {
             { value: 'changes', label: 'Changes', count: p0.changes.filter((x) => x.status === 'DRAFT').length || undefined, panelId: 'cmt-panel' },
             { value: 'receipts', label: 'Receipts', count: p0.receipts.length || undefined, panelId: 'cmt-panel' },
             { value: 'compliance', label: 'Compliance', count: missing.length || undefined, panelId: 'cmt-panel' },
+            ...(c.vendor_id ? [{ value: 'pay-apps' as Section, label: 'Pay apps from the portal', panelId: 'cmt-panel' }] : []),
           ]}
         />
       </div>
@@ -125,6 +127,7 @@ export function CommitmentDetail(p0: CommitmentDetailProps) {
         {section === 'changes' && <ChangesSection row={c} lines={p0.lines} changes={p0.changes} codes={codes} costCodes={p0.costCodes} ownerCos={p0.ownerCos} currentUserId={p0.currentUserId} readOnly={readOnly} />}
         {section === 'receipts' && <ReceiptsSection row={c} lines={p0.lines} receipts={p0.receipts} today={p0.today} readOnly={readOnly} />}
         {section === 'compliance' && <ComplianceSection row={c} docs={p0.compliance} today={p0.today} readOnly={readOnly} />}
+        {section === 'pay-apps' && <PortalPayApps filter={{ commitmentId: c.id }} />}
       </div>
 
       <ConfirmDialog

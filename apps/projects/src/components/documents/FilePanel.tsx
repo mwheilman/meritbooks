@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import {
-  Button, ConfirmDialog, Field, InlineNotice, Input, Panel, PanelSection, Select, Status, Tag, Textarea, WidgetState, api, toast,
+  Button, Check, ConfirmDialog, Field, InlineNotice, Input, Panel, PanelSection, Select, Status, Tag, Textarea, WidgetState, api, toast,
 } from '@meritbooks/merit-ui';
 import { KIND_LABEL, RETENTION_CLASSES, RETENTION_LABEL, type FolderRow, type RetentionClass } from '@/lib/documents/types';
 import type { FileDetail } from '@/lib/documents/store';
@@ -135,6 +135,8 @@ export function FilePanel({ fileId, userId, folders, perms, readOnly, onClose, o
         </ol>
       </PanelSection>
 
+      {f.job_id && <PortalShare key={`${f.id}:${(f.portal_audiences ?? []).join(',')}`} fileId={f.id} initial={f.portal_audiences ?? []} costDoc={f.money_cap === 'projects.financials'} canEdit={!readOnly && perms.edit && f.status === 'active'} onSaved={bump} />}
+
       {!readOnly && perms.edit && <Details key={`${f.id}:${f.updated_at}`} fileId={fileId} title={f.title} folderId={f.folder_id} description={f.description} tags={f.tags} folders={folders} archived={f.status === 'archived'} onSaved={bump} hold={f.legal_hold} />}
 
       <PanelSection title="Records">
@@ -234,5 +236,38 @@ function Records({ fileId, retentionClass, retainUntil, canEdit, onSaved }: { fi
       </Field>
       <div><Button type="submit" disabled={busy}>Save retention</Button></div>
     </form>
+  );
+}
+
+type PortalAudience = 'customer' | 'vendor' | 'lender' | 'investor';
+const PORTAL_WORD: Record<PortalAudience, string> = { customer: 'Customer', vendor: 'Subs and vendors', lender: 'Lender', investor: 'Investors' };
+
+/** "Share to portal" (1118): which portal audiences see this document. Cost documents never reach customers or investors. */
+function PortalShare({ fileId, initial, costDoc, canEdit, onSaved }: { fileId: string; initial: PortalAudience[]; costDoc: boolean; canEdit: boolean; onSaved: () => void }) {
+  const [on, setOn] = useState<ReadonlySet<PortalAudience>>(new Set(initial));
+  const [busy, setBusy] = useState(false);
+  const toggle = async (a: PortalAudience, next: boolean) => {
+    const set = new Set(on);
+    if (next) set.add(a); else set.delete(a);
+    setBusy(true);
+    const r = await api.post<{ audiences: PortalAudience[] }>('/api/portal/staff/share', { fileId, audiences: [...set] });
+    setBusy(false);
+    if (r.error) return void toast.error(r.error.error);
+    setOn(new Set(r.data?.audiences ?? [...set]));
+    toast(next ? `Shared with the ${PORTAL_WORD[a].toLowerCase()} portal` : `No longer on the ${PORTAL_WORD[a].toLowerCase()} portal`);
+    onSaved();
+  };
+  return (
+    <PanelSection title="Share to portal">
+      <div className="stack" style={{ gap: 6 }}>
+        {(Object.keys(PORTAL_WORD) as PortalAudience[]).map((a) => {
+          const blocked = costDoc && (a === 'customer' || a === 'investor');
+          return (
+            <Check key={a} label={blocked ? `${PORTAL_WORD[a]} (cost documents are never shared here)` : PORTAL_WORD[a]} checked={on.has(a)} disabled={!canEdit || busy || blocked} onChange={(e) => void toggle(a, e.target.checked)} />
+          );
+        })}
+      </div>
+      <p className="t-cap" style={{ marginTop: 8 }}>Shared documents show on the job in each portal once the company is live.</p>
+    </PanelSection>
   );
 }

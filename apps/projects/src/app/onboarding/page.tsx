@@ -95,6 +95,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: R
       jobTypesByCompany={jobTypesByCompany}
       team={team}
       booksTeamUrl={`${booksBase()}/team`}
+      booksUrl={booksBase()}
       aiConfigured={aiConfigured()}
       problem={state.problem}
     />

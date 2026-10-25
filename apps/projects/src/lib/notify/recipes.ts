@@ -24,6 +24,20 @@ export const INTERNAL_EVENTS = [
   'lead.sla_breach',
   'document.sign_requested',
   'comment.mention',
+  // Wave B (1118 portals, 1119 residential, 1120 commercial) — every one mandatory
+  'portal.activity',
+  'change_order.requested',
+  'trade.schedule_response',
+  'rfi.assigned',
+  'submittal.review_requested',
+  'sub_pay_app.review',
+  'compliance.expiring',
+  'eac.submitted',
+  'meeting.minutes',
+  'meeting.item_assigned',
+  'observation.assigned',
+  'productivity.fade',
+  'tm.signature_needed',
 ] as const;
 export type InternalEvent = (typeof INTERNAL_EVENTS)[number];
 
@@ -34,7 +48,15 @@ export const CUSTOMER_EVENTS = [
   'customer.selection_reminder',
   'customer.job_complete',
   'customer.message',
+  // Wave B outbound to customers / trade partners (held until go-live, consent / STOP checked)
+  'customer.portal_access',
+  'trade.schedule_request',
+  'trade.bid_invite',
+  'trade.po_ready',
 ] as const;
+
+/** Customer events whose messages may carry a sign-in link or one-time code (text never shown to staff). */
+export const SECRET_BEARING_EVENTS = ['customer.portal_access'] as const;
 export type CustomerEvent = (typeof CUSTOMER_EVENTS)[number];
 
 export type NotifyEvent = InternalEvent | CustomerEvent;
@@ -66,6 +88,19 @@ export const EVENT_INFO: Readonly<Record<InternalEvent, EventInfo>> = {
   'lead.sla_breach': { label: 'Lead not contacted in time', description: "A lead has had no call, text or email within the company's speed-to-lead window.", category: 'sales', mandatory: false },
   'document.sign_requested': { label: 'Document to sign', description: 'A document is waiting for your signature.', category: 'documents', mandatory: false },
   'comment.mention': { label: 'Mentioned in a comment', description: 'Someone mentioned you in a comment.', category: 'comments', mandatory: false },
+  'portal.activity': { label: 'Portal activity', description: 'A customer, sub, lender or investor acted in the portal (approved, declined, messaged, uploaded, proposed a date).', category: 'work', mandatory: true },
+  'change_order.requested': { label: 'Change order requested from the field', description: 'A crew lead found something that needs a change order (work there is stopped until it is signed).', category: 'approvals', mandatory: true },
+  'trade.schedule_response': { label: 'Trade answered a schedule request', description: 'A trade partner could not make a date or proposed another one.', category: 'schedule', mandatory: true },
+  'rfi.assigned': { label: 'RFI waiting on you', description: "An RFI's ball in court moved to you.", category: 'work', mandatory: true },
+  'submittal.review_requested': { label: 'Submittal to review', description: 'A submittal review step is waiting on you.', category: 'documents', mandatory: true },
+  'sub_pay_app.review': { label: 'Sub pay application to review', description: 'A subcontractor pay application is at a step you approve.', category: 'approvals', mandatory: true },
+  'compliance.expiring': { label: 'Insurance expiring', description: 'A subcontractor certificate of insurance is expiring or expired.', category: 'approvals', mandatory: true },
+  'eac.submitted': { label: 'Cost forecast to approve', description: "A project manager submitted the month's cost forecast.", category: 'approvals', mandatory: true },
+  'meeting.minutes': { label: 'Meeting minutes', description: 'Minutes of a meeting you attended were distributed.', category: 'work', mandatory: true },
+  'meeting.item_assigned': { label: 'Meeting action item', description: 'An action item from a meeting is yours.', category: 'work', mandatory: true },
+  'observation.assigned': { label: 'Observation assigned to you', description: 'A quality or safety observation was assigned to you.', category: 'work', mandatory: true },
+  'productivity.fade': { label: 'Labor productivity fading', description: 'Earned hours fell behind hours used on a cost code.', category: 'time', mandatory: true },
+  'tm.signature_needed': { label: 'T&M ticket to sign', description: "A T&M ticket is waiting for the GC's signature.", category: 'work', mandatory: true },
 };
 
 export type RecipePersona = PersonaKey | 'default';
@@ -101,6 +136,20 @@ export const RECIPE_CODES: Readonly<Record<InternalEvent, readonly RecipeCode[]>
   'lead.sla_breach':         ['D', 'I', 'I', '-', 'P', '-', '-', '-', '-', 'P', 'I'],
   'document.sign_requested': ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'I'],
   'comment.mention':         ['I', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'P', 'I'],
+  // Wave B (mandatory: the floor is I)
+  'portal.activity':            ['D', 'I', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'change_order.requested':     ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'trade.schedule_response':    ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I'],
+  'rfi.assigned':               ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I'],
+  'submittal.review_requested': ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I'],
+  'sub_pay_app.review':         ['I', 'I', 'I', 'P', 'I', 'P', 'P', 'I', 'I', 'I', 'I'],
+  'compliance.expiring':        ['D', 'D', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I', 'I'],
+  'eac.submitted':              ['P', 'P', 'I', 'I', 'I', 'I', 'I', 'I', 'I', 'I', 'I'],
+  'meeting.minutes':            ['D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D', 'D'],
+  'meeting.item_assigned':      ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'P', 'I', 'I'],
+  'observation.assigned':       ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'P', 'I', 'I'],
+  'productivity.fade':          ['D', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I'],
+  'tm.signature_needed':        ['I', 'I', 'I', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I'],
 };
 
 export interface RecipeModes {

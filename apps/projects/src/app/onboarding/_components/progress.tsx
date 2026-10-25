@@ -1,22 +1,25 @@
 'use client';
 
 import { Icon, StageMeter } from '@meritbooks/merit-ui';
-import type { RunStep } from '@/lib/onboarding/types';
+import type { FlowStep } from './flow';
 
-export const STEP_LABELS = ['Kind of work', 'Workspace', 'Bring your work', 'Team'] as const;
+export const STEP_LABELS = ['Kind of work', 'Workspace', 'Your work', 'First job', 'Money', 'Crew', 'Go live'] as const;
 
-export function stepIndex(step: RunStep): number {
+export function stepIndex(step: FlowStep): number {
   switch (step) {
     case 'describe': return 0;
     case 'preview': return 1;
     case 'bring_work': return 2;
-    case 'team': return 3;
-    case 'done': return 4;
+    case 'first_job': return 3;
+    case 'money': return 4;
+    case 'team': return 5;
+    case 'go_live': return 6;
+    case 'done': return 7;
   }
 }
 
-/** The four steps for the company in hand (O-connect-source .steps). */
-export function StepsBar({ step, mode }: { step: RunStep; mode: 'first' | 'change' }) {
+/** The steps for the company in hand (O-connect-source .steps). */
+export function StepsBar({ step, mode }: { step: FlowStep; mode: 'first' | 'change' }) {
   const labels = mode === 'change' ? STEP_LABELS.slice(0, 2) : STEP_LABELS;
   const at = stepIndex(step);
   return (
@@ -35,7 +38,7 @@ export function StepsBar({ step, mode }: { step: RunStep; mode: 'first' | 'chang
 export interface TowerRow {
   id: string;
   name: string;
-  step: RunStep;
+  step: FlowStep;
   current: boolean;
   detail: string;
 }

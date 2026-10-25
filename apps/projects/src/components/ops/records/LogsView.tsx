@@ -1,8 +1,9 @@
 'use client';
 
+import { usePortalVisibility } from '@/components/portal/staff/PortalVisibilityToggle';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Button, Check, ConfirmDialog, Field, Input, Select, Tag, Textarea, WidgetState, count, shortDate } from '@meritbooks/merit-ui';
+import { Button, Check, ConfirmDialog, Field, Input, Select, Switch, Tag, Textarea, WidgetState, count, shortDate } from '@meritbooks/merit-ui';
 import { LOG_KIND_WORDS } from '@/lib/pm/ops/labels';
 import type { FieldLogRow, LogKind } from '@/lib/pm/ops/types';
 import type { JobOption } from '@/lib/pm/ops/scope';
@@ -52,6 +53,8 @@ export function LogsView(p: LogsViewProps) {
   const loggedToday = new Set(p.logs.filter((l) => l.log_date === p.today).map((l) => l.job_id));
   const missing = p.fixedJobId ? [] : p.loggedJobIds.filter((id) => !loggedToday.has(id)).map((id) => jobs.get(id)).filter((j): j is JobOption => !!j);
 
+  // On a job's Logs tab: "Show on portal" per entry (1118 client_visible).
+  const portal = usePortalVisibility('field_logs', p.fixedJobId ? p.logs.map((l) => l.id) : [], !!p.fixedJobId);
   return (
     <div className="stack">
       {!readOnly && <NewLog jobs={p.jobs.filter((j) => j.open)} fixedJobId={p.fixedJobId} defaultJobId={jobFilter} today={p.today} busy={busy === 'add'} onSave={(b) => act('add', 'post', '/api/ops/logs', b, 'Saved the log')} />}
@@ -74,6 +77,7 @@ export function LogsView(p: LogsViewProps) {
             </div>
             <ul className="feed">
               {ls.map((l) => {
+                const shownOnPortal = portal.map ? portal.map[l.id] === true : null;
                 const w = weatherText(l.weather);
                 return (
                   <li key={l.id} style={{ alignItems: 'start', paddingTop: 10, paddingBottom: 10 }}>
@@ -88,6 +92,9 @@ export function LogsView(p: LogsViewProps) {
                     </span>
                     <span className="row" style={{ gap: 8 }}>
                       <span className="t">{stamp(l.created_at)}</span>
+                      {p.fixedJobId && shownOnPortal !== null && (
+                        <Switch checked={shownOnPortal} disabled={readOnly} onChange={(e) => void portal.set(l.id, e.target.checked)} label="On portal" />
+                      )}
                       {!readOnly && l.created_by === p.meUserId && <Button variant="quiet" iconOnly icon="x" aria-label="Delete log" onClick={() => setDel(l)} />}
                     </span>
                   </li>

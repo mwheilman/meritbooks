@@ -146,7 +146,7 @@ export async function recordPhotoMeta(db: SupabaseClient, o: StoredObject, bytes
 
 // ------------------------------------------------------------------ reads
 
-const FILE_COLS = 'id, location_id, job_id, folder_id, title, kind, money_cap, description, tags, subject_table, subject_id, current_version_id, version_count, retention_class, retain_until, legal_hold, legal_hold_reason, legal_hold_at, status, created_by, created_at, updated_at';
+const FILE_COLS = 'id, location_id, job_id, folder_id, title, kind, money_cap, description, tags, subject_table, subject_id, current_version_id, version_count, retention_class, retain_until, legal_hold, legal_hold_reason, legal_hold_at, status, created_by, created_at, updated_at, portal_audiences';
 const VERSION_COLS = 'id, file_id, version_no, document_id, file_name, mime_type, size_bytes, content_sha256, page_count, label, note, source, is_current, superseded_at, locked, meta, created_by, created_at';
 
 export interface FileListItem extends FileRow {

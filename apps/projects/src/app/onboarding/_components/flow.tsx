@@ -1,8 +1,10 @@
 'use client';
 
 /**
- * /onboarding — the whole flow, one company at a time:
- *   0 select (multi-company only) → 1 describe → 2 preview → 3 bring_work → 4 team → done
+ * /onboarding — the whole flow, one company at a time (UX seat §a steps 0–9):
+ *   0 select (multi-company only) → 1 describe → 2 preview (workspace) → 3 bring_work ("where does
+ *   your work live today", imports in the background) → 4 first_job → 5 money → 6 team (crew) →
+ *   7 go_live → done
  * Every step is saved on pm.onboarding_runs by the routes, so a reload resumes here.
  * Keys: Enter = the step's primary action (when focus isn't on a control), Esc = back.
  */
@@ -19,7 +21,11 @@ import { SelectStep } from './select-step';
 import { DescribeStep } from './describe-step';
 import { WorkspaceStep } from './workspace-step';
 import { BringStep } from './bring-step';
-import { TeamStep } from './team-step';
+import { FirstJobStep } from './first-job-step';
+import { MoneyStep } from './money-step';
+import { CrewStep } from './crew-step';
+import { GoLiveStep } from './go-live-step';
+import type { CommittedFile } from '@/components/imports/SourcesPanel';
 
 export interface FlowProps {
   orgName: string;
@@ -31,12 +37,16 @@ export interface FlowProps {
   jobTypesByCompany: Record<string, JobTypeOption[]>;
   team: TeamMember[];
   booksTeamUrl: string;
+  booksUrl: string;
   aiConfigured: boolean;
   problem: string | null;
 }
 
+/** The DB keeps describe | preview | bring_work | team | done; the client adds the steps in between. */
+export type FlowStep = RunStep | 'first_job' | 'money' | 'go_live';
+
 export interface CompanyFlow {
-  step: RunStep;
+  step: FlowStep;
   description: string;
   tile: string | null;
   file: ParseResponse | null;
@@ -46,13 +56,15 @@ export interface CompanyFlow {
   jobTypes: JobTypeOption[];
   sampleJobId: string | null;
   firstJobId: string | null;
+  /** files brought in through the import engine this session */
+  imported: CommittedFile[];
 }
 
 function initialFor(c: CompanyBrief, mode: 'first' | 'change', jobTypes: JobTypeOption[]): CompanyFlow {
   const run = c.run;
   const base: CompanyFlow = {
     step: 'describe', description: '', tile: mode === 'change' ? c.installed?.packKey ?? null : null, file: null,
-    classification: null, plan: null, preview: null, jobTypes, sampleJobId: null, firstJobId: null,
+    classification: null, plan: null, preview: null, jobTypes, sampleJobId: null, firstJobId: null, imported: [],
   };
   if (!run) return base;
   if (mode === 'first' && run.status === 'APPLIED') return { ...base, step: 'bring_work', classification: run.classification };
@@ -240,7 +252,10 @@ export function OnboardingFlow(props: FlowProps) {
     setError(null);
     if (phase === 'company' && company && flow) {
       if (flow.step === 'preview') { patch(company.id, { step: 'describe' }); return; }
-      if (flow.step === 'team') { patch(company.id, { step: 'bring_work' }); return; }
+      if (flow.step === 'first_job') { patch(company.id, { step: 'bring_work' }); return; }
+      if (flow.step === 'money') { patch(company.id, { step: 'first_job' }); return; }
+      if (flow.step === 'team') { patch(company.id, { step: 'money' }); return; }
+      if (flow.step === 'go_live') { patch(company.id, { step: 'team' }); return; }
       if (flow.step === 'describe' && props.showSelect && index === 0) { setPhase('select'); return; }
     }
   };
@@ -314,16 +329,48 @@ export function OnboardingFlow(props: FlowProps) {
             <BringStep
               company={company}
               flow={flow}
+              booksUrl={props.booksUrl}
               onPatch={(p) => patch(company.id, p)}
-              onContinue={() => { setError(null); patch(company.id, { step: 'team' }); }}
+              onImported={(f) => patch(company.id, { imported: [...(flows[company.id]?.imported ?? []).filter((x) => x.result.batch_id !== f.result.batch_id), f] })}
+              onContinue={() => { setError(null); patch(company.id, { step: 'first_job' }); }}
+              primaryRef={primary}
+            />
+          )}
+          {flow.step === 'first_job' && (
+            <FirstJobStep
+              company={company}
+              flow={flow}
+              imported={flow.imported}
+              onPatch={(p) => patch(company.id, p)}
+              onContinue={() => patch(company.id, { step: 'money' })}
+              onBack={back}
+              primaryRef={primary}
+            />
+          )}
+          {flow.step === 'money' && (
+            <MoneyStep
+              company={company}
+              firstJobId={flow.firstJobId}
+              booksUrl={props.booksUrl}
+              onContinue={() => patch(company.id, { step: 'team' })}
+              onBack={back}
               primaryRef={primary}
             />
           )}
           {flow.step === 'team' && (
-            <TeamStep
+            <CrewStep
               company={company}
-              team={props.team}
               booksTeamUrl={props.booksTeamUrl}
+              busy={busy === 'finish'}
+              error={error}
+              onFinish={() => patch(company.id, { step: 'go_live' })}
+              onBack={back}
+              primaryRef={primary}
+            />
+          )}
+          {flow.step === 'go_live' && (
+            <GoLiveStep
+              company={company}
               busy={busy === 'finish'}
               error={error}
               onFinish={() => void finish(company.id, flow.firstJobId)}

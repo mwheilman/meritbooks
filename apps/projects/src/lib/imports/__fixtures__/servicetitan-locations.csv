@@ -1,0 +1,4 @@
+Location ID,Customer ID,Location Name,Street,City,State,Zip,Zone
+L-9001,48817,Home,2210 Beaver Ave,Des Moines,IA,50310,North
+L-9002,48818,Building A,1400 Grand View Ave,Des Moines,IA,50316,East
+L-9003,48818,Building B,1410 Grand View Ave,Des Moines,IA,50316,East

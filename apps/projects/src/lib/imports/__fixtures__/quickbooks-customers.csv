@@ -1,0 +1,4 @@
+Customer,Company,Email,Phone,Billing Street,Billing City,Billing State,Billing ZIP,Open Balance
+Harbor Holdings,Harbor Holdings LLC,ap@harborholdings.example,515-555-1100,600 Locust St,Des Moines,IA,50309,"24,300.00"
+Westgate Health Partners,Westgate Health Partners,ap@westgatehealth.example,515-555-1900,1200 Westgate Blvd,West Des Moines,IA,50266,"133,092.00"
+Lucia Garcia,,lucia.garcia@example.com,515-555-0400,55 Birch St,Urbandale,IA,50322,0.00

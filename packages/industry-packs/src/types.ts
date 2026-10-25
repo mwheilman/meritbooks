@@ -138,6 +138,11 @@ export const NAV_ITEMS = [
   'ai_decisions', 'onboarding', 'settings', 'documents', 'stock', 'deals', 'parts', 'rentals', 'warranty',
   // field service depth (1117), approvals (1113), notifications (1114)
   'calls', 'campaigns', 'price_book', 'capacity', 'scorecards', 'out_of_office', 'approval_rules', 'company_messages',
+  // Wave B: portals (1118), residential (1119), commercial (1120), imports (1121), industry depth (1122)
+  'portals', 'proposals', 'homes', 'communities', 'change_events', 'rfis', 'submittals', 'meetings', 'compliance',
+  'imports', 'flooring', 'flooring_pay', 'flooring_rolls', 'flooring_catalog', 'design', 'design_inbox', 'development',
+  'parts_counter', 'price_files', 'store_scorecard', 'programs', 'warranty_deadlines', 'warranty_credits', 'tech_board',
+  'station', 'shop_backlog', 'cad_imports', 'materials', 'remakes', 'installs',
 ] as const;
 export type NavItemKey = (typeof NAV_ITEMS)[number];
 
@@ -170,6 +175,9 @@ export const JOB_TAB_KINDS = [
   // not built yet: rendered as an honest placeholder that links to where the work lives
   'rfis', 'client_view', 'equipment', 'agreement', 'parts', 'warranty_claim', 'capital_stack', 'bom',
   'tm_tickets', 'receiving', 'productivity',
+  // Wave B job screens
+  'portal', 'home', 'change_events', 'submittals', 'meetings', 'buyout', 'closeout', 'safety', 'flooring_job',
+  'design_project', 'development',
 ] as const;
 export type JobTabKind = (typeof JOB_TAB_KINDS)[number];
 
@@ -360,7 +368,7 @@ export const JobTabEntrySchema = z.union([
 ]);
 
 export const JobTabSetSchema = z.object({
-  tabs: z.array(JobTabEntrySchema).min(2).max(12),
+  tabs: z.array(JobTabEntrySchema).min(2).max(18),
   /** Tab the job opens on (defaults to the first). field_service opens on Visits. */
   defaultTab: z.enum(JOB_TAB_KINDS).optional(),
 });
@@ -426,7 +434,7 @@ export const PackManifestSchema = z.object({
   /** Industry titles → persona templates. First title per template is the display title. */
   roles: z.array(RoleTitleSchema).max(30).optional(),
   /** Rail per persona group, top to bottom. Items the person can't reach are dropped by the app. */
-  nav: z.record(z.enum(PERSONA_GROUPS), z.array(NavEntrySchema).min(1).max(14)).optional(),
+  nav: z.record(z.enum(PERSONA_GROUPS), z.array(NavEntrySchema).min(1).max(18)).optional(),
   /** Home modules per persona group, top-left first. */
   home: z.record(z.enum(PERSONA_GROUPS), z.array(z.enum(HOME_WIDGETS)).min(1).max(10)).optional(),
   /** Job page tabs per job type ('*' = every job type without its own set). */

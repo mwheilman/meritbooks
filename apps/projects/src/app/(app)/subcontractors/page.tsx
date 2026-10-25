@@ -56,7 +56,7 @@ export default async function SubcontractorsPage() {
         <PageHead eyebrow={where} title={vocab.subcontractors}>
           <p className="t-cap" style={{ marginTop: 4 }}>Vendors come from Merit Books. Documents are kept on each commitment’s Compliance tab.</p>
         </PageHead>
-        <SubcontractorsView vendors={vendors} today={today} />
+        <SubcontractorsView vendors={vendors} today={today} companyId={scope.company?.id ?? null} />
       </Page>
     </>
   );

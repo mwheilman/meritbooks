@@ -84,7 +84,7 @@ export default async function PartsPage({ searchParams }: { searchParams: { tab?
     <>
       <PageLine facts={[o.where, ...(openTickets ? [{ label: `${count(openTickets)} open tickets`, strong: true }] : []), ...(belowMin ? [`${count(belowMin)} below minimum`] : []), ...(soIn ? [`${count(soIn)} special orders in`] : [])]} />
       <Page>
-        <PageHead eyebrow={o.where} title="Parts" actions={<ButtonLink variant="quiet" href="/stock/settings">Store settings</ButtonLink>} />
+        <PageHead eyebrow={o.where} title="Parts" actions={<><ButtonLink variant="quiet" href="/parts/counter">Scan counter</ButtonLink><ButtonLink variant="quiet" href="/parts/price-files">Price files</ButtonLink><ButtonLink variant="quiet" href="/stock/settings">Store settings</ButtonLink></>} />
         <div className="stack">
           <PartsTabs value={tab} counts={{ counter: openTickets, catalog: belowMin, special: soIn }} />
           {body}

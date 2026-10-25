@@ -1,0 +1,4 @@
+RO #,Cust #,Customer Name,Serial #,Date In,RO Status,Complaint,Labor,Parts,Total
+RO-30911,100231,Prairie Acres Farm,KBT3100A33001,10/20/2026,Waiting parts,Hydraulic leak at loader valve,$312.00,$188.50,$500.50
+RO-30915,100245,Jeff Norgaard,EXM404870001,10/22/2026,In progress,Annual service,$145.00,$62.30,$207.30
+RO-30918,100260,City of Clive Parks,,10/23/2026,Open,Sharpen 6 blade sets,$90.00,$0.00,$90.00
