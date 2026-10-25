@@ -22,6 +22,9 @@ import {
 import { checklistSummary, templateByKey } from './checklists';
 import { DuplicateRowError, type DocSubject, type FieldJob, type FieldStore } from './store-types';
 import { PHOTO_MAX_BYTES, sniffPhoto } from './sniff';
+import { isPhoneKind } from './phone-contract';
+import { applyPhoneRaw } from './phone-apply';
+import type { PhoneStore } from './phone-store-types';
 
 export interface FieldCtx {
   store: FieldStore;
@@ -33,6 +36,10 @@ export interface FieldCtx {
   now: Date;
   /** Fallback time zone for the work date when the phone sends none. */
   defaultTz: string;
+  /** v2 phone commands (approvals, inbox, kiosk, dealer RO, e-sign, field-service sell): phone-apply.ts. */
+  phone?: PhoneStore;
+  /** The phone's IP and app (e-sign records them with a customer's signature). */
+  meta?: { ip: string | null; userAgent: string | null };
 }
 
 const SOURCE = 'merit_workforce';
@@ -399,6 +406,7 @@ function idOf(raw: unknown): string {
 export async function applyRaw(ctx: FieldCtx, raw: unknown): Promise<CommandResult> {
   const id = idOf(raw);
   const kind = typeof raw === 'object' && raw !== null ? (raw as { kind?: unknown }).kind : undefined;
+  if (isPhoneKind(kind)) return applyPhoneRaw(ctx, kind, raw);
   if (typeof kind !== 'string' || !(kind in SCHEMAS)) {
     return { id, kind: typeof kind === 'string' ? kind.slice(0, 40) : 'unknown', outcome: 'rejected', code: 'UNKNOWN_KIND', reason: 'This app version sent something the server does not understand. Update Merit Workforce.' };
   }

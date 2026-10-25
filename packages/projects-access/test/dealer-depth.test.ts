@@ -301,8 +301,10 @@ describe('tech clock per RO line + productivity board (DLR-47/56, make-or-break 
     expect(mine.techs).toHaveLength(1);
   });
   it('clock off and indirect time', async () => {
-    // security review L1: naming yourself does not skip the corrected-end-time check
-    expect(await callErr(f, 'labor', `pm.dlr_clock_off($1, $2, now() - interval '3 hours')`, [L1, f.employee.labor])).toMatch(forbidden);
+    // 1125: a tech's own end time is the phone's tap time (bounded; a manager correction on another
+    // tech's punch still needs projects.dispatch:edit, see dealer-completion.test.ts). It still
+    // cannot end the punch before it started.
+    expect(await callErr(f, 'labor', `pm.dlr_clock_off($1, $2, now() - interval '3 hours')`, [L1, f.employee.labor])).toMatch(/PM_INVALID/);
     expect(await call<{ open: boolean }>(f, 'labor', `pm.dlr_clock_off($1)`, [L1])).toMatchObject({ open: true });
     expect(await call<{ punch_id: string }>(f, 'labor', `pm.dlr_clock_indirect($1, 'SHOP')`, [L1])).toHaveProperty('punch_id');
     const n = await one<{ n: number }>(f, `select count(*)::int n from pm.dlr_tech_punches where employee_id = $1 and ended_at is null`, [f.employee.labor]);

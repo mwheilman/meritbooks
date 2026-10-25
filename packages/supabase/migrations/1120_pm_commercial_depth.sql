@@ -1197,6 +1197,7 @@ create table if not exists pm.cm_pay_app_status (
   architect_name          text,
   certified_at            timestamptz,
   certified_amount_cents  bigint,
+  certified_by            text,
   contractor_signed_at    timestamptz,
   notarized_at            timestamptz,
   owner_approved_at       timestamptz,
@@ -1214,6 +1215,8 @@ create table if not exists pm.cm_pay_app_status (
   foreign key (org_id, billing_request_id) references pm.billing_requests (org_id, id) on delete cascade deferrable initially immediate
 );
 create index if not exists pm_cm_pay_app_status_job_idx on pm.cm_pay_app_status (org_id, job_id, application_no);
+-- who recorded the certification (security review L6); kept for databases created before the column
+alter table pm.cm_pay_app_status add column if not exists certified_by text;
 
 create table if not exists pm.cm_pay_app_revisions (
   id                  uuid primary key default gen_random_uuid(),
@@ -1468,7 +1471,8 @@ begin
   return s.id;
 end $$;
 
--- Architect certification (CGC-44): the certified amount must equal the application's net due.
+-- Architect certification (CGC-44): the certified amount must equal the application's net due; the
+-- member recording it is not the one who prepared the application (certified_by keeps who it was).
 create or replace function pm.cm_certify_pay_app(p_request uuid, p_architect text, p_certified_cents bigint, p_notarized boolean default false)
 returns uuid
 language plpgsql security definer
@@ -1481,12 +1485,18 @@ begin
   if r.status not in ('DRAFT','REJECTED') then raise exception 'PM_PAYAPP_STAGE: the pay application is already %', r.status using errcode = '22023'; end if;
   if s.stage not in ('PENCIL','PENCIL_SENT') then raise exception 'PM_PAYAPP_STAGE: pay application is %', s.stage using errcode = '22023'; end if;
   if nullif(btrim(coalesce(p_architect, '')), '') is null then raise exception 'PM_INVALID: name the certifying architect / owner rep' using errcode = '22023'; end if;
+  -- separation of duties (security review L6): whoever prepared the application does not record its certification
+  if pm.current_user_id() is null or pm.current_user_id() = coalesce(s.created_by, r.created_by) then
+    raise exception 'PM_SOD_VIOLATION: the person who prepared pay application #% cannot record its certification', r.application_no using errcode = '42501';
+  end if;
   if p_certified_cents is distinct from r.net_cents then
     raise exception 'PM_PAYAPP_CERT_MISMATCH: certified % cents ≠ the application''s % cents due — revise the pay application to the certified figures first', p_certified_cents, r.net_cents
       using errcode = '22023';
   end if;
+  -- contractor_signed_at is NOT set here: only the completed e-sign envelope linked to this status
+  -- row sets it (pm.tg_cm_pay_app_esign below)
   update pm.cm_pay_app_status set stage = 'CERTIFIED', architect_name = p_architect, certified_at = now(), certified_amount_cents = p_certified_cents,
-         notarized_at = case when coalesce(p_notarized, false) then now() else notarized_at end, contractor_signed_at = coalesce(contractor_signed_at, now())
+         certified_by = pm.current_user_id(), notarized_at = case when coalesce(p_notarized, false) then now() else notarized_at end
    where id = s.id;
   perform pm.log_activity(r.org_id, r.location_id, r.job_id, 'payapp.certified', 'billing_requests', r.id,
     format('Pay application #%s certified by %s', r.application_no, p_architect), jsonb_build_object('certified_cents', p_certified_cents));
@@ -1506,6 +1516,41 @@ begin
    where id = s.id;
   return s.id;
 end $$;
+
+-- The contractor's e-signature envelope for a pay application (CGC-44): the envelope must be on a
+-- document filed on this billing request. Its completion (and only that) stamps contractor_signed_at.
+create or replace function pm.cm_pay_app_link_envelope(p_request uuid, p_envelope uuid)
+returns uuid
+language plpgsql security definer
+set search_path = pm, core, public
+as $$
+declare s pm.cm_pay_app_status%rowtype; e record;
+begin
+  s := pm._cm_pay_app_row(p_request);
+  select v.id, v.status, v.completed_at into e
+    from pm.esign_envelopes v join pm.doc_files d on d.org_id = v.org_id and d.id = v.file_id
+   where v.id = p_envelope and v.org_id = s.org_id and d.subject_table = 'billing_requests' and d.subject_id = p_request;
+  if e.id is null then
+    raise exception 'PM_PAYAPP_ENVELOPE: that signature request is not for pay application #%', s.application_no using errcode = '22023';
+  end if;
+  update pm.cm_pay_app_status set esign_envelope_id = e.id,
+         contractor_signed_at = case when e.status = 'completed' then coalesce(contractor_signed_at, e.completed_at, now()) else contractor_signed_at end
+   where id = s.id;
+  return s.id;
+end $$;
+
+create or replace function pm.tg_cm_pay_app_esign() returns trigger
+language plpgsql security definer
+set search_path = pm, core, public
+as $$
+begin
+  update pm.cm_pay_app_status set contractor_signed_at = coalesce(contractor_signed_at, new.completed_at, now())
+   where org_id = new.org_id and esign_envelope_id = new.id;
+  return null;
+end $$;
+drop trigger if exists trg_cm_pay_app_esign on pm.esign_envelopes;
+create trigger trg_cm_pay_app_esign after update of status on pm.esign_envelopes
+  for each row when (new.status = 'completed' and old.status is distinct from 'completed') execute function pm.tg_cm_pay_app_esign();
 
 -- Pencil → final: a pay application drafted here is finalized (sent to Books) only once certified
 -- when the contract requires architect certification.
@@ -5167,16 +5212,19 @@ end $$;
 create or replace function pm.cm_osha_300(p_location uuid, p_year int)
 returns table (case_number text, person_name text, job_title text, occurred_on date, where_occurred text, description text, classification text,
                days_away int, days_restricted int, injury_or_illness text, job_id uuid, incident_id uuid)
-language sql stable security invoker
+language plpgsql stable security invoker
 set search_path = pm, core, public
 as $$
+begin
+  -- through the masked view: privacy-case detail is null unless the caller manages safety there
+  return query
   select i.case_number, case when i.privacy_case then 'Privacy case' else coalesce(i.person_name, '') end, i.job_title, i.occurred_at::date,
          i.where_occurred, left(concat_ws(', ', i.injury_nature, i.body_part, i.object_substance), 500), i.osha_classification,
          i.days_away, i.days_restricted, i.injury_or_illness, i.job_id, i.id
-    from pm.cm_incidents i
+    from pm.v_cm_incidents_masked i
    where i.location_id = p_location and i.osha_recordable and i.is_employee and extract(year from i.occurred_at) = p_year
-   order by i.occurred_at, i.case_number
-$$;
+   order by i.occurred_at, i.case_number;
+end $$;
 
 create or replace function pm.cm_osha_300a(p_location uuid, p_year int)
 returns jsonb
@@ -6221,7 +6269,27 @@ select 'pm', x.* from (values
   ('cm_pco_lines',          'markup_cents',        't.job_id in (select pm.my_money_job_ids(''projects.financials''))',     null, '1120: PCO line markup'),
   ('cm_lien_waivers',       'amount_cents',        't.job_id in (select pm.my_money_job_ids(''projects.financials''))',     null, '1120: waiver amount (payment to the sub)'),
   ('cm_lien_waivers',       'signed_amount_cents', 't.job_id in (select pm.my_money_job_ids(''projects.financials''))',     null, '1120: signed waiver amount'),
-  ('cm_tm_ticket_lines',    'unit_cost_cents',     't.job_id in (select pm.my_money_job_ids(''projects.financials''))',     null, '1120: T&M material cost')
+  ('cm_tm_ticket_lines',    'unit_cost_cents',     't.job_id in (select pm.my_money_job_ids(''projects.financials''))',     null, '1120: T&M material cost'),
+  -- trade proposals (security review L3): the bid is the sub's sell price — contract value at the
+  -- company, or the estimators who price it; alternates / unit prices keep their labels, lose the amounts
+  -- OSHA privacy cases (29 CFR 1904.29(b)(7), security review round 2): identity and injury detail only for
+  -- whoever manages safety at the incident's company (projects.team:edit); everyone else reads them null
+  ('cm_incidents',          'person_name', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case name'),
+  ('cm_incidents',          'job_title', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case job title'),
+  ('cm_incidents',          'employee_id', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case employee link'),
+  ('cm_incidents',          'description', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', '''Privacy case — details are limited to the safety manager.''', '1120: privacy case narrative'),
+  ('cm_incidents',          'where_occurred', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case where it happened'),
+  ('cm_incidents',          'body_part', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case body part'),
+  ('cm_incidents',          'injury_nature', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case injury / illness'),
+  ('cm_incidents',          'object_substance', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case object or substance'),
+  ('cm_incidents',          'witnesses', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', '''[]''::jsonb', '1120: privacy case witness statements'),
+  ('cm_incidents',          'root_cause', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case root cause'),
+  ('cm_incidents',          'wc_claim_ref', '(not t.privacy_case or t.location_id in (select pm.my_location_ids(''projects.team'', ''edit'')))', null, '1120: privacy case workers'' comp claim'),
+  ('cm_proposals',          'base_bid_cents',      '(t.location_id in (select pm.my_location_ids(''projects.contract_value'', ''view'')) or t.location_id in (select pm.my_location_ids(''projects.estimates'', ''edit'')))', null, '1120: proposal base bid'),
+  ('cm_proposals',          'alternates',          '(t.location_id in (select pm.my_location_ids(''projects.contract_value'', ''view'')) or t.location_id in (select pm.my_location_ids(''projects.estimates'', ''edit'')))',
+     'coalesce((select jsonb_agg(a - ''amount_cents'' order by o) from jsonb_array_elements(t.alternates) with ordinality x(a, o)), ''[]''::jsonb)', '1120: alternate amounts'),
+  ('cm_proposals',          'unit_prices',         '(t.location_id in (select pm.my_location_ids(''projects.contract_value'', ''view'')) or t.location_id in (select pm.my_location_ids(''projects.estimates'', ''edit'')))',
+     'coalesce((select jsonb_agg(u - ''unit_cents'' order by o) from jsonb_array_elements(t.unit_prices) with ordinality x(u, o)), ''[]''::jsonb)', '1120: unit prices')
 ) as x(table_name, column_name, visible_when, masked_expr, note)
 on conflict (schema_name, table_name, column_name) do update set visible_when = excluded.visible_when, masked_expr = excluded.masked_expr, note = excluded.note;
 
@@ -6413,11 +6481,12 @@ select c.org_id, c.job_id, c.id as commitment_id, c.number, c.vendor_id,
   coalesce(sum(x.amount_cents) filter (where x.entry_type = 'HELD'), 0)::bigint as held_cents,
   coalesce(sum(x.amount_cents) filter (where x.entry_type = 'RELEASED'), 0)::bigint as released_cents,
   (coalesce(sum(x.amount_cents) filter (where x.entry_type = 'HELD'), 0) - coalesce(sum(x.amount_cents) filter (where x.entry_type = 'RELEASED'), 0))::bigint as outstanding_cents,
-  bool_or(w.id is not null) as final_waiver_verified
+  bool_or(w.id is not null) as final_waiver_verified,
+  c.location_id   -- the row's company, so response masking checks money there (security review L4; appended last)
 from pm.commitments c
 left join pm.cm_payable_retainage x on x.org_id = c.org_id and x.commitment_id = c.id
 left join pm.cm_lien_waivers w on w.org_id = c.org_id and w.commitment_id = c.id and w.status = 'VERIFIED' and w.waiver_type in ('CONDITIONAL_FINAL','UNCONDITIONAL_FINAL')
-group by c.org_id, c.job_id, c.id, c.number, c.vendor_id;
+group by c.org_id, c.job_id, c.id, c.number, c.vendor_id, c.location_id;
 
 -- Compliance queue per commitment (what blocks payment and why).
 create or replace view pm.cm_v_compliance_queue with (security_invoker = on) as
@@ -6799,7 +6868,7 @@ begin
        'submitted', (select count(*) from pm.cm_eac_forecasts e where e.status = 'SUBMITTED' and (p_location is null or e.location_id = p_location)),
        'late', (select count(*) from pm.cm_eac_forecasts e where e.status in ('DRAFT','REJECTED') and e.due_on < current_date and (p_location is null or e.location_id = p_location)),
        'loss_jobs', (select count(distinct e.job_id) from pm.cm_eac_forecasts e where e.status = 'APPROVED' and e.loss_flag and (p_location is null or e.location_id = p_location))),
-    'proposals', (select jsonb_build_object('open', count(*), 'base_bid_cents', coalesce(sum(x.base_bid_cents), 0)) from pm.cm_proposals x
+    'proposals', (select jsonb_build_object('open', count(*), 'base_bid_cents', coalesce(sum(x.base_bid_cents), 0)) from pm.v_cm_proposals_masked x
                    where x.status in ('DRAFT','SENT') and (p_location is null or x.location_id = p_location)),
     'safety', case when p_location is not null then pm.cm_osha_300a(p_location, v_year) end);
   return v;
@@ -6991,6 +7060,7 @@ insert into pm.access_rpc_guards as g (function_name, args, guard_sql, note) val
   ('cm_return_pencil',          '{p_request}',      'perform pm.access_assert_row(''projects.billing'', array[''edit''], ''billing_requests'', p_request);', '1120'),
   ('cm_certify_pay_app',        '{p_request}',      'perform pm.access_assert_row(''projects.billing'', array[''edit''], ''billing_requests'', p_request);', '1120'),
   ('cm_pay_app_portal',         '{p_request}',      'perform pm.access_assert_row(''projects.billing'', array[''edit''], ''billing_requests'', p_request);', '1120'),
+  ('cm_pay_app_link_envelope',  '{p_request}',      'perform pm.access_assert_row(''projects.billing'', array[''edit''], ''billing_requests'', p_request);', '1120: contractor e-sign envelope (L6)'),
   -- sub pay apps / compliance
   ('cm_create_sub_pay_app',     '{p_commitment}',   'perform pm.access_assert_row(''projects.commitments'', array[''edit''], ''commitments'', p_commitment);', '1120'),
   ('cm_revise_sub_pay_app',     '{p_app}',          'perform pm.access_assert_row(''projects.commitments'', array[''edit''], ''cm_sub_pay_apps'', p_app);', '1120'),
@@ -7077,7 +7147,7 @@ declare r record;
   v_member text[] := array[
     'cm_change_event_set_status','cm_change_event_proceed','cm_link_change_cost','cm_send_rfq','cm_rfq_set_portal_token','cm_rfq_respond','cm_rfq_decide',
     'cm_build_pco','cm_reprice_pco','cm_roll_to_cor','cm_submit_pco','cm_revise_pco','cm_propose_ccos',
-    'cm_sync_cos_to_sov','cm_draft_pay_app','cm_revise_pay_app','cm_send_pencil','cm_return_pencil','cm_certify_pay_app','cm_pay_app_portal','cm_pay_app_preview',
+    'cm_sync_cos_to_sov','cm_draft_pay_app','cm_revise_pay_app','cm_send_pencil','cm_return_pencil','cm_certify_pay_app','cm_pay_app_portal','cm_pay_app_link_envelope','cm_pay_app_preview',
     'cm_create_sub_pay_app','cm_revise_sub_pay_app','cm_submit_sub_pay_app','cm_act_sub_pay_app','cm_void_sub_pay_app','cm_release_sub_retainage',
     'cm_request_lien_waiver','cm_lien_waiver_sent','cm_receive_lien_waiver','cm_verify_lien_waiver','cm_record_sub_payment','cm_outbound_lien_waiver',
     'cm_record_coi','cm_verify_coi','cm_compliance_chase_run',

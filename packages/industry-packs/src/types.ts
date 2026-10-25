@@ -143,6 +143,9 @@ export const NAV_ITEMS = [
   'imports', 'flooring', 'flooring_pay', 'flooring_rolls', 'flooring_catalog', 'design', 'design_inbox', 'development',
   'parts_counter', 'price_files', 'store_scorecard', 'programs', 'warranty_deadlines', 'warranty_credits', 'tech_board',
   'station', 'shop_backlog', 'cad_imports', 'materials', 'remakes', 'installs',
+  // Wave C: commercial screens, field-service completion (1123), residential / RE (1124), dealer / mfg (1125)
+  'pay_apps', 'project_review', 'foreman', 'workforce', 'trade_proposals', 'safety_center', 'billing_calendar',
+  'call_log', 'invoice_review', 'fs_installs', 'timesheets', 'appointments', 'service_desk', 'shop_floor', 'bid_board',
 ] as const;
 export type NavItemKey = (typeof NAV_ITEMS)[number];
 
@@ -178,6 +181,8 @@ export const JOB_TAB_KINDS = [
   // Wave B job screens
   'portal', 'home', 'change_events', 'submittals', 'meetings', 'buyout', 'closeout', 'safety', 'flooring_job',
   'design_project', 'development',
+  // Wave C job screens (the commercial screens narrowed to the job)
+  'pay_apps', 'directory', 'specifications', 'correspondence', 'project_review',
 ] as const;
 export type JobTabKind = (typeof JOB_TAB_KINDS)[number];
 
@@ -368,7 +373,7 @@ export const JobTabEntrySchema = z.union([
 ]);
 
 export const JobTabSetSchema = z.object({
-  tabs: z.array(JobTabEntrySchema).min(2).max(18),
+  tabs: z.array(JobTabEntrySchema).min(2).max(24),
   /** Tab the job opens on (defaults to the first). field_service opens on Visits. */
   defaultTab: z.enum(JOB_TAB_KINDS).optional(),
 });

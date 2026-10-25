@@ -253,3 +253,111 @@ describe('command queue', () => {
     expect(calls).toBeGreaterThanOrEqual(2);
   });
 });
+
+describe('Wave C commands ride the same queue', () => {
+  it('a sale waits for its signature photo, then goes in the next batch; re-sends are duplicates', async () => {
+    const sig = photo();
+    const sale = { id: id(), at: '2026-10-24T15:02:00Z', kind: 'fs.sell' as const, estimateId: id(), optionIds: [id()], toggles: [], signedName: 'Pat', signaturePhotoId: sig.id, depositCents: 25000, depositMethod: 'check' as const, depositRef: '1042' };
+    const approve = { id: id(), at: '2026-10-24T15:03:00Z', kind: 'approval.decide' as const, requestId: id(), decision: 'approve' as const, round: 1, step: 1 };
+    await q.enqueue(sig, { fileUri: 'file:///photos/sig.png' });
+    await q.enqueue(sale, { dependsOn: sig.id });
+    await q.enqueue(approve);
+    const r = await q.flush(server);
+    expect(r.applied).toBe(3);
+    expect(server.batches).toEqual([[approve.id], [sale.id]]);
+    expect(server.photos).toEqual(['file:///photos/sig.png']);
+    await q.retry(sale.id); // even a forced re-send is answered once
+    expect((await q.list()).find((c) => c.id === sale.id)?.status).toBe('done');
+  });
+
+  it('offline: a kiosk tap, an RO clock-on and a customer signature all wait with their own times', async () => {
+    server.mode = 'offline';
+    const cmds = [
+      { id: id(), at: '2026-10-24T13:00:00Z', kind: 'kiosk.event' as const, companyId: id(), sessionToken: 'sess_0123456789abcdef', action: 'START' as const, operationId: id() },
+      { id: id(), at: '2026-10-24T13:05:00Z', kind: 'ro.clock' as const, op: 'clock_on' as const, companyId: id(), lineId: id() },
+      { id: id(), at: '2026-10-24T13:10:00Z', kind: 'esign.sign' as const, token: 'tok_0123456789abcdefghijk', typedName: 'Pat', signaturePng: 'data:image/png;base64,AA==', consent: true as const },
+    ];
+    for (const c of cmds) await q.enqueue(c);
+    expect((await q.flush(server)).offline).toBe(true);
+    expect((await q.counts()).waiting).toBe(3);
+    server.mode = 'ok';
+    await q.flush(server);
+    expect(server.batches).toEqual([cmds.map((c) => c.id)]);
+    expect((await store.all()).map((c) => c.command.at)).toEqual(cmds.map((c) => c.at));
+  });
+});
+
+/** A store whose writes fail on demand, like SQLite while iOS file protection locks the file. */
+class FlakyStore extends MemoryQueueStore {
+  locked = false;
+  failUpdates = false;
+  override async insert(c: Parameters<MemoryQueueStore['insert']>[0]): Promise<void> {
+    if (this.locked) throw new Error('disk I/O error (file protection: device locked)');
+    return super.insert(c);
+  }
+  override async update(id: string, patch: Parameters<MemoryQueueStore['update']>[1]): Promise<void> {
+    if (this.locked || this.failUpdates) throw new Error('disk I/O error');
+    return super.update(id, patch);
+  }
+  override async all(): ReturnType<MemoryQueueStore['all']> {
+    if (this.locked) throw new Error('disk I/O error');
+    return super.all();
+  }
+}
+
+describe('a failed write never loses the tap (phone locked mid-write)', () => {
+  it('the command is held in memory, counted and listed, written on the next foreground, then sent once', async () => {
+    const flaky = new FlakyStore();
+    const fq = new CommandQueue(flaky, { now });
+    const srv = new FakeServer();
+    flaky.locked = true;
+    const tap = log({ body: 'Tapped while the phone locked' });
+    await expect(fq.enqueue(tap)).resolves.toMatchObject({ id: tap.id, status: 'pending' });
+    expect(fq.heldCount).toBe(1);
+    expect((await fq.counts()).waiting).toBe(1);
+    expect((await fq.list()).map((c) => c.id)).toEqual([tap.id]);
+    // still locked: nothing is sent, nothing is lost
+    await fq.flush(srv).catch(() => undefined);
+    expect(srv.batches).toEqual([]);
+    expect(fq.heldCount).toBe(1);
+    // unlocked: resume() writes it to disk; the flush sends it once
+    flaky.locked = false;
+    await fq.resume();
+    expect(fq.heldCount).toBe(0);
+    expect((await flaky.all()).map((c) => c.id)).toEqual([tap.id]);
+    await fq.flush(srv);
+    expect(srv.batches).toEqual([[tap.id]]);
+    expect((await fq.counts()).waiting).toBe(0);
+  });
+
+  it('held taps keep their order behind what was already on disk', async () => {
+    const flaky = new FlakyStore();
+    const fq = new CommandQueue(flaky, { now });
+    const a = log({ body: 'a' });
+    await fq.enqueue(a);
+    flaky.locked = true;
+    const b = log({ body: 'b' });
+    const c = log({ body: 'c' });
+    await fq.enqueue(b);
+    await fq.enqueue(c);
+    await fq.enqueue(b); // the same id twice is still one command
+    flaky.locked = false;
+    const srv = new FakeServer();
+    await fq.flush(srv);
+    expect(srv.batches).toEqual([[a.id, b.id, c.id]]);
+  });
+
+  it('a send whose status write failed is put back by resume() and re-sent safely (the server answers duplicate)', async () => {
+    const flaky = new FlakyStore();
+    const fq = new CommandQueue(flaky, { now });
+    const srv = new FakeServer();
+    const tap = log();
+    await fq.enqueue(tap);
+    await flaky.update(tap.id, { status: 'sending' }); // a crash / lock right after the send started
+    srv.seen.add(tap.id); // the server already applied it
+    await fq.resume();
+    const r = await fq.flush(srv);
+    expect(r).toMatchObject({ duplicates: 1, applied: 0 });
+    expect((await fq.counts()).waiting).toBe(0);
+  });
+});

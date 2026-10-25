@@ -29,7 +29,13 @@ export const EditRateCardBody = z.object({ ...RateCardFields, isActive: z.boolea
 
 export const EmployeeCardBody = z.object({ companyId: z.string().uuid(), employeeId: z.string().uuid(), rateCardId: z.string().uuid().nullable() });
 
-export const ApproveTimeBody = z.object({ ids: z.array(z.string().uuid()).min(1, 'Pick the time to approve').max(500) });
+export const ApproveTimeBody = z.object({
+  ids: z.array(z.string().uuid()).min(1, 'Pick the time to approve').max(500),
+  /** Late taps (1125) the approver acknowledged one by one; each must also be in ids. */
+  ackLate: z.array(z.string().uuid()).max(200).default([]),
+}).refine((b) => b.ackLate.every((id) => b.ids.includes(id)), { message: 'Acknowledge only time you are approving.', path: ['ackLate'] });
+/** Acknowledge late phone / kiosk time ahead of approval (pm.dlr_ack_late_time, 1125). */
+export const AckLateTimeBody = z.object({ ids: z.array(z.string().uuid()).min(1, 'Pick the late time to acknowledge').max(200) });
 
 /** "Finish carpenter" → "finish_carpenter" (the card key when none is given). */
 export function cardKeyFrom(label: string): string {

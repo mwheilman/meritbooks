@@ -13,6 +13,14 @@ function routeFiles(dir: string): string[] {
 
 const files = routeFiles(API);
 
+describe('the public field-service database helper uses the anon key only', () => {
+  it('lib/fieldservice/public-db never reaches for the service role', () => {
+    const src = readFileSync(join(__dirname, '..', 'lib', 'fieldservice', 'public-db.ts'), 'utf8');
+    expect(src.includes('NEXT_PUBLIC_SUPABASE_ANON_KEY')).toBe(true);
+    expect(/createAdminSupabase|SERVICE_ROLE/.test(src)).toBe(false);
+  });
+});
+
 describe('every API route declares access (spec §4)', () => {
   it('finds the route files', () => {
     expect(files.length).toBeGreaterThan(100);
@@ -28,7 +36,27 @@ describe('every API route declares access (spec §4)', () => {
     const publicSign = _rel.startsWith('sign/public/') || _rel.startsWith('sign\\public\\');
     const publicWidget = _rel === 'fieldservice/widget/route.ts' || _rel === 'fieldservice\\widget\\route.ts';
     const publicPortal = /^portal[\\/](?!staff[\\/])/.test(_rel);
-    if (publicPortal) {
+    const fsPublic = /^fieldservice[\\/]public[\\/]/.test(_rel);
+    const publicBook = /^residential[\\/]public-book[\\/]/.test(_rel);
+    if (fsPublic) {
+      // /api/fieldservice/public/* (1123): provider webhooks, the reminder cron and the client hub.
+      // No Clerk session: each file must verify its caller (provider signature / cron secret /
+      // portal session) and reach the database only through lib/fieldservice/public-db (anon key:
+      // server-key-gated public.fs_* or session-scoped portal.fs_*). No route(), never the service role.
+      expect(wrapped).toBe(0);
+      expect(/requireCronSecret\(|verifyTwilioSignature\(|verifyRingCentral\(|verifyDialpadJwt\(|portalHandler\(/.test(src)).toBe(true);
+      expect(/fsPublicRpc|fsPortalRpc/.test(src)).toBe(true);
+      expect(/createAdminSupabase|SERVICE_ROLE|createClient\(/.test(src)).toBe(false);
+    } else if (publicBook) {
+      // /api/residential/public-book/[token] (1124, RES-10): homeowner self-booking. The path token
+      // is the credential (shape-checked here, sha-256 matched and rate-limited by public.wc_* on
+      // the anon key). No route(), never the service role.
+      expect(wrapped).toBe(0);
+      expect(src.includes('isTokenShape(')).toBe(true);
+      expect(src.includes("rpc('wc_")).toBe(true);
+      expect(src.includes('NEXT_PUBLIC_SUPABASE_ANON_KEY')).toBe(true);
+      expect(/createAdminSupabase|SERVICE_ROLE/.test(src)).toBe(false);
+    } else if (publicPortal) {
       // /api/portal/* (1118, except /api/portal/staff/*) has no Clerk session: the portal session
       // cookie is the credential, checked by portal.* on the anon key. portalHandler() (same-origin
       // writes, Zod), never route(), never the service role.

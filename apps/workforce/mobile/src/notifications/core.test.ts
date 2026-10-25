@@ -10,7 +10,11 @@ describe('push deep links → screens', () => {
     expect(routeForUrl('/punch-list')).toEqual({ route: '/punch', params: {} });
     expect(routeForUrl('/time?week=1')).toEqual({ route: '/(tabs)/crew', params: {} });
     expect(routeForUrl('/review')).toEqual({ route: '/(tabs)/crew', params: {} });
-    expect(routeForUrl('/inbox')).toEqual({ route: '/(tabs)/me', params: {} });
+    expect(routeForUrl('/inbox')).toEqual({ route: '/inbox', params: {} });
+    expect(routeForUrl('/approvals?tab=mine')).toEqual({ route: '/(tabs)/crew', params: {} });
+    expect(routeForUrl(`/jobs/${J}/drawings`)).toEqual({ route: '/drawings', params: { jobId: J } });
+    expect(routeForUrl('/flooring/pay')).toEqual({ route: '/pay', params: {} });
+    expect(routeForUrl('/dealer/tech')).toEqual({ route: '/ro', params: {} });
   });
   it('anything else, or anything unsafe, opens Today', () => {
     for (const u of ['/leads/x', '/jobs/not-a-uuid', '//evil.test/x', 'https://evil.test', null, 42]) expect(routeForUrl(u).route).toBe('/');

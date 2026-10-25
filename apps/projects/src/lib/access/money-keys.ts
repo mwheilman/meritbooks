@@ -35,12 +35,14 @@ export const MONEY_KEYS = {
       'contract_value_cents', 'pending_co_value_cents', 'original_cents', 'billed_to_date_cents', 'billed_net_to_date_cents',
       'retainage_held_cents', 'retainage_released_cents', 'retainage_outstanding_cents', 'deposits_requested_cents',
       'contractCents', 'contract_price_cents', 'p_contract_cents',
+  'backlog_cents', 'open_ar_cents', 'sales_target_cents', 'sold_12m_cents', 'unbilled_work_cents', 'cash_collected_cents', 'deposits_received_cents',
     ],
     financials: [
       'budget_total_cents', 'budget_original_cents', 'budget_revised_cents', 'revised_budget_cents', 'cost_estimate_cents',
       'projected_margin_cents', 'projected_margin_pct', 'committed_cents', 'committed_open_cents', 'actual_cost_cents',
       'pending_cost_cents', 'forecast_by_cost_code_cents', 'projected_final_cost_cents', 'cost_to_complete_cents',
       'earned_revenue_cents', 'over_under_billing_cents', 'pct_complete_cost', 'marginCents', 'margin_pct', 'margin_cents',
+  'cash_cents', 'warranty_cost_12m_cents', 'cost_incurred_cents', 'over_cents', 'sold_margin_pct', 'cash_after_commitments_cents', 'cash_position_cents',
     ],
   },
   /** pm.budget_lines, v_cost_code_status, budget revisions. */
@@ -52,7 +54,7 @@ export const MONEY_KEYS = {
   },
   /** pm.job_costs (cost drain from Books). */
   cost: {
-    financials: ['amount_cents', 'cost_cents', 'actual_cents', 'actual_cost_cents', 'amountCents', 'costCents'],
+    financials: ['amount_cents', 'cost_cents', 'actual_cents', 'actual_cost_cents', 'amountCents', 'costCents', 'tax_cents', 'taxCents'],
   },
   /** Commitments (POs / subcontracts), lines, changes, receipts, compliance, v_commitment_status. */
   commitment: {
@@ -86,12 +88,13 @@ export const MONEY_KEYS = {
   },
   /** Estimates and estimate lines: sell is contract, cost lines and margin are cost. */
   estimate: {
-    contract_value: ['total_cents', 'unit_price_cents', 'amount_cents', 'unitPriceCents', 'amountCents', 'sell', 'allowances'],
+    contract_value: ['total_cents', 'unit_price_cents', 'amount_cents', 'unitPriceCents', 'amountCents', 'sell', 'allowances', 'est_value_cents', 'estValueCents'],
     financials: [
       'cost_total_cents', 'unit_cost_cents', 'cost_cents', 'unitCostCents', 'costCents', 'margin', 'marginPct',
       'markup_pct', 'markupPct', 'cost', 'margin_cents', 'margin_pct',
     ],
     labor_rates: ['estimatingRateCents', 'estimating_rate_cents'],
+    public: ['list_price_cents', 'listCents', 'measure_fee_cents', 'measureFeeCents'],
   },
   /** pm.time_entries: the pinned pay rate is individual comp; the bill rate is sell. */
   time_entry: {
@@ -116,6 +119,7 @@ export const MONEY_KEYS = {
       'trade_allowance_cents', 'allowance_cents', 'fi_price_cents', 'taxable_estimate_cents', 'tax_estimate_cents',
       'deposits_cents', 'cash_price_cents', 'balance_due_estimate_cents', 'amount_financed_cents', 'unit_price_cents',
       'amount_cents', 'price_cents', 'unitPriceCents', 'priceCents', 'amountFinancedCents', 'amountCents',
+  'funded_cents', 'paid_cents', 'fundedCents', 'paidCents',
     ],
     financials: [
       'unit_cost_cents', 'cost_cents', 'fee_cost_cents', 'fi_cost_cents', 'trade_acv_cents', 'acv_cents', 'over_allowance_cents',
@@ -148,6 +152,7 @@ export const MONEY_KEYS = {
     contract_value: [
       'unit_price_cents', 'amount_cents', 'core_charge_cents', 'core_charges_cents', 'total_cents', 'merchandise_cents',
       'discount_cents', 'tax_estimate_cents', 'tax_cents', 'subtotal_cents', 'unitPriceCents', 'amountCents',
+  'card_cents', 'cash_cents', 'check_cents', 'drawer_variance_cents', 'opening_cash_cents', 'keep_float_cents', 'cardCents', 'cashCents', 'checkCents', 'openingCashCents', 'keepFloatCents',
     ],
     financials: ['unit_cost_cents', 'cost_cents', 'cost_total_cents', 'margin_cents', 'unitCostCents', 'costCents'],
   },
@@ -157,8 +162,9 @@ export const MONEY_KEYS = {
   },
   /** Repair orders (dealer service): sell lines are contract; cost is financials; warranty claim amounts are billed (contract). */
   repair_order: {
-    contract_value: ['unit_price_cents', 'amount_cents', 'claimed_cents', 'unitPriceCents', 'amountCents'],
+    contract_value: ['unit_price_cents', 'amount_cents', 'claimed_cents', 'unitPriceCents', 'amountCents', 'auth_limit_cents', 'deposit_cents', 'price_cents', 'authLimitCents', 'depositCents', 'priceCents'],
     financials: ['unit_cost_cents', 'cost_cents', 'sublet_cost_cents', 'unitCostCents'],
+    public: ['labor_rate_cents', 'laborRateCents', 'storage_daily_cents', 'min_cents', 'cap_cents'],
   },
   /** Warranty claims (the OEM is billed): contract money. */
   warranty_claim: {
@@ -174,11 +180,11 @@ export const MONEY_KEYS = {
       'rental_cents', 'damage_waiver_cents', 'fees_cents', 'total_cents', 'waiverCents', 'feesCents', 'damageCents', 'fuelCents',
       'cleaningCents', 'deliveryCents',
     ],
-    public: ['day_cents', 'week_cents', 'month_cents', 'damage_waiver_pct', 'dayCents', 'weekCents', 'monthCents'],
+    public: ['day_cents', 'week_cents', 'month_cents', 'damage_waiver_pct', 'dayCents', 'weekCents', 'monthCents', 'card_hold_cents', 'half_day_cents', 'hour_cents', 'min_charge_cents', 'cardHoldCents', 'halfDayCents', 'hourCents', 'minChargeCents'],
   },
   /** Field-service / shop work orders and their lines. */
   work_order: {
-    contract_value: ['unit_price_cents', 'amount_cents', 'total_cents', 'unitPriceCents', 'amountCents'],
+    contract_value: ['unit_price_cents', 'amount_cents', 'total_cents', 'unitPriceCents', 'amountCents', 'allowance_cents', 'upcharge_cents'],
     financials: ['unit_cost_cents', 'cost_cents', 'unitCostCents', 'costCents', 'rate_cents', 'rateCents'],
   },
   /** Price book: sell is public (dispatcher rule); cost is financials. */
@@ -222,6 +228,7 @@ export const MONEY_KEYS = {
       'eac_cents', 'cost_to_date_cents', 'uninstalled_materials_cents', 'earned_cents', 'over_billed_cents', 'under_billed_cents',
       'gp_cents', 'loss_provision_cents', 'total_budget_cents', 'total_actual_cents', 'total_ctc_cents', 'total_eac_cents',
       'prior_eac_cents', 'budget_cents', 'committed_cents', 'actual_cents', 'pending_cents', 'ctc_cents',
+  'value_cents', 'valueCents',
     ],
   },
   /** Sub pay applications (1120 cm_sub_pay_apps, 1118 portal_pay_apps): what the GC pays subs — cost. */
@@ -230,6 +237,18 @@ export const MONEY_KEYS = {
       'scheduled_value_cents', 'gross_this_period_cents', 'work_to_date_cents', 'retainage_this_period_cents', 'net_due_cents',
       'gross_cents', 'retainage_cents', 'net_cents', 'this_period_cents',
     ],
+  },
+  /**
+   * Wave C commercial screens. Retainage ledger (cm_v_retainage_both / cm_v_payable_retainage):
+   * what the owner holds from us is contract; what we hold from subs is cost.
+   */
+  retainage_ledger: {
+    contract_value: ['receivable_held_cents', 'receivable_released_cents', 'receivable_outstanding_cents', 'retainage_outstanding_cents'],
+    financials: ['payable_held_cents', 'payable_released_cents', 'payable_outstanding_cents', 'held_cents', 'released_cents', 'outstanding_cents'],
+  },
+  /** Trade proposals (cm_trade_proposals): our bid to the GC — base bid, alternates and unit prices are contract. */
+  trade_proposal: {
+    contract_value: ['base_bid_cents', 'amount_cents', 'unit_cents', 'baseBidCents', 'amountCents', 'unitCents'],
   },
   /** Service agreements: the customer's contract price. */
   agreement: {
@@ -249,8 +268,10 @@ export const MONEY_KEYS = {
   },
   /** FF&E / flooring procurement items. */
   procurement: {
-    contract_value: ['unit_sell_cents', 'sell_total_cents', 'unitSellCents', 'amount_cents'],
-    financials: ['unit_cost_cents', 'markup_pct', 'freight_cents', 'cost_total_cents', 'margin_cents', 'margin_pct', 'unitCostCents', 'markupPct', 'freightCents'],
+    contract_value: ['unit_sell_cents', 'sell_total_cents', 'unitSellCents', 'amount_cents', 'deposit_cents', 'deposit_moved_cents', 'fee_cents', 'gmp_cents', 'retainer_cents', 'budget_low_cents', 'budget_high_cents', 'sell_cents', 'subtotal_cents', 'tax_cents', 'depositCents', 'feeCents', 'gmpCents', 'retainerCents'],
+    financials: ['unit_cost_cents', 'markup_pct', 'freight_cents', 'cost_total_cents', 'margin_cents', 'margin_pct', 'unitCostCents', 'markupPct', 'freightCents', 'claim_cents', 'settled_cents', 'restocking_fee_cents', 'cost_cents', 'trade_cost_cents', 'default_markup_pct', 'up_to_cents', 'freight_in_cents', 'landed_cost_cents', 'claimCents', 'settledCents', 'costCents', 'freightInCents', 'marginPct'],
+    labor_rates: ['pay_cents'],
+    public: ['retail_cents', 'retailCents', 'measure_fee_cents', 'measureFeeCents'],
   },
   /** Development lots/units: contract price is contract; lender release price is development finance. List price is public. */
   dev_unit: {
@@ -269,6 +290,7 @@ export const MONEY_KEYS = {
       'approved_cents', 'equity_applied_cents', 'loan_expected_cents', 'funded_cents', 'amountCents', 'outCents',
       'loanCommitmentCents', 'equityRequiredCents', 'interestReserveCents', 'projectedMonthlyInterestCents', 'requestedCents',
       'approvedCents', 'fundedCents', 'originalCents', 'revisedCents',
+  'previous_cents', 'stored_cents', 'this_period_cents', 'total_cents', 'interestCents', 'totalCents', 'asking_price_cents', 'earnest_money_cents', 'pursuit_budget_cents', 'pursuit_spent_cents',
     ],
   },
   /**

@@ -104,9 +104,15 @@ export async function capturePhoto(commandId: string): Promise<PhotoCapture> {
     } catch {
       return { ok: false, reason: 'too_large' };
     }
-    const dest = new File(photoDir(), `${commandId}.jpg`);
-    await new File(small).move(dest);
-    return { ok: true, uri: dest.uri };
+    // Moving into the app's photos folder can fail if the phone locks mid-write (iOS file protection):
+    // keep the shrunk copy where it is (app-private cache, wiped on sign-out) rather than lose the photo.
+    try {
+      const dest = new File(photoDir(), `${commandId}.jpg`);
+      await new File(small).move(dest);
+      return { ok: true, uri: dest.uri };
+    } catch {
+      return new File(small).exists ? { ok: true, uri: small } : { ok: false, reason: 'failed' };
+    }
   } catch {
     return { ok: false, reason: 'failed' };
   }

@@ -6,14 +6,19 @@ import { Uuid } from '@/lib/pm/money/schemas';
 import { CloseoutAction } from '@/lib/commercial/schemas';
 import { cmError, cmRpc, cmWrote, loadCloseGate } from '@/lib/commercial/server';
 
-/** GET /api/commercial/closeout?jobId= — the close gate (what still blocks closing the job) and the closeout package. */
+/** GET /api/commercial/closeout?jobId= — the close gate (what still blocks closing the job), the closeout package and the subs' names. */
 export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: z.object({ jobId: Uuid }) }, async ({ db, query }) => {
   const [gate, items] = await Promise.all([
     loadCloseGate(db, query.jobId),
-    db.schema('pm').from('cm_closeout_items').select('id, category, title, form_ref, vendor_id, spec_section, required, status, due_on, warranty_ends_on').eq('job_id', query.jobId).order('category').order('title'),
+    db.schema('pm').from('cm_closeout_items').select('id, job_id, category, title, form_ref, commitment_id, vendor_id, spec_section, required, status, due_on, document_id, warranty_starts_on, warranty_years, warranty_ends_on, accepted_at, notes')
+      .eq('job_id', query.jobId).order('category').order('title'),
   ]);
   if (items.error) throw cmError(items.error);
-  return { gate, items: items.data ?? [] };
+  const list = (items.data ?? []) as Array<{ vendor_id: string | null }>;
+  const vids = [...new Set(list.map((i) => i.vendor_id).filter((x): x is string => !!x))];
+  const v = vids.length ? await db.schema('pm').from('v_core_vendors_masked').select('id, name, display_name').in('id', vids) : { data: [], error: null };
+  const vendors = Object.fromEntries(((v.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((x) => [x.id, x.display_name || x.name]));
+  return { gate, items: list, vendors };
 });
 
 /** POST /api/commercial/closeout — generate the closeout package from the job (O&Ms, warranties, as-builts, final waivers), set an item, close the job (refused while anything blocks). */

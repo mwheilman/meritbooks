@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import type { FieldJob, PhotoCommand } from '@/core/contract';
 import { useApp } from '@/state/app';
 import { capturePhoto } from '@/lib/device';
+import { overlayInbox } from '@/core/inbox';
 import { Field, Notice, Row } from './components';
 import { color, font, size } from './theme';
 
@@ -29,6 +30,24 @@ export function SyncBadge() {
       <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: fg }} />
       <Text style={{ fontSize: 16, fontWeight: '700', color: fg }}>{text}</Text>
       {!online ? <Text style={{ fontSize: 16, color: fg }}>· {t('offlineShort')}</Text> : null}
+    </Pressable>
+  );
+}
+
+/** The inbox bell in the header: unread count (with this phone's own read marks applied). */
+export function InboxBell() {
+  const { inbox, queued, t } = useApp();
+  const unread = useMemo(() => overlayInbox(inbox, queued).unread, [inbox, queued]);
+  return (
+    <Pressable
+      onPress={() => router.push('/inbox')}
+      accessibilityRole="button"
+      accessibilityLabel={t('bellLabel', { n: unread })}
+      hitSlop={8}
+      style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 10, borderRadius: 999, borderWidth: 1.5, borderColor: unread ? color.primary : color.line, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 6, backgroundColor: unread ? color.sky : color.bg }}
+    >
+      <View style={{ width: 16, height: 14, borderTopLeftRadius: 8, borderTopRightRadius: 8, borderWidth: 2.5, borderBottomWidth: 0, borderColor: unread ? color.primary : color.muted }} />
+      {unread ? <Text style={{ fontSize: 16, fontWeight: '800', color: color.primary }}>{unread > 99 ? '99+' : unread}</Text> : null}
     </Pressable>
   );
 }

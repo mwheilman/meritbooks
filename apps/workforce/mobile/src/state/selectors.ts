@@ -53,3 +53,17 @@ export function agoText(ms: number | null, lang: 'en' | 'es'): string {
 export function hoursText(h: number): string {
   return (Math.round(h * 100) / 100).toLocaleString('en-US', { maximumFractionDigits: 2 });
 }
+
+/**
+ * The jobs whose current drawing set the phone keeps: jobs with sheets that I work on in the
+ * three-day window (visits, tasks, the shift), today's first; else the first ten with sheets.
+ */
+export function drawingJobs(t: FieldToday | null, drawings: Readonly<Record<string, number>> | null | undefined, shiftJobId: string | null = null): { jobs: string[]; priority: string[] } {
+  if (!t || !drawings) return { jobs: [], priority: [] };
+  const has = (id: string) => (drawings[id] ?? 0) > 0;
+  const todayJobs = [shiftJobId, ...t.assignments.filter((a) => a.day === t.today).map((a) => a.jobId)].filter((x): x is string => !!x);
+  const windowJobs = [...todayJobs, ...t.assignments.map((a) => a.jobId), ...t.tasks.filter((k) => k.mine).map((k) => k.jobId)];
+  let jobs = [...new Set(windowJobs)].filter(has);
+  if (!jobs.length) jobs = t.jobs.map((j) => j.id).filter(has).slice(0, 10);
+  return { jobs: jobs.slice(0, 30), priority: [...new Set(todayJobs)] };
+}

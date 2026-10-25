@@ -887,10 +887,15 @@ export interface TimeEntryRow {
   approved_by: string | null;
   /** The JOB_TIME event of the current approval; null when not sent to Merit Books. */
   event_id: string | null;
+  /** 1125: a phone / kiosk tap that reached the office late (offline, or a backdated own tap). */
+  late_tap: boolean;
+  late_tap_minutes: number | null;
+  /** Set when an approver acknowledged the late entry (required before it can be approved). */
+  late_ack_at: string | null;
 }
 export const TIME_COLS =
   'id, job_id, employee_id, user_id, work_date, hours, pay_type, cost_code_id, work_order_id, operation_id, billable, notes, approval_state, approved_at, ' +
-  'created_by, cost_rate_cents, bill_rate_cents, approved_by, event_id';
+  'created_by, cost_rate_cents, bill_rate_cents, approved_by, event_id, late_tap, late_tap_minutes, late_ack_at';
 
 export type LogKind = 'DAILY' | 'INSPECTION' | 'SAFETY' | 'DELIVERY' | 'VISIT';
 

@@ -55,7 +55,7 @@ export type JobTabValue =
   | JobTab | 'team' | 'rfis' | 'client-view' | 'equipment' | 'agreement' | 'parts' | 'warranty-claim'
   | 'capital-stack' | 'bom' | 'tm-tickets' | 'receiving' | 'productivity'
   | 'portal' | 'home' | 'change-events' | 'submittals' | 'meetings' | 'buyout' | 'closeout' | 'safety' | 'flooring-job'
-  | 'design-project' | 'development';
+  | 'design-project' | 'development' | 'pay-apps' | 'directory' | 'specs' | 'correspondence' | 'review';
 
 export interface JobTabDef {
   value: JobTabValue;
@@ -116,6 +116,11 @@ export const TAB_KINDS: Readonly<Record<JobTabKind, KindSpec>> = {
   flooring_job: { value: 'flooring-job', label: () => 'Measure to install' },
   design_project: { value: 'design-project', label: () => 'Rooms & items' },
   development: { value: 'development', label: () => 'Pro forma & capital' },
+  pay_apps: { value: 'pay-apps', modules: ['billing'], label: () => 'Pay apps' },
+  directory: { value: 'directory', label: () => 'Directory' },
+  specifications: { value: 'specs', label: () => 'Specifications' },
+  correspondence: { value: 'correspondence', label: () => 'Correspondence' },
+  project_review: { value: 'review', modules: ['budget'], label: () => 'Monthly review' },
 };
 
 const ALL_VALUES: ReadonlySet<string> = new Set(Object.values(TAB_KINDS).map((k) => k.value));

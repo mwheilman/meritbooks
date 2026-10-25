@@ -17,6 +17,7 @@ import { listBillingQueue } from '@/lib/pm/money/queries';
 import { COMPLIANCE_DOC_LABELS, billingKindLabel } from '@/lib/pm/money/status';
 import { listEmployees } from '@/lib/pm/ops/field-queries';
 import { loadPunch, loadTime } from '@/lib/pm/ops/records-queries';
+import { lateLabel, needsLateAck } from '@/lib/pm/labor/time';
 import { clockOf, dayBoundsUtc, localParts, parseSlot } from '@/lib/pm/ops/dispatch-math';
 import { mondayOf } from '@/lib/pm/ops/week';
 import { personName } from '@/lib/pm/ops/labels';
@@ -201,6 +202,8 @@ export interface CrewTimeItem {
   job: string;
   workDate: string;
   hours: number;
+  /** "entered 3.5 h late" while a late phone tap waits for acknowledgment on the time sheet (1125). */
+  late: string | null;
 }
 
 export interface PunchItem {
@@ -282,7 +285,8 @@ export async function loadSupervisorHome({ db, scope, access, modules }: Base): 
           .map((t) => {
             const e = t.employee_id ? emps.get(t.employee_id) : undefined;
             const j = byId.get(t.job_id)!;
-            return { id: t.id, person: e ? personName(e) : 'Team member', jobId: t.job_id, job: jobLabel(j), workDate: t.work_date, hours: Number(t.hours) };
+            return { id: t.id, person: e ? personName(e) : 'Team member', jobId: t.job_id, job: jobLabel(j), workDate: t.work_date, hours: Number(t.hours),
+              late: needsLateAck(t) ? lateLabel(t.late_tap_minutes) : null };
           }),
       };
     }

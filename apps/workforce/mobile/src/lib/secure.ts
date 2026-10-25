@@ -1,7 +1,8 @@
 /**
  * The phone's storage key: 256 random bits made on first use and kept ONLY in the platform key
  * store (iOS Keychain / Android Keystore via expo-secure-store, this device only, readable after
- * the first unlock so a queued punch can still send with the screen locked). It encrypts:
+ * the first unlock). The files themselves are NSFileProtectionComplete on iOS (app.json), so the
+ * app reads and sends only while the phone is unlocked — it never syncs in the background. It encrypts:
  *   - the SQLite file itself, with SQLCipher (development and store builds; Expo Go has no SQLCipher)
  *   - the payload columns (commands, server answers, cached work) with AES-256-GCM, everywhere
  * Signing out deletes the key, the database and the photos, so nothing left behind can be read.

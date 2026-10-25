@@ -6,17 +6,35 @@ import { HttpError } from '@/lib/api-errors';
 import { Uuid } from '@/lib/pm/money/schemas';
 import { SafetyAction } from '@/lib/commercial/schemas';
 import { cmError, cmRpc, cmWrote } from '@/lib/commercial/server';
+import { can } from '@/lib/access/can';
+import { redactPrivacyCase, type IncidentPrivate } from '@/lib/commercial/screen-logic';
 
-/** GET /api/commercial/safety?jobId= — toolbox talks, JHAs and (for those who may see them) incidents on a job. */
-export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: z.object({ jobId: Uuid }) }, async ({ db, query }) => {
+const INCIDENT_COLS = 'id, job_id, location_id, number, incident_type, occurred_at, reported_at, person_name, job_title, company, is_employee, description, where_occurred, body_part, injury_nature, object_substance, witnesses, root_cause, corrective_actions, osha_recordable, osha_classification, injury_or_illness, days_away, days_restricted, privacy_case, case_number, wc_claim_ref, status';
+
+/**
+ * GET /api/commercial/safety?jobId= — toolbox talks, JHAs and (for those who may see them) incidents on a job.
+ * OSHA privacy cases come back without the name or injury detail unless the caller holds projects.team:edit
+ * at the job's company (there is no separate safety-manager capability).
+ */
+export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: z.object({ jobId: Uuid }) }, async ({ db, query, access }) => {
   const pm = db.schema('pm');
-  const [talks, jhas, incidents] = await Promise.all([
-    pm.from('cm_toolbox_talks').select('id, held_on, topic, language, presenter_name').eq('job_id', query.jobId).order('held_on', { ascending: false }).limit(200),
-    pm.from('cm_jhas').select('id, work_date, task_description, area, status, ppe').eq('job_id', query.jobId).order('work_date', { ascending: false }).limit(200),
-    pm.from('cm_incidents').select('id, number, incident_type, occurred_at, person_name, osha_recordable, osha_classification').eq('job_id', query.jobId).order('occurred_at', { ascending: false }).limit(200),
+  const [talks, att, jhas, incidents] = await Promise.all([
+    pm.from('cm_toolbox_talks').select('id, job_id, held_on, topic, language, presenter_name, notes').eq('job_id', query.jobId).order('held_on', { ascending: false }).limit(200),
+    pm.from('cm_toolbox_attendance').select('talk_id').eq('job_id', query.jobId).limit(5000),
+    pm.from('cm_jhas').select('id, job_id, work_date, task_description, area, steps, ppe, permits, status, signoffs').eq('job_id', query.jobId).order('work_date', { ascending: false }).limit(200),
+    pm.from('v_cm_incidents_masked').select(INCIDENT_COLS).eq('job_id', query.jobId).order('occurred_at', { ascending: false }).limit(200),
   ]);
   if (talks.error) throw cmError(talks.error);
-  return { talks: talks.data ?? [], jhas: jhas.data ?? [], incidents: incidents.error ? [] : incidents.data ?? [] };
+  const n = new Map<string, number>();
+  for (const a of (att.data ?? []) as Array<{ talk_id: string }>) n.set(a.talk_id, (n.get(a.talk_id) ?? 0) + 1);
+  return {
+    talks: ((talks.data ?? []) as Array<{ id: string }>).map((t) => ({ ...t, attendees: n.get(t.id) ?? 0 })),
+    jhas: jhas.data ?? [],
+    // privacy cases: the masked view nulls name and injury detail at the database unless the caller holds
+    // projects.team:edit at the incident's company; the same rule again here (defense in depth, L5)
+    incidents: incidents.error ? [] : ((incidents.data ?? []) as Array<IncidentPrivate & { location_id: string | null }>).map((i) => redactPrivacyCase(i, can(access, 'projects.team', 'edit', i.location_id))),
+    incidentsVisible: !incidents.error,
+  };
 });
 
 /** POST /api/commercial/safety — a toolbox talk with its sign-in, a JHA / pre-task plan and its sign-off, an incident report (feeds the OSHA 300 log). */

@@ -1,5 +1,5 @@
 /**
- * 1114 suite notifications against the full migration chain (Books 178 + 1110 … 1114):
+ * 1114 suite notifications against the full migration chain (Books 178 + 1110 … 1124):
  * recipe fan-out by role, money masking, preferences / mandatory / muted, quiet hours, frequency
  * caps, batching, digests, customer messages held until go-live, SMS consent + STOP, the inbox
  * under RLS (incl. Projects-only seats), the worker surface and the registry guards.
@@ -54,10 +54,11 @@ async function approvalRequest(o: { job: string; title: string; amount: number; 
 
 beforeAll(async () => {
   f = await buildFixture();
-  // 1114's own chain (1111 shared records, 1112 schedule, 1113 approvals — approval notifications
-  // are built from its requests —, 1114). Other Wave A migrations replay in
-  // the full-suite tests; they are not prerequisites here.
-  for (const file of listMigrationFiles().filter((x) => [1111, 1112, 1113, 1114].includes(parseInt(x, 10)))) await applyMigration(f.db, file);
+  // The chain through 1124: 1111 shared records, 1112 schedule, 1113 approvals (approval
+  // notifications are built from its requests), 1114 notifications, then every later Projects
+  // migration up to 1124, whose W1b block seeds the Wave C role recipes — so the DB == code parity
+  // below covers every platform recipe row. All must apply (none is skipped).
+  for (const file of listMigrationFiles().filter((x) => { const n = parseInt(x, 10); return n >= 1111 && n <= 1124; })) await applyMigration(f.db, file);
   for (const p of ['gm', 'pm', 'dispatcher', 'labor', 'supervisor', 'owner'] as const) {
     await as(f, p, async () => {
       await f.db.query(`select pm.notify_register_device($1, 'ios', 'Phone', '1.0')`, [TOKEN(p)]);

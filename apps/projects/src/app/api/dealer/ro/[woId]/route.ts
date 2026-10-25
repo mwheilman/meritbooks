@@ -5,7 +5,7 @@ import { HttpError } from '@/lib/api-errors';
 import { assertCompany, route } from '@/lib/api';
 import { rows } from '@/lib/pm/db';
 import { customerNames } from '@/lib/pm/ops/scope';
-import { dcall, downs, dwrite } from '@/lib/pm/dealer/rpc';
+import { dcall, downs } from '@/lib/pm/dealer/rpc';
 import { Day, RoPayTypeZ, Text, Uuid, attrs } from '@/lib/pm/dealer/schemas';
 import { RO_LINE_COLS, type RoLineRow } from '@/lib/pm/dealer/types';
 
@@ -76,21 +76,20 @@ export const GET = route({ access: { cap: 'projects.store', action: 'view' }, ma
 export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, mask: 'repair_order', body: Op }, async ({ db, params, body, tenant }) => {
   const wo = await downs<Wo>(db, 'work_orders', 'id, job_id, location_id, number, kind, status, payer_customer_id, asset_id', params.woId!, 'That repair order was not found.');
   assertCompany(tenant, wo.location_id);
-  const pm = db.schema('pm');
   switch (body.op) {
     case 'add_line': {
       if (body.kind === 'PART' && !body.partId && !body.description) throw new HttpError(422, 'Key a part number or describe the part.', 'VALIDATION');
       if (body.kind !== 'PART' && !body.description && !body.laborOp) throw new HttpError(422, 'Describe the line.', 'VALIDATION');
-      const last = rows<{ sort: number }>(await pm.from('work_order_lines').select('sort').eq('work_order_id', wo.id).order('sort', { ascending: false }).limit(1), 'last line');
       const labor = body.kind === 'LABOR';
       const qty = labor && body.flagHours ? body.flagHours : body.qty;
-      await dwrite(pm.from('work_order_lines').insert({
-        job_id: wo.job_id, work_order_id: wo.id, sort: (last[0]?.sort ?? -1) + 1, kind: body.kind, status: 'APPROVED',
-        description: body.description || (labor && body.laborOp ? `Labor op ${body.laborOp}` : null),
+      // Through the guarded RPC (migration 1125, security review R2): the price guard and the store's
+      // discount limits apply; members no longer insert lines directly.
+      await dcall(db, 'add_work_order_line', { p_wo: wo.id, p_attrs: {
+        kind: body.kind, status: 'APPROVED', description: body.description || (labor && body.laborOp ? `Labor op ${body.laborOp}` : null),
         qty, uom: labor ? 'HR' : 'EA', unit_price_cents: body.unitPriceCents ?? null, unit_cost_cents: body.unitCostCents ?? null,
         pay_type: body.payType, labor_op: body.laborOp || null, flag_hours: labor ? body.flagHours ?? qty : null,
         part_id: body.kind === 'PART' ? body.partId ?? null : null, stock_location_id: body.kind === 'PART' ? body.stockLocationId ?? null : null,
-      }).select('id'), 'add line');
+      } });
       return { ok: true };
     }
     case 'update_line': {
@@ -103,13 +102,12 @@ export const POST = route({ access: { cap: 'projects.store', action: 'edit' }, m
       if (body.unitPriceCents !== undefined) patch.unit_price_cents = body.unitPriceCents;
       if (body.unitCostCents !== undefined) patch.unit_cost_cents = body.unitCostCents;
       if (!Object.keys(patch).length) throw new HttpError(422, 'Nothing to change.', 'VALIDATION');
-      const r = await dwrite<unknown[]>(pm.from('work_order_lines').update(patch).eq('id', body.lineId).eq('work_order_id', wo.id).select('id'), 'update line');
-      if (!r.length) throw new HttpError(404, 'That line was not found on this repair order.', 'NOT_FOUND');
+      await dcall(db, 'update_work_order_line', { p_line: body.lineId, p_patch: patch, p_wo: wo.id });
       return { ok: true };
     }
     case 'remove_line': {
-      const r = await dwrite<unknown[]>(pm.from('work_order_lines').delete().eq('id', body.lineId).eq('work_order_id', wo.id).select('id'), 'remove line');
-      if (!r.length) throw new HttpError(404, 'That line was not found on this repair order.', 'NOT_FOUND');
+      // through the guarded RPC (1125 R2-b): a charged line's removal needs approve; issued parts are returned first
+      await dcall(db, 'remove_work_order_line', { p_line: body.lineId, p_wo: wo.id });
       return { ok: true };
     }
     case 'claim': {

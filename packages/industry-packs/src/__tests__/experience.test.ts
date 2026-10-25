@@ -62,11 +62,12 @@ describe('manifest v2: every published pack validates and fills every slot', () 
 describe('Industry × experience table (UX seat §3a)', () => {
   it('commercial_gc: budget-first project tabs with pay apps, RFIs and directory', () => {
     expect(tabs('commercial_gc', 'lump_sum')).toEqual([
-      'overview', 'budget', 'schedule', 'commitments', 'Changes', 'RFIs', 'Pay apps', 'submittals', 'Daily reports', 'meetings',
-      'buyout', 'closeout', 'Directory', 'Safety & inspections', 'documents', 'Owner portal',
+      'overview', 'budget', 'schedule', 'commitments', 'Changes', 'RFIs', 'pay_apps', 'submittals', 'Daily reports', 'meetings',
+      'buyout', 'closeout', 'directory', 'Safety & inspections', 'documents', 'specifications', 'correspondence', 'Monthly review',
+      'Owner portal', 'billing',
     ]);
     expect(tabs('commercial_gc', 'small_work')).not.toContain('RFIs');
-    expect(navItems('commercial_gc', 'pm')).toEqual(expect.arrayContaining(['Change events', 'Pay apps', 'Reports']));
+    expect(navItems('commercial_gc', 'pm')).toEqual(expect.arrayContaining(['Change events', 'pay_apps', 'project_review', 'Reports']));
   });
 
   it('field_service: jobs open on Visits; the dispatch board is the schedule', () => {

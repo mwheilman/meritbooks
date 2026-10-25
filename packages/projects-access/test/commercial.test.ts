@@ -8,6 +8,7 @@
  * The SQL math is checked against the browser mirror (apps/projects/src/lib/commercial).
  */
 
+import { createHash } from 'node:crypto';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { buildFixture, as, q, errorOf, type Fixture, type Persona, ORG_A, ORG_B, L1, J1, J2 } from './fixture';
 import { applyMigration, listMigrationFiles } from './pg';
@@ -239,14 +240,35 @@ describe('owner pay apps: CO → SOV, stored materials, step-downs, pencil → c
     expect((await one<{ stage: string }>(`select stage from pm.cm_pay_app_status where billing_request_id = $1`, [id.app1])).stage).toBe('PENCIL');
     expect(await asErr('accountant', `select pm.approve_and_emit_billing($1)`, [id.app1])).toMatch(/PM_PAYAPP_NOT_CERTIFIED/);
     await asQ('pm', `select pm.cm_send_pencil($1, 'Owner rep')`, [id.app1]);
-    expect(await asErr('pm', `select pm.cm_certify_pay_app($1, 'A. Architect', 900000, false)`, [id.app1])).toMatch(/PM_PAYAPP_CERT_MISMATCH/);
-    await asQ('pm', `select pm.cm_certify_pay_app($1, 'A. Architect', 945000, false)`, [id.app1]);
+    // preparer ≠ certifier (security review L6): the PM who drafted it cannot record the certification
+    expect(await asErr('pm', `select pm.cm_certify_pay_app($1, 'A. Architect', 945000, false)`, [id.app1])).toMatch(/PM_SOD_VIOLATION/);
+    expect(await asErr('accountant', `select pm.cm_certify_pay_app($1, 'A. Architect', 900000, false)`, [id.app1])).toMatch(/PM_PAYAPP_CERT_MISMATCH/);
+    await asQ('accountant', `select pm.cm_certify_pay_app($1, 'A. Architect', 945000, false)`, [id.app1]);
+    const cert = await one<{ certified_by: string | null; contractor_signed_at: string | null }>(`select certified_by, contractor_signed_at from pm.cm_pay_app_status where billing_request_id = $1`, [id.app1]);
+    expect(cert.certified_by).toBe(f.clerk.accountant);
+    expect(cert.contractor_signed_at).toBeNull(); // only the completed e-sign envelope stamps it
     await asQ('accountant', `select pm.approve_and_emit_billing($1)`, [id.app1]);
     expect((await one<{ status: string }>(`select status from pm.billing_requests where id = $1`, [id.app1])).status).toBe('EMITTED');
     expect((await one<{ stage: string }>(`select stage from pm.cm_pay_app_status where billing_request_id = $1`, [id.app1])).stage).toBe('FINAL');
     const ev = await one<{ payload: { billing_subtype: string; retainage_cents: number; gross_earned_cents: number } }>(
       `select payload from core.events e join pm.billing_requests b on b.event_id = e.event_id where b.id = $1`, [id.app1]);
     expect(ev.payload).toMatchObject({ billing_subtype: 'SOV', retainage_cents: 105000, gross_earned_cents: 1050000 });
+  });
+
+  it('the contractor signature is stamped only by the completed e-sign envelope linked to the pay app (L6)', async () => {
+    const docId = await as(f, 'pm', async () => (await q<{ id: string }>(f.db,
+      `insert into public.documents (org_id, storage_path, file_name, mime_type, size_bytes, doc_type, entity_type, uploaded_by_user)
+       values ($1, $2, 'pay-app-1.pdf', 'application/pdf', 1234, 'OTHER', 'pm.doc_files', $3) returning id`, [ORG_A, `${ORG_A}/pm/docs/cm-pay-app-1.pdf`, f.clerk.pm]))[0]!.id);
+    const file = (await asOne<{ r: { file_id: string } }>('pm', `select pm.doc_create($1, null, $2, $3::jsonb) as r`, [J1, docId,
+      JSON.stringify({ mime_type: 'application/pdf', content_sha256: createHash('sha256').update('cm-pay-app-1').digest('hex'), kind: 'pay_app', subject_table: 'billing_requests', subject_id: id.app1 })])).r.file_id;
+    const env = (await asOne<{ id: string }>('pm', `select pm.esign_create($1, '[{"name":"Pat Officer","channel":"link"}]'::jsonb) as id`, [file])).id;
+    expect(await asErr('pm', `select pm.cm_pay_app_link_envelope($1, $2)`, [id.app1, '00000000-0000-4000-8000-00000000abcd'])).toMatch(/PM_PAYAPP_ENVELOPE/);
+    expect(await asErr('labor', `select pm.cm_pay_app_link_envelope($1, $2)`, [id.app1, env])).toMatch(forbidden);
+    await asQ('pm', `select pm.cm_pay_app_link_envelope($1, $2)`, [id.app1, env]);
+    const before = await one<{ esign_envelope_id: string; contractor_signed_at: string | null }>(`select esign_envelope_id, contractor_signed_at from pm.cm_pay_app_status where billing_request_id = $1`, [id.app1]);
+    expect(before).toEqual({ esign_envelope_id: env, contractor_signed_at: null });
+    await q(f.db, `update pm.esign_envelopes set status = 'completed', completed_at = now() where id = $1`, [env]);
+    expect((await one<{ s: string | null }>(`select contractor_signed_at::text s from pm.cm_pay_app_status where billing_request_id = $1`, [id.app1])).s).not.toBeNull();
   });
 
   it('application #2 carries forward; the owner returns the pencil and the revision keeps the number', async () => {
@@ -270,7 +292,7 @@ describe('owner pay apps: CO → SOV, stored materials, step-downs, pencil → c
     expect(n((await one<{ c: number }>(`select count(*)::int c from pm.cm_pay_app_revisions where job_id = $1 and application_no = 2`, [J1])).c)).toBe(1);
     id.app2 = rev;
     const net = n((await one<{ n: string }>(`select net_cents n from pm.billing_requests where id = $1`, [rev])).n);
-    await asQ('pm', `select pm.cm_certify_pay_app($1, 'A. Architect', $2, true)`, [rev, net]);
+    await asQ('accountant', `select pm.cm_certify_pay_app($1, 'A. Architect', $2, true)`, [rev, net]);
     await asQ('accountant', `select pm.approve_and_emit_billing($1)`, [rev]);
   });
 
@@ -655,6 +677,20 @@ describe('field: daily log (sign + lock, amendments, copy forward, voice), inspe
     expect(Number(a.trir)).toBeCloseTo(1, 1);
     expect((await asQ<{ person_name: string }>('gm', `select person_name from pm.cm_osha_300($1, 2026)`, [L1]))).toEqual([{ person_name: 'Lee Worker' }]);
     expect(await count('labor', `select 1 from pm.cm_incidents`)).toBe(0);
+    // OSHA privacy case (security round 2): masked at the database — team:view sees the case, not who or what
+    const pc = (await asOne<{ id: string }>('pm', `insert into pm.cm_incidents (job_id, incident_type, occurred_at, person_name, job_title, description, body_part, injury_nature, privacy_case, osha_recordable, osha_classification)
+                             values ($1, 'ILLNESS', '2026-10-16 09:00', 'Pat Private', 'Electrician', 'Reaction after exposure', 'Lungs', 'Respiratory irritation', true, true, 'OTHER_RECORDABLE') returning id`, [J1])).id;
+    expect(await asErr('supervisor', `select person_name from pm.cm_incidents where id = $1`, [pc])).toMatch(/permission denied/);
+    const hidden = await asOne<Record<string, string | null>>('supervisor', `select person_name, job_title, body_part, injury_nature, description, osha_classification from pm.v_cm_incidents_masked where id = $1`, [pc]);
+    expect(hidden).toMatchObject({ person_name: null, job_title: null, body_part: null, injury_nature: null, osha_classification: 'OTHER_RECORDABLE' });
+    expect(hidden.description).toMatch(/^Privacy case/);
+    const shown = await asOne<{ person_name: string; body_part: string }>('pm', `select person_name, body_part from pm.v_cm_incidents_masked where id = $1`, [pc]);
+    expect(shown).toEqual({ person_name: 'Pat Private', body_part: 'Lungs' });
+    // an ordinary case stays readable through the view for team:view
+    expect((await asOne<{ person_name: string }>('supervisor', `select person_name from pm.v_cm_incidents_masked where person_name = 'Lee Worker'`)).person_name).toBe('Lee Worker');
+    // the OSHA 300 log reads the masked view: the privacy case carries no name and, for team:view, no injury detail
+    const log = await asQ<{ person_name: string; description: string }>('supervisor', `select person_name, description from pm.cm_osha_300($1, 2026) order by occurred_on`, [L1]);
+    expect(log.find((r) => r.person_name === 'Privacy case')?.description ?? 'missing').toBe('');
   });
 
   it('labor productivity: earned vs actual hours by cost code (hours only), with a weekly fade alert that names the cause', async () => {
@@ -703,6 +739,12 @@ describe('templates (global update), proposals, directory, close gate, inbox, ex
     const p = await asOne<{ id: string; number: string }>('pm', `insert into pm.cm_proposals (location_id, customer_id, project_name, base_bid_cents, alternates, exclusions)
                        values ($1, $2, 'Clinic electrical', 5000000, '[{"label": "LED upgrade", "amount_cents": 250000}, {"label": "Generator", "amount_cents": 900000}]'::jsonb, '{Permits,Utility fees}') returning id, number`, [L1, id.customer]);
     expect(p.number).toMatch(/^PR-L1-\d{4}-001$/);
+    // the bid is masked at the database (security review L3): members read it through pm.v_cm_proposals_masked only
+    expect(await asErr('pm', `select base_bid_cents from pm.cm_proposals where id = $1`, [p.id])).toMatch(/permission denied/);
+    const seen = await asOne<{ base_bid_cents: string | null; alternates: Array<{ label: string; amount_cents?: number }> }>('pm', `select base_bid_cents, alternates from pm.v_cm_proposals_masked where id = $1`, [p.id]);
+    expect([n(seen.base_bid_cents), seen.alternates[1]!.amount_cents]).toEqual([5000000, 900000]);
+    const reg = await q<{ column_name: string }>(f.db, `select column_name from pm.access_masked_columns where table_name = 'cm_proposals' order by 1`);
+    expect(reg.map((r) => r.column_name)).toEqual(['alternates', 'base_bid_cents', 'unit_prices']);
     expect(await asErr('pm', `update pm.cm_proposals set status = 'ACCEPTED' where id = $1`, [p.id])).toMatch(/permission denied|PM_PROPOSAL_STATE/);
     await asQ('pm', `select pm.cm_proposal_send($1, null)`, [p.id]);
     const job = (await asOne<{ r: string }>('pm', `select pm.cm_proposal_accept($1, 'build', array[0]) r`, [p.id])).r;

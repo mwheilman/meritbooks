@@ -32,3 +32,13 @@ export function pinnedRateText(cents: number | null | undefined, fmt: (c: number
 
 export const TIME_APPROVAL_NOTE =
   'Approving pins each entry’s cost rate at pay + burden (overtime 1.5×, double time 2×) and, with Merit Books connected, sends the hours there for labor cost. You cannot approve time you entered or your own hours.';
+
+/** 1125 late taps: "entered 3.5 h late" — the same words and rounding as pm.dlr_late_time. */
+export function lateLabel(minutes: number | null | undefined): string {
+  return `entered ${(Math.max(0, Number(minutes ?? 0)) / 60).toFixed(1)} h late`;
+}
+
+/** A late entry must be acknowledged one by one before it can be approved (pm.tg_d5_late_time_gate). */
+export function needsLateAck(t: { late_tap?: boolean | null; late_ack_at?: string | null; approval_state: string }): boolean {
+  return !!t.late_tap && !t.late_ack_at && t.approval_state !== 'APPROVED' && t.approval_state !== 'VOID';
+}

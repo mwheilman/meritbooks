@@ -13,7 +13,9 @@ import { localDay } from '@/lib/device';
 import { useApp } from '@/state/app';
 import { dayLabel, hoursText, jobById } from '@/state/selectors';
 import { Button, Card, Choice, Field, Notice, Pill, Row, Screen, Section } from '@/ui/components';
-import { SyncBadge, jobLabel } from '@/ui/chrome';
+import { InboxBell, SyncBadge, jobLabel } from '@/ui/chrome';
+import { router } from 'expo-router';
+import { overlayInbox } from '@/core/inbox';
 import { font } from '@/ui/theme';
 
 const money = (cents: number) => (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -81,10 +83,19 @@ export default function Me() {
 
   const neededCount = receipts?.state === 'ok' ? receipts.value.cards.reduce((s, c) => s + (c.chaseOn ? c.needed.length : 0), 0) : 0;
   const neededCents = receipts?.state === 'ok' ? receipts.value.cards.reduce((s, c) => s + (c.chaseOn ? c.neededTotalCents : 0), 0) : 0;
+  const unread = useMemo(() => overlayInbox(app.inbox, queued).unread, [app.inbox, queued]);
   const booksCards = today?.booksPresent && (receipts?.state === 'ok' || pay?.state === 'ok' || commissions?.state === 'ok');
 
   return (
-    <Screen title={today?.me.name ?? t('tabMe')} right={<SyncBadge />} footer={msg ? <Notice text={msg.text} tone={msg.tone} /> : undefined}>
+    <Screen title={today?.me.name ?? t('tabMe')} right={<View style={{ flexDirection: 'row', gap: 8 }}><InboxBell /><SyncBadge /></View>} footer={msg ? <Notice text={msg.text} tone={msg.tone} /> : undefined}>
+      <View style={{ gap: 10 }}>
+        <Row title={t('inboxTitle')} sub={unread ? t('inboxNew', { n: unread }) : null} onPress={() => router.push('/inbox')} right={unread ? <Pill text={String(unread)} tone="primary" /> : null} />
+        {app.extras?.features.installerPay ? <Row title={t('payWeekTitle')} sub={t('payCardHint')} onPress={() => router.push('/pay')} /> : null}
+        {app.extras?.features.roClock ? <Row title={t('roTitle')} onPress={() => router.push('/ro')} /> : null}
+        {app.more.installerDay && (app.more.installerDay.bookings.length || app.more.installerDay.my_pay_this_week_cents) ? <Row title={t('installTitle')} sub={app.more.installerDay.bookings.length ? t('installBtn', { n: app.more.installerDay.bookings.length }) : t('installNone')} onPress={() => router.push('/install')} /> : null}
+        {app.more.willCalls.length ? <Row title={t('willCallTitle')} sub={t('willCallBtn', { n: app.more.willCalls.length })} onPress={() => router.push('/willcalls')} /> : null}
+        {app.extras?.features.kiosk ? <Row title={t('stationMode')} onPress={() => router.push('/kiosk')} /> : null}
+      </View>
       <Section title={t('myWeek')} right={<Text style={font.strong}>{t('weekTotal', { h: hoursText(totalHours(lines)) })}</Text>}>
         {!lines.length ? <Text style={font.muted}>{t('nothingLater')}</Text> : null}
         {lines.map((l) => {

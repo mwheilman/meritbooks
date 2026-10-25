@@ -87,7 +87,8 @@ describe('estimate labor line', () => {
 
 const entry = (o: Partial<TimeEntryRow>): TimeEntryRow => ({
   id: 't1', job_id: J, employee_id: 'e1', user_id: null, work_date: '2026-10-20', hours: 8, pay_type: 'REG', cost_code_id: 'cc02', work_order_id: null, operation_id: null,
-  billable: true, notes: null, approval_state: 'SUBMITTED', approved_at: null, created_by: 'user_pm', cost_rate_cents: null, bill_rate_cents: null, approved_by: null, event_id: null, ...o,
+  billable: true, notes: null, approval_state: 'SUBMITTED', approved_at: null, created_by: 'user_pm', cost_rate_cents: null, bill_rate_cents: null, approved_by: null, event_id: null,
+  late_tap: false, late_tap_minutes: null, late_ack_at: null, ...o,
 });
 
 describe('time list: approve, unapprove, pinned rate, sent to Books', () => {
@@ -108,6 +109,18 @@ describe('time list: approve, unapprove, pinned rate, sent to Books', () => {
     expect(html).toContain('56.25/h');
     expect(html.match(/Sent to Merit Books/g)?.length).toBe(1);
     expect(html).not.toMatch(/later release/i);
+  });
+  it('a late phone tap shows "entered N h late", is left out of Approve all and is reviewed one by one', () => {
+    const html = wrap(<TimeView {...base} meUserId="user_pm2" entries={[
+      entry({ id: 'late', late_tap: true, late_tap_minutes: 210 }),
+      entry({ id: 'acked', late_tap: true, late_tap_minutes: 90, late_ack_at: '2026-10-21T13:00:00Z' }),
+    ]} />);
+    expect(html).toContain('entered 3.5 h late');
+    expect(html).toContain('entered 1.5 h late');
+    expect(html).toContain('acknowledged');
+    expect(html).toContain('Review late time');
+    expect(html).toContain('entered late from the phone');
+    expect(html).toContain('<span class="t-cap">1<!-- --> ready to approve');   // only the acknowledged one
   });
   it('the preparer cannot approve their own entry', () => {
     const html = wrap(<TimeView {...base} meUserId="user_pm" entries={[entry({})]} />);

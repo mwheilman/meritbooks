@@ -27,6 +27,11 @@ describe('opening the saved work', () => {
     expect(isKeyMismatch(new Error('User interaction is not allowed (keychain)'))).toBe(false);
     expect(isKeyMismatch(new Error('database is locked'))).toBe(false);
     expect(isKeyMismatch(new Error('unable to open database file'))).toBe(false);
+    // what iOS file protection gives while the phone is locked: never a reason to delete
+    expect(isKeyMismatch(new Error('disk I/O error'))).toBe(false);
+    expect(isKeyMismatch(new Error('Error code 10: disk I/O error'))).toBe(false);
+    expect(isKeyMismatch(new Error('authorization denied (code 23)'))).toBe(false);
+    expect(isKeyMismatch(new Error('Operation not permitted'))).toBe(false);
   });
 
   it('a confirmed key mismatch deletes the unreadable file once and opens a fresh one', async () => {

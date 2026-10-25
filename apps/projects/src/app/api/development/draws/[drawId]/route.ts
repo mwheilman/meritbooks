@@ -56,7 +56,10 @@ export const POST = route({
     case 'add_invoice':
       return { id: await xcall<string>(db, 'dev_add_draw_invoice', { p_draw: drawId, p_vendor: body.vendorId, p_invoice_number: body.invoiceNumber, p_amount_cents: body.amountCents, p_invoice_on: body.invoiceOn ?? null, p_commitment: body.commitmentId ?? null, p_cost_code: body.costCodeId ?? null, p_draw_budget_line: body.drawBudgetLineId ?? null, p_retainage_cents: body.retainageCents, p_document: body.documentId ?? null }) };
     case 'decide_invoice':
-      return { id: await xcall<string>(db, 'dev_decide_draw_invoice', { p_invoice: body.invoiceId, p_approve: body.approve }) };
+      // approving goes through the invoice's approval chain (steps, roles, preparer ≠ approver);
+      // excluding an invoice from the draw stays a direct decision
+      if (body.approve) return xcall(db, 'dev_decide_invoice_step', { p_invoice: body.invoiceId, p_approve: true, p_note: null, p_channel: 'web' });
+      return { id: await xcall<string>(db, 'dev_decide_draw_invoice', { p_invoice: body.invoiceId, p_approve: false }) };
     case 'build':
       return xcall(db, 'dev_build_draw', { p_draw: drawId });
     case 'request_waivers':

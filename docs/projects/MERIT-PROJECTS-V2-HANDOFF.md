@@ -59,3 +59,28 @@ Checksum-pinned runner: `extensions.http_get` the file from GitHub at a pinned c
   hours by job); onboarding import doesn't use the matcher yet (safety-net trigger catches duplicates); phone app needs Apple
   Developer + Google Play + Expo accounts and Clerk email/SMS code sign-in (apps/workforce/README.md); Books needs
   /api/w/me/pay and /commissions for the Me cards; ask Books to call core.match_parties on its create doors.
+
+## 3c. Waves A–C (2026-10-25) — built, verified, not yet live
+- Container commits (not pushed until the laptop reconnects): 77b567ff Wave A (1113 approvals, 1114 notifications,
+  1115 documents/drawings/e-sign, 1116 pack manifest v2 + job page, 1117 field-service depth), 5c05e2c4 Wave B
+  (1118 portals, 1119 residential, 1120 commercial, 1121 imports/onboarding, 1122 dealer/mfg/flooring/design/development),
+  Wave C commit (1123 field-service completion, 1124 residential/RE/flooring/design completion, 1125 dealer/mfg completion;
+  commercial screens; phone app approvals/inbox/drawings/sell/sign/RO clock/station mode/pay/install day/visit tools).
+- Live DB stops at 1112. 1113–1125 must be applied in order with the checksum runner pinned to the pushed Wave C commit
+  (final file contents — 1114/1120/1123–1125 were edited in place after Wave A/B commits, which is safe because none ran
+  anywhere). Then add `esign` and `portal` to authenticator pgrst.db_schemas and `notify pgrst, 'reload config'`.
+- Verification at commit: tsc clean (needs 6 GB heap — build script sets NODE_OPTIONS), Projects 2240/2240, projects-access
+  full suite (PGlite replay of every migration), industry-packs 271/271, mobile 88/88, Books access-foundations 82/82.
+- Security: three independent auditors, three rounds; all High/Medium fixed (phone-number hijack registry, nested-guard
+  skips audited in 1123/1124/1125, public booking behind server key, dev invoice chain trigger, Books GL read via tie-out,
+  late/backdated punches flagged + ack-before-approve, drawer blind count, price-limit bypass via direct line writes,
+  pay-link origin allowlist, OSHA privacy masks in DB, pay-app certification SoD).
+- Mike setup to turn features on: Vercel env (projects) CRON_SECRET, SUPABASE_SERVICE_ROLE_KEY (notification worker only),
+  RESEND_API_KEY + NOTIFY_FROM_EMAIL, TWILIO_ACCOUNT_SID/AUTH_TOKEN + verified numbers, FS_WIDGET_SERVER_KEY (+ hash in
+  pm.fs_widget_server_keys), FS_WIDGET_FORM_SECRET or WC_BOOKING_IP_SECRET, FS_TURNSTILE_SITE_KEY/SECRET (production
+  booking fails closed without it unless FS_TURNSTILE_DISABLED=1), PORTAL_SERVER_KEY/PORTAL_BASE_URL, optional
+  RingCentral/Dialpad; Merit support registers each company's phone numbers in pm.fs_voice_numbers; Apple/Google/Expo
+  accounts for the phone app; GoDaddy CNAMEs for projects./books.meritmgt.com.
+- Books asks (Books session): accept hand-off kinds DEAD_DEAL_WRITE_OFF, INTERCOMPANY_FEE_INVOICE, PRODUCT_INVOICE,
+  DEALER_RO_CLOSED, drawer deposit batches, deal-unwind refunds, vendor back-charges, incentive receivables, stored
+  materials / bill-on-ship billing; per-line tax on job billing; a CIP account flag; match_parties on Books create doors.

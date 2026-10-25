@@ -30,7 +30,10 @@ export function SupervisorHome({ data, readOnly }: { data: SupervisorHomeData; r
   const crew = data.crewTime?.ok ? data.crewTime.value : [];
   const punch = data.punch?.ok ? data.punch.value : [];
 
-  const approve = async (rows: CrewTimeItem[]) => {
+  const approve = async (picked: CrewTimeItem[]) => {
+    // Late phone taps are acknowledged one by one on the time sheet, never in a bulk approval.
+    const rows = picked.filter((r) => !r.late);
+    if (picked.length > rows.length) toast(`${count(picked.length - rows.length)} late ${picked.length - rows.length === 1 ? 'entry' : 'entries'} left for the time sheet: acknowledge each one there.`);
     if (!rows.length) return;
     setBusy(true);
     const res = await api.post<TimeApprovalWire>('/api/ops/time/approve', { ids: rows.map((r) => r.id) });
@@ -51,7 +54,7 @@ export function SupervisorHome({ data, readOnly }: { data: SupervisorHomeData; r
       cell: (t) => (
         <Link href={`/time?week=${mondayOf(t.workDate)}`} className="nlink" style={{ display: 'block', minWidth: 0 }}>
           <span className="l1">{t.person}</span>
-          <span className="l2">{t.job}</span>
+          <span className="l2">{t.job}{t.late ? ` · ${t.late}` : ''}</span>
         </Link>
       ),
     },

@@ -11,7 +11,7 @@ export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mas
   const pm = db.schema('pm');
   const [ins, tpl] = await Promise.all([
     pm.from('cm_inspections').select('id, job_id, template_id, number, title, category, area, inspected_on, inspector_name, status, result, signed_by_name, signed_at').eq('job_id', query.jobId).neq('status', 'VOID').order('created_at', { ascending: false }).limit(300),
-    pm.from('cm_checklist_templates').select('id, name, category').order('name').limit(200),
+    pm.from('cm_checklist_templates').select('id, name, category').eq('is_active', true).order('name').limit(200),
   ]);
   if (ins.error) throw cmError(ins.error);
   return { inspections: ins.data ?? [], templates: tpl.data ?? [] };

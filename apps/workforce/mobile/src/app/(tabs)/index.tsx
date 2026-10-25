@@ -12,7 +12,8 @@ import type { ClockEvent } from '@/core/contract';
 import { useApp } from '@/state/app';
 import { agoText, currentVisit, dayLabel, jobById, scheduleCostCode, tasksOn, timeOf, visitsOn } from '@/state/selectors';
 import { Button, Card, Notice, Pill, Row, Section, s } from '@/ui/components';
-import { CameraButton, SyncBadge, jobLabel } from '@/ui/chrome';
+import { CameraButton, InboxBell, SyncBadge, jobLabel } from '@/ui/chrome';
+import { JobActions, SiteCard } from '@/ui/site';
 import { font } from '@/ui/theme';
 
 export default function Today() {
@@ -66,7 +67,7 @@ export default function Today() {
     <View style={[s.screen, { paddingTop: insets.top }]}>
       <View style={s.header}>
         <Text style={font.title} accessibilityRole="header">{t('tabToday')}</Text>
-        <SyncBadge />
+        <View style={{ flexDirection: 'row', gap: 8 }}><InboxBell /><SyncBadge /></View>
       </View>
       <ScrollView
         contentContainerStyle={s.body}
@@ -91,6 +92,8 @@ export default function Today() {
           ) : today ? (
             <Card><Text style={font.regular}>{t('nothingToday')}</Text></Card>
           ) : null}
+          {job ? <SiteCard jobId={job.id} workOrderId={visit && visit.jobId === job.id ? visit.workOrderId : null} /> : null}
+          {job ? <JobActions jobId={job.id} workOrderId={visit && visit.jobId === job.id ? visit.workOrderId : null} /> : null}
         </Section>
 
         {today ? (
@@ -98,7 +101,12 @@ export default function Today() {
             {laterVisits.length === 0 && todayTasks.length === 0 ? <Text style={font.muted}>{t('nothingLater')}</Text> : null}
             {laterVisits.map((v) => {
               const j = jobById(today, v.jobId);
-              return <Row key={v.id} title={v.title} sub={[timeOf(v.start, lang), j ? jobLabel(j) : null].filter(Boolean).join(' · ')} right={<Pill text={t('visit')} />} />;
+              const x = app.extras?.visits[v.workOrderId];
+              return (
+                <Row key={v.id} title={v.title} sub={[timeOf(v.start, lang), j ? jobLabel(j) : null, x?.gateCode ? `${t('gate')} ${x.gateCode}` : null].filter(Boolean).join(' · ')}
+                  right={<Pill text={x && x.estimates.open > 0 ? t('sellTitle') : t('visit')} tone={x && x.estimates.open > 0 ? 'primary' : 'muted'} />}
+                  onPress={x && x.estimates.open > 0 ? () => router.push({ pathname: '/sell', params: { workOrderId: v.workOrderId } }) : undefined} />
+              );
             })}
             {todayTasks.slice(0, 12).map((k) => {
               const j = jobById(today, k.jobId);
@@ -123,6 +131,9 @@ export default function Today() {
             })}
           </Section>
         ) : null}
+
+        {app.more.installerDay?.bookings.length ? <Button tone="primary" label={t('installBtn', { n: app.more.installerDay.bookings.length })} onPress={() => router.push('/install')} /> : null}
+        {app.more.willCalls.length ? <Button label={t('willCallBtn', { n: app.more.willCalls.length })} onPress={() => router.push('/willcalls')} /> : null}
 
         {today?.jobs.length ? (
           <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>

@@ -6,7 +6,7 @@ import { Uuid } from '@/lib/pm/money/schemas';
 import { ObservationCreate } from '@/lib/commercial/schemas';
 import { cmError, cmWrote } from '@/lib/commercial/server';
 
-const COLS = 'id, job_id, number, obs_type, priority, title, description, hazard, assignee_vendor_id, assignee_name, due_on, status, closed_at, inspection_item_id, created_at';
+const COLS = 'id, job_id, number, obs_type, priority, title, description, hazard, contributing_condition, assignee_vendor_id, assignee_name, due_on, status, closed_at, inspection_item_id, created_at';
 
 /** GET /api/commercial/observations?jobId= — quality, safety and commissioning observations (CGC-76). */
 export const GET = route({ access: { cap: 'projects.jobs', action: 'view' }, mask: false, query: z.object({ jobId: Uuid }) }, async ({ db, query }) => {

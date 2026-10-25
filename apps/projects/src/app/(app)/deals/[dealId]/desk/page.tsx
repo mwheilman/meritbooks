@@ -33,7 +33,7 @@ export default async function DealDeskPage({ params }: { params: { dealId: strin
     <>
       <PageLine facts={[o.where, { label: 'Deal desk', strong: true }]} />
       <Page>
-        <PageHead eyebrow={o.where} title="Deal desk" actions={<ButtonLink variant="quiet" href="/deals">Deals</ButtonLink>} />
+        <PageHead eyebrow={o.where} title="Deal desk" actions={<><ButtonLink variant="quiet" href={`/deals/${params.dealId}/menu`}>Payment menu</ButtonLink><ButtonLink variant="quiet" href="/deals">Deals</ButtonLink></>} />
         <DeskWorksheet dealId={params.dealId} />
       </Page>
     </>

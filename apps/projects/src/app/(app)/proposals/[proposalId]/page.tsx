@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { AppLink, Page, PageHead } from '@meritbooks/merit-ui';
+import { AppLink, ButtonLink, Page, PageHead } from '@meritbooks/merit-ui';
 import { HttpError } from '@/lib/api-errors';
 import { can } from '@/lib/access/can';
 import { loadCatalog, loadProposal } from '@/lib/residential/queries';
@@ -32,7 +32,8 @@ export default async function ProposalPage({ params }: { params: { proposalId: s
     <>
       <PageLine facts={[o.companyName(p.location_id) ?? o.where, ...(bundle.job ? [{ label: `${bundle.job.job_number} · ${bundle.job.name}`, strong: true }] : []), ...(bundle.job?.customer_name ? [bundle.job.customer_name] : [])]} />
       <Page>
-        <PageHead eyebrow={<AppLink href="/proposals">Proposals</AppLink>} title={`${p.title}${p.number ? ` · ${p.number}` : ''}`} />
+        <PageHead eyebrow={<AppLink href="/proposals">Proposals</AppLink>} title={`${p.title}${p.number ? ` · ${p.number}` : ''}`}
+          actions={canEdit && p.status === 'DRAFT' ? <ButtonLink variant="quiet" href={`/proposals/${p.id}/import`}>Import a cabinet list</ButtonLink> : undefined} />
         <ProposalBuilder bundle={bundle} catalog={catalog} today={todayIso()} canEdit={canEdit} />
       </Page>
     </>

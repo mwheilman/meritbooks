@@ -10,9 +10,15 @@
  *   rejected → the server will never apply it as sent; `result.reason` says why (shown on the phone)
  *   dismissed→ a rejection the person has read and cleared
  *
+ * A write that fails (iOS NSFileProtectionComplete: the phone locked mid-write; the disk briefly
+ * unavailable) never loses the tap: the command is HELD in memory, counted as waiting, shown in
+ * every list, and written to the store on the next flush / foreground (resume()). Held commands
+ * are sent only once they are on disk.
+ *
  * Pure TypeScript: storage and transport are injected (unit-tested in queue.test.ts).
  */
 import { MAX_BATCH, type Command, type CommandKind, type CommandResult, type JsonCommand, type PhotoCommand } from './contract';
+import { resolveDocs, waitsForPhotos } from './routing';
 
 export type QueueStatus = 'pending' | 'sending' | 'done' | 'rejected' | 'dismissed';
 
@@ -98,6 +104,9 @@ export class CommandQueue {
   private readonly max: number;
   private readonly listeners = new Set<() => void>();
   private flushing: Promise<FlushReport> | null = null;
+  /** Commands whose first write to the store failed: kept here until persistHeld() gets them on disk. */
+  private held: QueuedCommand[] = [];
+  private lastSeq = 0;
 
   constructor(private readonly store: QueueStore, private readonly opts: QueueOptions = {}) {
     this.now = opts.now ?? Date.now;
@@ -125,24 +134,74 @@ export class CommandQueue {
 
   /** Save a command durably. Resolves only after the store has it — then the UI can say "Saved". */
   async enqueue(command: Command, opts: { fileUri?: string | null; dependsOn?: string | null } = {}): Promise<QueuedCommand> {
-    const existing = (await this.store.all()).find((c) => c.id === command.id);
+    const heldRow = this.held.find((c) => c.id === command.id);
+    if (heldRow) return heldRow;
+    let stored: QueuedCommand[] | null = null;
+    try {
+      stored = await this.store.all();
+    } catch {
+      stored = null; // the store cannot be read right now: hold the command (below)
+    }
+    const existing = stored?.find((c) => c.id === command.id);
     if (existing) return existing;
+    const storedMax = stored ? stored.reduce((m, c) => Math.max(m, c.seq), 0) : 0;
+    const seq = Math.max(storedMax, this.lastSeq, ...this.held.map((h) => h.seq)) + 1;
+    this.lastSeq = seq;
     const t = this.now();
     const row: QueuedCommand = {
-      id: command.id, seq: (await this.store.maxSeq()) + 1, kind: command.kind, command, status: 'pending', attempts: 0,
+      id: command.id, seq, kind: command.kind, command, status: 'pending', attempts: 0,
       nextAttemptAt: 0, createdAt: t, updatedAt: t, lastError: null, result: null, fileUri: opts.fileUri ?? null, dependsOn: opts.dependsOn ?? null,
     };
-    await this.store.insert(row);
+    try {
+      if (!stored) throw new Error('store unavailable');
+      await this.store.insert(row);
+    } catch {
+      this.held.push({ ...row, lastError: 'Saved in memory; it is written to the phone as soon as it can be.' });
+    }
     this.emit();
     return row;
   }
 
+  /** Write held commands to the store, oldest first; stops at the first failure. Returns how many are still held. */
+  async persistHeld(): Promise<number> {
+    let wrote = false;
+    while (this.held.length) {
+      const next = this.held[0]!;
+      try {
+        await this.store.insert({ ...next, lastError: null });
+      } catch {
+        break;
+      }
+      this.held.shift();
+      wrote = true;
+    }
+    if (wrote) this.emit();
+    return this.held.length;
+  }
+
+  get heldCount(): number {
+    return this.held.length;
+  }
+
+  /** On foreground / unlock: write what is held and put interrupted sends back (never during a send). */
+  async resume(): Promise<void> {
+    if (this.flushing) return;
+    await this.persistHeld();
+    await this.recover().catch(() => 0);
+  }
+
   async list(): Promise<QueuedCommand[]> {
-    return this.store.all();
+    let stored: QueuedCommand[] = [];
+    try {
+      stored = await this.store.all();
+    } catch {
+      stored = [];
+    }
+    return [...stored, ...this.held.filter((h) => !stored.some((c) => c.id === h.id))].sort((a, b) => a.seq - b.seq);
   }
 
   async counts(): Promise<QueueCounts> {
-    const all = await this.store.all();
+    const all = await this.list();
     const t = this.now();
     return {
       waiting: all.filter((c) => OPEN.has(c.status)).length,
@@ -185,7 +244,8 @@ export class CommandQueue {
   private ready(all: QueuedCommand[]): QueuedCommand[] {
     const t = this.now();
     const open = new Set(all.filter((c) => OPEN.has(c.status)).map((c) => c.id));
-    return all.filter((c) => c.status === 'pending' && c.nextAttemptAt <= t && !(c.dependsOn && open.has(c.dependsOn)));
+    return all.filter((c) => c.status === 'pending' && c.nextAttemptAt <= t && !(c.dependsOn && open.has(c.dependsOn))
+      && !(c.kind !== 'photo.upload' && waitsForPhotos(c.command as JsonCommand, open)));
   }
 
   private async settle(c: QueuedCommand, r: CommandResult | undefined, report: FlushReport, err?: string): Promise<void> {
@@ -222,8 +282,10 @@ export class CommandQueue {
 
   private async run(transport: Transport): Promise<FlushReport> {
     const report: FlushReport = { sent: 0, applied: 0, duplicates: 0, rejected: 0, retried: 0, offline: false, authProblem: false };
+    await this.persistHeld(); // held commands go to disk before anything is sent
     for (let round = 0; round < 20; round += 1) {
-      const ready = this.ready(await this.store.all());
+      const rows = await this.store.all();
+      const ready = this.ready(rows);
       if (!ready.length) break;
       const json = ready.filter((c) => c.kind !== 'photo.upload').slice(0, this.batchSize);
       const photos = ready.filter((c) => c.kind === 'photo.upload');
@@ -234,7 +296,8 @@ export class CommandQueue {
         for (const c of json) await this.store.update(c.id, { status: 'sending', updatedAt: this.now() });
         this.emit();
         try {
-          const results = await transport.sendBatch(json.map((c) => c.command as JsonCommand));
+          // photos this command names by command id → their server document ids (docRefs)
+          const results = await transport.sendBatch(json.map((c) => resolveDocs(c.command as JsonCommand, rows)));
           const byId = new Map(results.map((r) => [r.id, r]));
           report.sent += json.length;
           for (const c of json) await this.settle(c, byId.get(c.id), report, 'The server did not answer for this one.');

@@ -11,9 +11,9 @@ import {
   pinnedCostRateCents, priceLaborLine,
 } from '@/lib/pm/labor/math';
 import { laborBreakdown, laborTooltip, overheadInLines } from '@/lib/pm/labor/estimate';
-import { approveBlock, sentToBooks } from '@/lib/pm/labor/time';
+import { approveBlock, lateLabel, needsLateAck, sentToBooks } from '@/lib/pm/labor/time';
 import { LABOR_ERROR_COPY, laborErrorCopy } from '@/lib/pm/labor/errors';
-import { ApproveTimeBody, LaborSettingsBody, cardKeyFrom } from '@/lib/pm/labor/schemas';
+import { AckLateTimeBody, ApproveTimeBody, LaborSettingsBody, cardKeyFrom } from '@/lib/pm/labor/schemas';
 import { DEFAULT_BOOKS_URL, booksUrl } from '@/lib/books-url';
 
 const MIG = resolve(__dirname, '../../../../packages/supabase/migrations');
@@ -173,5 +173,45 @@ describe('Merit Books URL', () => {
     expect(DEFAULT_BOOKS_URL).toBe('https://books.meritmgt.com');
     expect(booksUrl('')).toBe('https://books.meritmgt.com');
     expect(booksUrl('https://books.example.com/')).toBe('https://books.example.com');
+  });
+});
+
+describe('late phone / kiosk time (1125)', () => {
+  const ID = '0bf579d0-7e25-421c-956c-4f1be58fa640';
+  it('"entered N h late" with the database\'s rounding', () => {
+    expect(lateLabel(210)).toBe('entered 3.5 h late');
+    expect(lateLabel(20)).toBe('entered 0.3 h late');
+    expect(lateLabel(null)).toBe('entered 0.0 h late');
+  });
+  it('a late entry needs acknowledgment until it is acknowledged, approved or void', () => {
+    expect(needsLateAck({ late_tap: true, late_ack_at: null, approval_state: 'SUBMITTED' })).toBe(true);
+    expect(needsLateAck({ late_tap: true, late_ack_at: null, approval_state: 'DRAFT' })).toBe(true);
+    expect(needsLateAck({ late_tap: true, late_ack_at: '2026-10-21T12:00:00Z', approval_state: 'SUBMITTED' })).toBe(false);
+    expect(needsLateAck({ late_tap: true, late_ack_at: null, approval_state: 'APPROVED' })).toBe(false);
+    expect(needsLateAck({ late_tap: false, late_ack_at: null, approval_state: 'SUBMITTED' })).toBe(false);
+  });
+  it('the database sentences become plain copy (kept detail, split at the semicolon)', () => {
+    const late = laborErrorCopy({ code: '22023', message: 'PM_LATE_TAP: this time was entered 3.5 h late from the phone; acknowledge it individually to approve' });
+    expect(late).toEqual({ status: 422, code: 'PM_LATE_TAP', error: 'This time was entered 3.5 h late from the phone. Acknowledge it individually to approve.' });
+    expect(laborErrorCopy({ code: '55000', message: 'PM_TIME_WEEK_LOCKED: the week of Oct 19 already has approved time; the service manager enters this punch' }))
+      .toEqual({ status: 409, code: 'PM_TIME_WEEK_LOCKED', error: 'The week of Oct 19 already has approved time. The service manager enters this punch.' });
+    expect(laborErrorCopy({ code: '22023', message: 'PM_PUNCH_STALE: the clock-on was tapped more than 72 hours ago; the service manager enters it' })?.status).toBe(422);
+    expect(laborErrorCopy({ code: '22023', message: "PM_CLOCK_AHEAD: the clock-on time is in the future; turn on the phone's automatic date and time" })?.error)
+      .toBe("The clock-on time is in the future. Turn on the phone's automatic date and time.");
+    expect(laborErrorCopy({ code: '55000', message: 'PM_PUNCH_OVERLAP: ' })?.error).toMatch(/later punch is already on this person/);
+  });
+  it('approve may name the late entries it acknowledges, only among the ones approved', () => {
+    expect(ApproveTimeBody.safeParse({ ids: [ID] }).success).toBe(true);
+    expect(ApproveTimeBody.safeParse({ ids: [ID], ackLate: [ID] }).success).toBe(true);
+    expect(ApproveTimeBody.safeParse({ ids: [ID], ackLate: ['1bf579d0-7e25-421c-956c-4f1be58fa640'] }).success).toBe(false);
+    expect(AckLateTimeBody.safeParse({ ids: [] }).success).toBe(false);
+    expect(AckLateTimeBody.safeParse({ ids: [ID] }).success).toBe(true);
+  });
+  it('the approve route refuses unacknowledged late time before approving anything, and the ack route uses pm.dlr_ack_late_time', () => {
+    const approve = readFileSync(resolve(__dirname, '../app/api/ops/time/approve/route.ts'), 'utf8');
+    expect(approve.indexOf("'PM_LATE_TAP'")).toBeGreaterThan(0);
+    expect(approve.indexOf("'PM_LATE_TAP'")).toBeLessThan(approve.indexOf('approveTimeEntries(db'));
+    expect(approve).toContain("rpc('dlr_ack_late_time'");
+    expect(readFileSync(resolve(__dirname, '../app/api/ops/time/ack/route.ts'), 'utf8')).toContain("rpc('dlr_ack_late_time'");
   });
 });

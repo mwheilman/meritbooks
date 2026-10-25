@@ -6,6 +6,8 @@ import { APP_TZ } from '@/lib/time';
 import type { CommandResult } from './contract';
 import type { FieldCtx } from './apply';
 import { createFieldStore } from './store';
+import { createPhoneStore } from './phone-store';
+import { requestMeta } from '@/lib/esign/public';
 
 export function fieldCtx<B, Q>(rc: RouteContext<B, Q>): FieldCtx {
   const names = new Map(rc.tenant.companies.map((c) => [c.id, c.name]));
@@ -17,6 +19,8 @@ export function fieldCtx<B, Q>(rc: RouteContext<B, Q>): FieldCtx {
     companyName: (id) => names.get(id) ?? null,
     now: new Date(),
     defaultTz: APP_TZ,
+    phone: createPhoneStore(rc.db, { userId: rc.userId }),
+    meta: requestMeta(rc.req.headers),
   };
 }
 

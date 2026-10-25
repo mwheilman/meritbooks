@@ -19,24 +19,30 @@ export const GET = route({ access: { cap: 'projects.time', action: 'view' }, mas
   return { ...board, ros, lines };
 });
 
+/** The tap time (ISO 8601 with offset). Bounds are the database's (migration 1125 H1): ≤ 10 min ahead, own taps ≤ 72 h old (late after 15 min). */
+const At = z.string().datetime({ offset: true }).nullish();
+
 const Op = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('clock_on'), lineId: Uuid, employeeId: Uuid.nullish() }),
-  z.object({ op: z.literal('clock_off'), companyId: Uuid, employeeId: Uuid.nullish() }),
-  z.object({ op: z.literal('indirect'), companyId: Uuid, kind: z.enum(['SHOP', 'WAITING_PARTS', 'TRAINING', 'CLEANUP', 'IDLE']), employeeId: Uuid.nullish() }),
+  z.object({ op: z.literal('clock_on'), lineId: Uuid, employeeId: Uuid.nullish(), at: At }),
+  z.object({ op: z.literal('clock_off'), companyId: Uuid, employeeId: Uuid.nullish(), at: At }),
+  z.object({ op: z.literal('indirect'), companyId: Uuid, kind: z.enum(['SHOP', 'WAITING_PARTS', 'TRAINING', 'CLEANUP', 'IDLE']), employeeId: Uuid.nullish(), at: At }),
   z.object({ op: z.literal('flag'), lineId: Uuid, flagHours: z.number().min(0).max(200) }),
 ]);
 
-/** Clock on an RO line (closes any open punch first), clock off, indirect time, flag hours. */
+/**
+ * Clock on an RO line (closes any open punch first), clock off, indirect time, flag hours. `at` is
+ * the tap time from an offline phone: forwarded as p_at / p_end_at; a late own tap is flagged.
+ */
 export const POST = route({ access: { cap: 'projects.time', action: 'create' }, mask: ['repair_order', 'time_entry'], body: Op }, async ({ db, body, tenant }) => {
   switch (body.op) {
     case 'clock_on':
-      return xcall(db, 'dlr_clock_on', { p_line: body.lineId, p_employee: body.employeeId ?? null });
+      return xcall(db, 'dlr_clock_on', { p_line: body.lineId, p_employee: body.employeeId ?? null, p_at: body.at ?? null });
     case 'clock_off':
       assertCompany(tenant, body.companyId);
-      return xcall(db, 'dlr_clock_off', { p_location: body.companyId, p_employee: body.employeeId ?? null, p_end_at: null });
+      return xcall(db, 'dlr_clock_off', { p_location: body.companyId, p_employee: body.employeeId ?? null, p_end_at: body.at ?? null });
     case 'indirect':
       assertCompany(tenant, body.companyId);
-      return xcall(db, 'dlr_clock_indirect', { p_location: body.companyId, p_kind: body.kind, p_employee: body.employeeId ?? null });
+      return xcall(db, 'dlr_clock_indirect', { p_location: body.companyId, p_kind: body.kind, p_employee: body.employeeId ?? null, p_at: body.at ?? null });
     case 'flag':
       return { id: await xcall<string>(db, 'dlr_flag_line', { p_line: body.lineId, p_flag_hours: body.flagHours }) };
   }

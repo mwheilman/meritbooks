@@ -44,3 +44,15 @@
 .fs-muted { color: var(--ink-3); }
 .fs-mono { font-variant-numeric: tabular-nums; }
 .fs-pre { white-space: pre-line; }
+/* 1123: install stage board, KPI tiles, flags */
+.fs-board { display: grid; grid-template-columns: repeat(7, minmax(180px, 1fr)); gap: var(--s1); overflow-x: auto; align-items: start; }
+.fs-board-col { background: var(--canvas); border: 1px solid var(--line); min-height: 160px; display: flex; flex-direction: column; gap: 6px; padding: 6px; }
+.fs-board-h { display: flex; align-items: center; gap: 6px; padding: 4px 6px; font: 500 var(--t-12)/var(--lh-12) var(--f-text); color: var(--ink-2); }
+.fs-board-h .sp { flex: 1; }
+.fs-board-card { text-align: left; font: inherit; color: inherit; background: var(--white); border: 1px solid var(--line-2); padding: 8px 10px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+.fs-board-card:hover, .fs-board-card:focus-visible { border-color: var(--electric); outline: none; }
+.fs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: var(--s1); }
+.fs-tile { background: var(--white); border: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+.fs-tile b { font: 600 var(--t-20)/var(--lh-20) var(--f-text); font-variant-numeric: tabular-nums; }
+.fs-flag-block { color: var(--neg); }
+@media (max-width: 900px) { .fs-board { grid-template-columns: repeat(7, 220px); } }

@@ -156,7 +156,10 @@ describe('draw builder, pre-submission check, waivers, package in the lender rea
     const own = await call<string>(f, 'owner', `pm.dev_add_draw_invoice($1, $2, 'PA-X', 100, current_date, null, $3)`, [ids.draw, ids.arch, ids.SOFT]);
     expect(await callErr(f, 'owner', `pm.dev_decide_draw_invoice($1, true)`, [own])).toMatch(/PM_SOD_VIOLATION/);
     await q(f.db, `delete from pm.dev_draw_invoices where id = $1`, [own]);
-    await call(f, 'owner', `pm.dev_decide_draw_invoice($1, true)`, [ids.inv1]);
+    // 1124 (security review round 2): approval runs through the invoice's chain — the direct call is refused
+    expect(await callErr(f, 'owner', `pm.dev_decide_draw_invoice($1, true)`, [ids.inv1])).toMatch(/PM_DEV_INVOICE_CHAIN/);
+    await call(f, 'owner', `pm.dev_decide_invoice_step($1, true)`, [ids.inv1]);   // dev manager
+    await call(f, 'gm', `pm.dev_decide_invoice_step($1, true)`, [ids.inv1]);      // principal (a different person)
     const b = await call<{ lines_with_amounts: number; requested_cents: number }>(f, 'pm', `pm.dev_build_draw($1)`, [ids.draw]);
     expect(b).toMatchObject({ lines_with_amounts: 1, requested_cents: 15 * K });
   });

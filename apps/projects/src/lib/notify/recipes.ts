@@ -1,5 +1,5 @@
 /**
- * Notification recipes — the code mirror of migration 1114 (core.notification_event_types +
+ * Notification recipes — the code mirror of migrations 1114 and 1124 W1b (core.notification_event_types +
  * core.notification_recipes). Panel 06 §2e "Notification defaults by role":
  *   P = inbox + push · I = inbox · D = inbox + daily / weekly digest email · - = never.
  * A parity test (packages/projects-access/test/notifications.test.ts) fails when the two drift.
@@ -38,6 +38,14 @@ export const INTERNAL_EVENTS = [
   'observation.assigned',
   'productivity.fade',
   'tm.signature_needed',
+  // Wave C (1124, recipes in its W1b block) — every one mandatory
+  'sales.appointment_booked',
+  'job.margin_fade',
+  'job.cash_negative',
+  'client_update.ready',
+  'development.key_date_due',
+  'flooring.goods_received',
+  'design.room_over_budget',
 ] as const;
 export type InternalEvent = (typeof INTERNAL_EVENTS)[number];
 
@@ -53,6 +61,10 @@ export const CUSTOMER_EVENTS = [
   'trade.schedule_request',
   'trade.bid_invite',
   'trade.po_ready',
+  // Wave C (1124) outbound to customers
+  'customer.appointment_booked',
+  'customer.order_update',
+  'customer.install_confirmation',
 ] as const;
 
 /** Customer events whose messages may carry a sign-in link or one-time code (text never shown to staff). */
@@ -101,6 +113,13 @@ export const EVENT_INFO: Readonly<Record<InternalEvent, EventInfo>> = {
   'observation.assigned': { label: 'Observation assigned to you', description: 'A quality or safety observation was assigned to you.', category: 'work', mandatory: true },
   'productivity.fade': { label: 'Labor productivity fading', description: 'Earned hours fell behind hours used on a cost code.', category: 'time', mandatory: true },
   'tm.signature_needed': { label: 'T&M ticket to sign', description: "A T&M ticket is waiting for the GC's signature.", category: 'work', mandatory: true },
+  'sales.appointment_booked': { label: 'Appointment booked for you', description: 'A sales or measure appointment was booked on your calendar, with the lead brief.', category: 'sales', mandatory: true },
+  'job.margin_fade': { label: 'Margin fading on a job', description: "Projected margin dropped below what was sold by more than the company's alert threshold.", category: 'work', mandatory: true },
+  'job.cash_negative': { label: 'Job went cash-negative', description: 'Cost incurred on a job is ahead of the cash collected on it.', category: 'work', mandatory: true },
+  'client_update.ready': { label: 'Weekly client update ready', description: "This week's client update was drafted from the logs, photos and schedule. Edit and send it.", category: 'work', mandatory: true },
+  'development.key_date_due': { label: 'Development date coming due', description: 'A PSA, loan, covenant, entitlement or due-diligence date is inside its reminder window.', category: 'schedule', mandatory: true },
+  'flooring.goods_received': { label: 'Special-order goods received', description: 'Material for one of your orders was received and inspected (damage or shortage noted).', category: 'work', mandatory: true },
+  'design.room_over_budget': { label: 'Room over budget', description: 'The items specified for a room total more than the room budget.', category: 'work', mandatory: true },
 };
 
 export type RecipePersona = PersonaKey | 'default';
@@ -121,7 +140,7 @@ export const RECIPE_PERSONAS = [
 
 export type RecipeCode = 'P' | 'I' | 'D' | '-';
 
-/** Same order as RECIPE_PERSONAS. Keep identical to the VALUES list in 1114 §3. */
+/** Same order as RECIPE_PERSONAS. Keep identical to the VALUES lists in 1114 §3 and 1124 W1b. */
 export const RECIPE_CODES: Readonly<Record<InternalEvent, readonly RecipeCode[]>> = {
   //                        owner gm  om  pa  disp pur pm  sup lab sal default
   'job.assigned':            ['I', 'P', 'I', 'I', 'I', 'I', 'P', 'P', 'P', 'I', 'I'],
@@ -150,6 +169,14 @@ export const RECIPE_CODES: Readonly<Record<InternalEvent, readonly RecipeCode[]>
   'observation.assigned':       ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'P', 'I', 'I'],
   'productivity.fade':          ['D', 'I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I'],
   'tm.signature_needed':        ['I', 'I', 'I', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I'],
+  // Wave C (1124 W1b; mandatory: the floor is I)
+  'sales.appointment_booked':   ['I', 'I', 'I', 'I', 'I', 'I', 'I', 'I', 'I', 'P', 'I'],
+  'job.margin_fade':            ['P', 'P', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'job.cash_negative':          ['P', 'P', 'I', 'P', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'client_update.ready':        ['I', 'I', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'development.key_date_due':   ['P', 'P', 'I', 'I', 'I', 'I', 'P', 'I', 'I', 'I', 'I'],
+  'flooring.goods_received':    ['I', 'I', 'I', 'I', 'P', 'P', 'P', 'I', 'I', 'P', 'I'],
+  'design.room_over_budget':    ['I', 'I', 'I', 'I', 'I', 'P', 'P', 'I', 'I', 'I', 'I'],
 };
 
 export interface RecipeModes {

@@ -10,11 +10,15 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.meritsuite.workforce",
-      "supportsTablet": false,
+      "supportsTablet": true,
       "infoPlist": {
         "NSCameraUsageDescription": "Merit Workforce uses the camera to take job photos and checklist photos.",
         "NSLocationWhenInUseUsageDescription": "Merit Workforce records where you are only at the moment you clock in, clock out or take a break, to show the job site you were at. It does not track you in between.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "Merit Workforce uses Face ID only to let the tablet owner leave station mode."
+      },
+      "entitlements": {
+        "com.apple.developer.default-data-protection": "NSFileProtectionComplete"
       }
     },
     "android": {
@@ -30,7 +34,8 @@
       ],
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "allowBackup": false
     },
     "plugins": [
       "expo-router",
@@ -57,6 +62,20 @@
           "cameraPermission": "Merit Workforce uses the camera to take job photos and checklist photos.",
           "photosPermission": false,
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#2563EB",
+          "defaultChannel": "default",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      [
+        "expo-local-authentication",
+        {
+          "faceIDPermission": "Merit Workforce uses Face ID only to let the tablet owner leave station mode."
         }
       ]
     ]

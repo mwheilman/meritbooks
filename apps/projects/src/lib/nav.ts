@@ -105,6 +105,54 @@ const RULES: ReadonlyArray<readonly [string, Rule]> = [
   ['/flooring', { all: ['projects.jobs:view'] }],
   ['/design', { all: ['projects.selections:view'] }],
   ['/development', { all: ['projects.financials:view'] }],
+  // ---- Wave C
+  // Commercial screens (1120 APIs): contract-side money, cost, the job record, crews, bids, setup.
+  ['/pay-apps', { all: ['projects.billing:view', 'projects.contract_value:view'] }],
+  ['/retainage-ledger', { all: ['projects.billing:view', 'projects.contract_value:view'] }],
+  ['/billing-calendar', { all: ['projects.billing:view', 'projects.contract_value:view'] }],
+  ['/buyout', { all: ['projects.financials:view'] }],
+  ['/cost-detail', { all: ['projects.financials:view'] }],
+  ['/project-review', { all: ['projects.financials:view'] }],
+  ['/directory', { all: ['projects.jobs:view'] }],
+  ['/specifications', { all: ['projects.jobs:view'] }],
+  ['/correspondence', { all: ['projects.jobs:view'] }],
+  ['/inspections', { all: ['projects.jobs:view'] }],
+  ['/observations', { all: ['projects.jobs:view'] }],
+  ['/safety', { all: ['projects.jobs:view'] }],
+  ['/closeout', { all: ['projects.jobs:view'] }],
+  ['/foreman', { all: ['projects.jobs:view'] }],
+  ['/productivity', { all: ['projects.jobs:view'] }],
+  ['/workforce', { all: ['projects.dispatch:view'] }],
+  ['/trade-proposals', { all: ['projects.estimates:view'] }],
+  ['/project-templates', { all: ['projects.settings:view'] }],
+  // Field-service completion (1123): same any-of grants as each page's fsPage() guard.
+  ['/calls/log', { any: ['projects.dispatch:view', 'projects.leads:view'] }],
+  ['/calls/messages', { any: ['projects.dispatch:view', 'projects.customers:view'] }],
+  ['/calls/sales', { any: ['projects.leads:view', 'projects.estimates:view'] }],
+  ['/installs', { any: ['projects.dispatch:view', 'projects.jobs:view'] }],
+  ['/invoice-review', { any: ['projects.billing:view', 'projects.dispatch:view'] }],
+  ['/dispatch/timesheets', { all: ['projects.time:approve'] }],
+  ['/dispatch/go-live', { all: ['projects.settings:view'] }],
+  ['/pricebook/forms', { any: ['projects.jobs:view', 'projects.settings:view'] }],
+  // Residential / RE / flooring / design (1124). '*' matches one path segment (the job).
+  ['/homes/*/money', { all: ['projects.jobs:view', 'projects.financials:view'] }],
+  ['/homes/setup', { all: ['projects.jobs:view', 'projects.settings:view'] }],
+  ['/flooring/setup', { all: ['projects.jobs:view', 'projects.settings:view'] }],
+  ['/design/setup', { all: ['projects.selections:view', 'projects.settings:view'] }],
+  // Dealer / manufacturing completion (1125): cash and receivables need billing, shop money cost.
+  ['/stock/drawer', { all: ['projects.store:view', 'projects.billing:view'] }],
+  ['/stock/close', { all: ['projects.store:view', 'projects.billing:view'] }],
+  ['/stock/incentives', { all: ['projects.store:view', 'projects.billing:view'] }],
+  ['/stock/pricing', { all: ['projects.store:view', 'projects.settings:view'] }],
+  ['/deals/funding', { all: ['projects.store:view', 'projects.billing:view'] }],
+  ['/work-orders/service', { all: ['projects.store:view', 'projects.jobs:view'] }],
+  ['/work-orders/routes', { all: ['projects.store:view', 'projects.jobs:view'] }],
+  ['/work-orders/wip', { all: ['projects.store:view', 'projects.financials:view'] }],
+  ['/production/bids', { all: ['projects.production:view', 'projects.estimates:view'] }],
+  ['/production/proposals', { all: ['projects.production:view', 'projects.estimates:view'] }],
+  ['/production/products', { all: ['projects.production:view', 'projects.estimates:view'] }],
+  ['/production/takeoff', { all: ['projects.production:view', 'projects.estimates:view'] }],
+  ['/production/money', { all: ['projects.production:view', 'projects.financials:view'] }],
   ['/estimates', { all: ['projects.estimates:view'] }],
   ['/leads', { all: ['projects.leads:view'] }],
   ['/customers', { all: ['projects.customers:view'] }],
@@ -147,12 +195,21 @@ function cleanPath(href: string): string {
   return p || '/';
 }
 
+/** Does `prefix` (segments, '*' = any one segment) cover `path` on a segment boundary? */
+function covers(prefix: string, path: string): boolean {
+  if (!prefix.includes('*')) return path === prefix || path.startsWith(`${prefix}/`);
+  const want = prefix.split('/');
+  const got = path.split('/');
+  if (got.length < want.length) return false;
+  return want.every((seg, k) => seg === '*' ? got[k] !== '' : seg === got[k]);
+}
+
 function ruleFor(href: string): Rule | null {
   const path = cleanPath(href);
   let best: Rule | null = null;
   let len = -1;
   for (const [prefix, rule] of RULES) {
-    if ((path === prefix || path.startsWith(`${prefix}/`)) && prefix.length > len) {
+    if (covers(prefix, path) && prefix.length > len) {
       best = rule;
       len = prefix.length;
     }
@@ -211,8 +268,15 @@ export function isDealerNav(i: Pick<NavInput, 'vocab' | 'packKeys' | 'archetypes
 const COMPANY: ReadonlyArray<ShellContext> = ['client'];
 const ROLLUP: ReadonlyArray<ShellContext> = ['workspace', 'consolidated'];
 
-function a(label: string, href: string, module: ModuleKey | typeof DEALER_STORE_MODULE | keyof typeof PACK_SCREENS, extra: Partial<NavItem> = {}): NavItem {
+type NavModule = ModuleKey | typeof DEALER_STORE_MODULE | keyof typeof PACK_SCREENS;
+
+function a(label: string, href: string, module: NavModule, extra: Partial<NavItem> = {}): NavItem {
   return { label, href, disclosure: 'A', module, ...extra };
+}
+
+/** A module-gated destination folded behind "More" (shown only when its module is in use). */
+function m(label: string, href: string, module: NavModule): NavItem {
+  return { label, href, disclosure: 'M', module };
 }
 
 /** Every destination, named in the company's own words. Rails pick from this. */
@@ -267,6 +331,75 @@ function items(i: NavInput) {
     materials: a('Material', '/production/materials', 'production'),
     remakes: a('Remakes', '/production/remakes', 'production'),
     installs: a('Installs', '/production/installs', 'production'),
+    // ---- Wave C: commercial screens
+    payApps: a('Pay apps', '/pay-apps', 'pack:commercial'),
+    billingCalendar: m('Billing calendar', '/billing-calendar', 'pack:commercial'),
+    retainageLedger: m('Retainage ledger', '/retainage-ledger', 'pack:commercial'),
+    buyout: a('Buyout', '/buyout', 'pack:commercial'),
+    costDetail: m('Cost detail', '/cost-detail', 'pack:commercial'),
+    projectReview: a('Monthly review', '/project-review', 'pack:commercial'),
+    directory: m('Directory', '/directory', 'pack:commercial'),
+    specifications: m('Specifications', '/specifications', 'pack:commercial'),
+    correspondence: m('Correspondence', '/correspondence', 'pack:commercial'),
+    inspections: m('Inspections', '/inspections', 'pack:commercial'),
+    observations: m('Observations', '/observations', 'pack:commercial'),
+    safety: a('Safety', '/safety', 'pack:commercial'),
+    closeout: m('Closeout', '/closeout', 'pack:commercial'),
+    foreman: a('Daily plan', '/foreman', 'pack:commercial'),
+    productivity: a('Productivity', '/productivity', 'pack:commercial'),
+    workforce: a('Workforce', '/workforce', 'pack:commercial'),
+    tradeProposals: a('Trade proposals', '/trade-proposals', 'pack:commercial'),
+    projectTemplates: m('Project templates', '/project-templates', 'pack:commercial'),
+    // ---- Wave C: field-service completion (1123)
+    callLog: a('Call log', '/calls/log', 'dispatch'),
+    messages: a('Messages', '/calls/messages', 'dispatch'),
+    salesFollowUp: m('Sales follow-up', '/calls/sales', 'dispatch'),
+    fsInstalls: a('Installs', '/installs', 'dispatch'),
+    invoiceReview: a('Invoice review', '/invoice-review', 'dispatch'),
+    timesheets: a('Timesheets', '/dispatch/timesheets', 'dispatch'),
+    fsDashboard: m('Field service dashboard', '/dispatch/dashboard', 'dispatch'),
+    goLive: m('Go-live', '/dispatch/go-live', 'dispatch'),
+    serviceForms: m('Checklists and forms', '/pricebook/forms', 'dispatch'),
+    // ---- Wave C: residential / RE / flooring / design (1124)
+    ownerDashboard: m('Owner dashboard', '/homes/dashboard', 'pack:residential'),
+    appointments: a('Appointments', '/homes/appointments', 'pack:residential'),
+    tradeCapacity: m('Crew and trade capacity', '/homes/capacity', 'pack:residential'),
+    receipts: a('Receipts to code', '/homes/receipts', 'pack:residential'),
+    residentialSetup: m('Residential setup', '/homes/setup', 'pack:residential'),
+    pursuits: a('Pursuits', '/development/pursuits', 'pack:development'),
+    keyDates: m('Key dates', '/development/calendar', 'pack:development'),
+    devInbox: m('Invoice inbox', '/development/inbox', 'pack:development'),
+    flooringOrders: a('Orders and receiving', '/flooring/orders', 'pack:flooring'),
+    flooringInstallers: m('Installers', '/flooring/installers', 'pack:flooring'),
+    flooringReports: m('Flooring reports', '/flooring/reports', 'pack:flooring'),
+    flooringSetup: m('Flooring setup', '/flooring/setup', 'pack:flooring'),
+    designLibrary: m('Product library', '/design/library', 'pack:design'),
+    designSetup: m('Design firm setup', '/design/setup', 'pack:design'),
+    // ---- Wave C: dealer completion (1125)
+    yard: a('Yard', '/stock/yard', DEALER_STORE_MODULE),
+    incentives: m('OEM incentives', '/stock/incentives', DEALER_STORE_MODULE),
+    storeCustomers: m('Customer 360', '/stock/customers', DEALER_STORE_MODULE),
+    drawer: a('Cash drawer', '/stock/drawer', DEALER_STORE_MODULE),
+    pricing: m('Pricing controls', '/stock/pricing', DEALER_STORE_MODULE),
+    storeClose: m('Store close', '/stock/close', DEALER_STORE_MODULE),
+    storeRules: m('Store rules', '/stock/settings/completion', DEALER_STORE_MODULE),
+    funding: m('Contracts in transit', '/deals/funding', DEALER_STORE_MODULE),
+    partsOrdering: m('Stock ordering', '/parts/ordering', DEALER_STORE_MODULE),
+    partsLocator: m('Parts locator', '/parts/transfers', DEALER_STORE_MODULE),
+    serviceDesk: a('Service desk', '/work-orders/service', DEALER_STORE_MODULE),
+    truckRoute: m('Truck route', '/work-orders/routes', DEALER_STORE_MODULE),
+    serviceWip: m('Service WIP', '/work-orders/wip', DEALER_STORE_MODULE),
+    rentalFleet: m('Rental fleet', '/rentals/fleet', DEALER_STORE_MODULE),
+    // ---- Wave C: manufacturing completion (1125)
+    bidBoard: a('Bid board', '/production/bids', 'production'),
+    mfgProposals: m('Proposals', '/production/proposals', 'production'),
+    productLibrary: m('Product library', '/production/products', 'production'),
+    takeoff: m('Drawing takeoff', '/production/takeoff', 'production'),
+    engineering: a('Engineering', '/production/engineering', 'production'),
+    shopFloor: a('Shop floor', '/production/shop', 'production'),
+    shipping: a('Shipping', '/production/shipping', 'production'),
+    shopMoney: m('Shop money', '/production/money', 'production'),
+    installer: m('Installer', '/production/installer', 'production'),
     toReview: { label: 'To review', href: '/review', keys: 'g v', count: review, processing: true } satisfies NavItem,
     documents: { label: 'Documents', href: '/documents', keys: 'g d' } satisfies NavItem,
     me: { label: 'Me', href: '/me', keys: 'g m' } satisfies NavItem,
@@ -317,8 +450,26 @@ type Items = ReturnType<typeof items>;
 function storeGroup(it: Items): NavGroup {
   return {
     id: 'store', label: 'Store', contexts: COMPANY,
-    items: [it.stock, it.deals, it.parts, it.partsCounter, it.rentals, it.warranty, it.techBoard, it.warrantyDeadlines, it.warrantyCredits, it.priceFiles, it.programs, it.storeScorecard],
+    items: [it.stock, it.yard, it.deals, it.parts, it.partsCounter, it.serviceDesk, it.drawer, it.rentals, it.warranty, it.techBoard, it.warrantyDeadlines,
+      it.warrantyCredits, it.priceFiles, it.programs, it.storeScorecard, it.funding, it.partsOrdering, it.partsLocator, it.truckRoute, it.serviceWip,
+      it.rentalFleet, it.storeCustomers, it.incentives, it.pricing, it.storeClose, it.storeRules],
   };
+}
+
+/** The job record screens across jobs (commercial: directory, specs, letters, field QA, closeout). */
+function jobRecords(it: Items): NavItem[] {
+  return [it.directory, it.specifications, it.correspondence, it.closeout];
+}
+
+/** Manufacturing: the shop, then bids to install. */
+function makeItems(it: Items): NavItem[] {
+  return [it.production, it.station, it.shopFloor, it.shopBacklog, it.bidBoard, it.engineering, it.cadImports, it.materials, it.shipping, it.installs,
+    it.remakes, it.mfgProposals, it.productLibrary, it.takeoff, it.shopMoney, it.installer];
+}
+
+/** Industry setup screens, folded under Controls. */
+function setupItems(it: Items): NavItem[] {
+  return [it.projectTemplates, it.residentialSetup, it.flooringSetup, it.designSetup];
 }
 
 /** Management (owner, GM): every screen, Pipeline and Insights, Approvals at the top. */
@@ -327,18 +478,19 @@ function managementRail(i: NavInput, it: Items): NavGroup[] {
     { id: 'home', items: [it.home, it.inbox, { ...it.approvals, contexts: COMPANY }, { ...it.toReview, contexts: COMPANY }] },
     // ---- company rail ----
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates, it.proposals] },
-    { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.homes, it.communities, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units] },
+    { id: 'sell', label: 'Pipeline', contexts: COMPANY, items: [it.leads, it.customers, it.estimates, it.proposals, it.appointments, it.tradeProposals, it.pursuits, it.salesFollowUp] },
+    { id: 'jobs', label: i.vocab.jobs, contexts: COMPANY, items: [it.jobs, it.homes, it.communities, it.flooring, it.flooringOrders, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units, ...jobRecords(it)] },
     {
       id: 'field', label: 'Field', contexts: COMPANY,
-      items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.logs, it.punch, it.time, it.scorecards, it.campaigns],
+      items: [it.schedule, it.calls, it.callLog, it.messages, it.dispatch, it.capacity, it.workOrders, it.fsInstalls, it.agreements, it.equipment, it.priceBook, it.logs, it.punch, it.time,
+        it.timesheets, it.workforce, it.productivity, it.safety, it.scorecards, it.campaigns, it.fsDashboard, it.goLive, it.serviceForms, it.inspections, it.observations, it.tradeCapacity, it.keyDates, it.flooringInstallers],
     },
-    { id: 'make', label: 'Make', contexts: COMPANY, items: [it.production, it.station, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs] },
-    { id: 'buy', label: 'Buy', contexts: COMPANY, items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls, it.flooringCatalog] },
-    { id: 'bill', label: 'Bill', contexts: COMPANY, items: [it.billing, it.retainage, it.draws, it.flooringPay] },
-    { id: 'cost', label: 'Cost', contexts: COMPANY, items: [it.jobCost, it.wip] },
-    { id: 'insights-co', label: 'Insights', contexts: COMPANY, items: [it.margin, it.backlog] },
-    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.documents, it.portals, it.activity, it.aiDecisions, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages] },
+    { id: 'make', label: 'Make', contexts: COMPANY, items: [...makeItems(it)] },
+    { id: 'buy', label: 'Buy', contexts: COMPANY, items: [it.commitments, it.subcontractors, it.buyout, it.compliance, it.receipts, it.designInbox, it.devInbox, it.flooringRolls, it.flooringCatalog, it.designLibrary] },
+    { id: 'bill', label: 'Bill', contexts: COMPANY, items: [it.billing, it.payApps, it.invoiceReview, it.retainage, it.draws, it.flooringPay, it.billingCalendar, it.retainageLedger] },
+    { id: 'cost', label: 'Cost', contexts: COMPANY, items: [it.jobCost, it.wip, it.projectReview, it.costDetail] },
+    { id: 'insights-co', label: 'Insights', contexts: COMPANY, items: [it.margin, it.backlog, it.ownerDashboard, it.flooringReports] },
+    { id: 'controls', label: 'Controls', contexts: COMPANY, items: [it.documents, it.portals, it.activity, it.aiDecisions, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages, ...setupItems(it)] },
     // ---- workspace / consolidated rail ----
     { id: 'work', label: 'Work', contexts: ROLLUP, items: [{ ...it.jobs }, it.schedule, it.approvals] },
     { id: 'pipeline', label: 'Pipeline', contexts: ROLLUP, items: [it.leads, it.customers] },
@@ -355,12 +507,12 @@ function pmRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
-    { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.homes, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units, it.jobCost, it.wip] },
-    { id: 'sell', label: 'Customers', items: [it.customers, it.leads, it.proposals, it.communities] },
-    { id: 'field', label: 'Schedule', items: [it.schedule, it.dispatch, it.capacity, it.workOrders, it.logs, it.punch, it.time, it.production, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs, it.priceBook, it.scorecards] },
+    { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs, it.homes, it.flooring, it.flooringOrders, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units, it.jobCost, it.wip, it.projectReview, ...jobRecords(it), it.costDetail] },
+    { id: 'sell', label: 'Customers', items: [it.customers, it.leads, it.proposals, it.appointments, it.communities, it.tradeProposals, it.pursuits] },
+    { id: 'field', label: 'Schedule', items: [it.schedule, it.dispatch, it.capacity, it.workOrders, it.fsInstalls, it.timesheets, it.workforce, it.productivity, it.safety, it.logs, it.punch, it.time, ...makeItems(it), it.priceBook, it.scorecards, it.messages, it.inspections, it.observations, it.tradeCapacity, it.keyDates, it.flooringInstallers] },
     { id: 'away', items: [it.outOfOffice] },
-    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls] },
-    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws, it.flooringPay] },
+    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.buyout, it.compliance, it.receipts, it.designInbox, it.devInbox, it.flooringRolls, it.designLibrary] },
+    { id: 'bill', label: 'Bill', items: [it.billing, it.payApps, it.invoiceReview, it.retainage, it.draws, it.flooringPay, it.billingCalendar, it.retainageLedger] },
   ];
 }
 
@@ -369,21 +521,21 @@ function adminRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.approvals, it.toReview] },
     storeGroup(it),
-    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates, it.proposals] },
-    { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.homes, it.communities, it.flooring, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units] },
-    { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.calls, it.dispatch, it.capacity, it.workOrders, it.agreements, it.equipment, it.priceBook, it.time, it.campaigns] },
-    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.compliance, it.designInbox, it.flooringRolls, it.flooringCatalog] },
-    { id: 'bill', label: 'Bill', items: [it.billing, it.retainage, it.draws, it.flooringPay] },
-    { id: 'cost', label: 'Cost', items: [it.jobCost, it.wip] },
-    { id: 'make', label: 'Make', items: [it.production, it.shopBacklog, it.cadImports, it.materials, it.remakes, it.installs] },
-    { id: 'controls', label: 'Controls', items: [it.documents, it.portals, it.activity, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages] },
+    { id: 'sell', label: 'Calls and leads', items: [it.leads, it.customers, it.estimates, it.proposals, it.appointments, it.tradeProposals, it.pursuits, it.salesFollowUp] },
+    { id: 'jobs', label: i.vocab.jobs, items: [it.jobs, it.homes, it.communities, it.flooring, it.flooringOrders, it.design, it.development, it.changeOrders, it.changeEvents, it.rfis, it.submittals, it.meetings, it.selections, it.units, ...jobRecords(it)] },
+    { id: 'field', label: 'Schedule and dispatch', items: [it.schedule, it.calls, it.callLog, it.messages, it.dispatch, it.capacity, it.workOrders, it.fsInstalls, it.agreements, it.equipment, it.priceBook, it.time, it.timesheets, it.workforce, it.campaigns, it.fsDashboard, it.goLive, it.serviceForms, it.tradeCapacity, it.keyDates, it.flooringInstallers] },
+    { id: 'buy', label: 'Buy', items: [it.commitments, it.subcontractors, it.buyout, it.compliance, it.receipts, it.designInbox, it.devInbox, it.flooringRolls, it.flooringCatalog, it.designLibrary] },
+    { id: 'bill', label: 'Bill', items: [it.billing, it.payApps, it.invoiceReview, it.retainage, it.draws, it.flooringPay, it.billingCalendar, it.retainageLedger] },
+    { id: 'cost', label: 'Cost', items: [it.jobCost, it.wip, it.projectReview, it.costDetail] },
+    { id: 'make', label: 'Make', items: [...makeItems(it)] },
+    { id: 'controls', label: 'Controls', items: [it.documents, it.portals, it.activity, it.settings, it.imports, it.approvalRules, it.outOfOffice, it.companyMessages, ...setupItems(it), it.flooringReports, it.ownerDashboard] },
   ];
 }
 
 /** Supervisor: Today, My jobs, Schedule, Crew time, Logs, Punch. */
 function supervisorRail(_i: NavInput, it: Items): NavGroup[] {
   return [
-    { id: 'home', items: [it.today, it.myJobs, it.schedule, it.dispatch, it.crewTime, it.logs, it.punch, { ...it.documents, label: 'Docs' }, it.approvals, it.scorecards] },
+    { id: 'home', items: [it.today, it.foreman, it.myJobs, it.schedule, it.dispatch, it.fsInstalls, it.shopFloor, it.crewTime, it.timesheets, it.logs, it.punch, it.safety, it.productivity, { ...it.documents, label: 'Docs' }, it.approvals, it.scorecards, it.inspections, it.observations, it.installer] },
   ];
 }
 
@@ -397,7 +549,7 @@ function salesRail(i: NavInput, it: Items): NavGroup[] {
   return [
     { id: 'home', items: [it.home, it.inbox, it.approvals] },
     storeGroup(it),
-    { id: 'sell', label: 'Pipeline', items: [it.leads, it.customers, it.estimates, it.priceBook, it.campaigns] },
+    { id: 'sell', label: 'Pipeline', items: [it.leads, it.appointments, it.customers, it.estimates, it.tradeProposals, it.bidBoard, it.priceBook, it.campaigns, it.salesFollowUp, it.messages] },
     { id: 'jobs', label: `My ${lower(i.vocab.jobs)}`, items: [it.myJobs] },
   ];
 }
@@ -430,6 +582,10 @@ const NAV_ITEM_DEST: Readonly<Record<NavItemKey, keyof Items>> = {
   price_files: 'priceFiles', store_scorecard: 'storeScorecard', programs: 'programs', warranty_deadlines: 'warrantyDeadlines',
   warranty_credits: 'warrantyCredits', tech_board: 'techBoard', station: 'station', shop_backlog: 'shopBacklog',
   cad_imports: 'cadImports', materials: 'materials', remakes: 'remakes', installs: 'installs',
+  pay_apps: 'payApps', project_review: 'projectReview', foreman: 'foreman', workforce: 'workforce', trade_proposals: 'tradeProposals',
+  safety_center: 'safety', billing_calendar: 'billingCalendar', call_log: 'callLog', invoice_review: 'invoiceReview',
+  fs_installs: 'fsInstalls', timesheets: 'timesheets', appointments: 'appointments', service_desk: 'serviceDesk',
+  shop_floor: 'shopFloor', bid_board: 'bidBoard',
 };
 
 export function navDestination(key: NavItemKey, i: NavInput): NavItem {
@@ -486,9 +642,12 @@ function packRail(i: NavInput, it: Items, access: NavAccess): NavGroup[] | null 
 export function buildNav(i: NavInput): NavGroup[] {
   const access = i.access ?? FULL_NAV_ACCESS;
   const it = items(i);
-  const reach = (item: NavItem) => canReach(access, item.href, i.companyId);
+  const used = modulesInUse(i);
+  // Reachable, and (for folded "More" items that name a module) only when that module is in use:
+  // filterNav gates 'A' items itself, but shows every 'M' item.
+  const keep = (item: NavItem) => canReach(access, item.href, i.companyId) && (item.disclosure !== 'M' || item.module === undefined || activated({ ...item, disclosure: 'A' }, used));
   return (packRail(i, it, access) ?? RAILS[access.group](i, it))
-    .map((g) => ({ ...g, items: g.items.filter(reach) }))
+    .map((g) => ({ ...g, items: g.items.filter(keep) }))
     .filter((g) => g.items.length > 0);
 }
 

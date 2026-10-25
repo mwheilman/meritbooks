@@ -566,8 +566,8 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
             "tab": "rfis",
           },
           {
-            "label": "Pay apps",
-            "tab": "billing",
+            "label": null,
+            "tab": "pay_apps",
           },
           {
             "label": null,
@@ -590,8 +590,8 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
             "tab": "closeout",
           },
           {
-            "label": "Directory",
-            "tab": "team",
+            "label": null,
+            "tab": "directory",
           },
           {
             "label": "Safety & inspections",
@@ -602,8 +602,24 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
             "tab": "documents",
           },
           {
+            "label": null,
+            "tab": "specifications",
+          },
+          {
+            "label": null,
+            "tab": "correspondence",
+          },
+          {
+            "label": "Monthly review",
+            "tab": "project_review",
+          },
+          {
             "label": "Owner portal",
             "tab": "portal",
+          },
+          {
+            "label": null,
+            "tab": "billing",
           },
         ],
       },
@@ -683,8 +699,12 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
-          "item": "billing",
-          "label": "Pay apps",
+          "item": "pay_apps",
+          "label": null,
+        },
+        {
+          "item": "billing_calendar",
+          "label": null,
         },
         {
           "item": "retainage",
@@ -813,11 +833,15 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
-          "item": "billing",
-          "label": "Pay apps",
+          "item": "pay_apps",
+          "label": null,
         },
         {
           "item": "meetings",
+          "label": null,
+        },
+        {
+          "item": "project_review",
           "label": null,
         },
         {
@@ -886,6 +910,10 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
         },
         {
           "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "safety_center",
           "label": null,
         },
         {
@@ -1321,7 +1349,7 @@ exports[`compilePlan(commercial_gc, defaults) > matches the golden snapshot 1`] 
     "self_perform": false,
     "uses_retainage": true,
   },
-  "plan_hash": "78db63400a6e2dd7e363406b7453169a18506bb525cf6fb9d3f7a6ab5da74092",
+  "plan_hash": "92743173d42ac8194d14f05f84b0bc77006444ea171d11c1b244da627972e7c6",
   "price_book": [],
   "primary_pack": {
     "key": "commercial_gc",
@@ -2178,6 +2206,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
           "label": null,
         },
         {
+          "item": "service_desk",
+          "label": null,
+        },
+        {
           "item": "work_orders",
           "label": "Service",
         },
@@ -2293,6 +2325,10 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
       "pm": [
         {
           "item": "home",
+          "label": null,
+        },
+        {
+          "item": "service_desk",
           "label": null,
         },
         {
@@ -2872,7 +2908,7 @@ exports[`compilePlan(equipment_dealer, defaults) > matches the golden snapshot 1
     "uses_retainage": false,
     "warranty_labor_rate_cents": 9500,
   },
-  "plan_hash": "5c4e8d94b2c10e5f38b7715a20b4cba68ee6576a3f325727ccccec52cb20bccf",
+  "plan_hash": "ee1a49d87a3f32812fceb0fae1733a24b6adc368da5d321a6b43530d5f110b2e",
   "price_book": [
     {
       "code": "OP-DIAG",
@@ -3933,6 +3969,14 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
           "label": null,
         },
         {
+          "item": "call_log",
+          "label": null,
+        },
+        {
+          "item": "fs_installs",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
@@ -3946,6 +3990,10 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
         },
         {
           "item": "price_book",
+          "label": null,
+        },
+        {
+          "item": "invoice_review",
           "label": null,
         },
         {
@@ -4048,6 +4096,10 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
         },
         {
           "item": "work_orders",
+          "label": null,
+        },
+        {
+          "item": "timesheets",
           "label": null,
         },
         {
@@ -4594,7 +4646,7 @@ exports[`compilePlan(field_service, defaults) > matches the golden snapshot 1`] 
     "target_repair_margin_pct": 0.7,
     "uses_retainage": false,
   },
-  "plan_hash": "7a2e32e43b4ee61e3cd276dcaba452d59d208f40d2097952fce02bdcc508e195",
+  "plan_hash": "e6e5f0d89b45d7070ed54ec6c2bb9cb00d1c36cfa6ac9e562e3fc248fbeca285",
   "price_book": [
     {
       "code": "DIAG",
@@ -8449,6 +8501,10 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
           "label": null,
         },
         {
+          "item": "appointments",
+          "label": null,
+        },
+        {
           "item": "homes",
           "label": null,
         },
@@ -8865,7 +8921,7 @@ exports[`compilePlan(home_builder, defaults) > matches the golden snapshot 1`] =
     "uses_retainage": false,
     "warranty_program": "one_year",
   },
-  "plan_hash": "bde6a733ae390d5e53d52b796e32016b899e36a5941378998fb1c234529cfebe",
+  "plan_hash": "e46d4d97b3f6dcf122c7388509b6ca8ad433e285d7da3337b0862432a7caeb07",
   "price_book": [],
   "primary_pack": {
     "key": "home_builder",
@@ -11297,6 +11353,10 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "bid_board",
+          "label": null,
+        },
+        {
           "item": "estimates",
           "label": null,
         },
@@ -11403,6 +11463,10 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
           "label": null,
         },
         {
+          "item": "bid_board",
+          "label": null,
+        },
+        {
           "item": "estimates",
           "label": null,
         },
@@ -11480,6 +11544,10 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
         },
         {
           "item": "station",
+          "label": null,
+        },
+        {
+          "item": "shop_floor",
           "label": null,
         },
         {
@@ -11838,7 +11906,7 @@ exports[`compilePlan(manufacturing_eto, defaults) > matches the golden snapshot 
     "shop_hours_per_week": 40,
     "uses_retainage": false,
   },
-  "plan_hash": "505530b5c72e8663362eea28f9b2ac932f27179220b95b8edaee38b9009250b8",
+  "plan_hash": "e2aaf5bef5558f9bf4c5178be57d3b3cb653ee8867de11fd3cd7621339def6d9",
   "price_book": [],
   "primary_pack": {
     "key": "manufacturing_eto",
@@ -15548,6 +15616,10 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
           "label": null,
         },
         {
+          "item": "appointments",
+          "label": null,
+        },
+        {
           "item": "proposals",
           "label": null,
         },
@@ -15697,6 +15769,10 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
         },
         {
           "item": "leads",
+          "label": null,
+        },
+        {
+          "item": "appointments",
           "label": null,
         },
         {
@@ -16084,7 +16160,7 @@ exports[`compilePlan(residential_remodel, defaults) > matches the golden snapsho
     "uses_retainage": false,
     "warranty_months": 12,
   },
-  "plan_hash": "ef205cd0213d2881d13adfbeb87f06670c910b721bd3a43343ac3014cfa5d4c1",
+  "plan_hash": "dfa133ecd0bd122fced58e93d09711e5ba98785d4ff91e2a155a8b50daadfc7c",
   "price_book": [],
   "primary_pack": {
     "key": "residential_remodel",
@@ -16991,8 +17067,8 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
             "tab": "overview",
           },
           {
-            "label": "SOV & pay apps",
-            "tab": "billing",
+            "label": null,
+            "tab": "pay_apps",
           },
           {
             "label": "Productivity",
@@ -17041,6 +17117,18 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           {
             "label": null,
             "tab": "closeout",
+          },
+          {
+            "label": "SOV & billing",
+            "tab": "billing",
+          },
+          {
+            "label": null,
+            "tab": "directory",
+          },
+          {
+            "label": null,
+            "tab": "correspondence",
           },
         ],
       },
@@ -17108,12 +17196,20 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           "label": "Bids",
         },
         {
+          "item": "trade_proposals",
+          "label": null,
+        },
+        {
           "item": "jobs",
           "label": null,
         },
         {
           "item": "schedule",
           "label": "Crew schedule",
+        },
+        {
+          "item": "workforce",
+          "label": null,
         },
         {
           "item": "calls",
@@ -17124,8 +17220,8 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           "label": null,
         },
         {
-          "item": "billing",
-          "label": "Pay apps",
+          "item": "pay_apps",
+          "label": null,
         },
         {
           "item": "retainage",
@@ -17234,8 +17330,8 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           "label": "Crew schedule",
         },
         {
-          "item": "billing",
-          "label": "Pay apps",
+          "item": "pay_apps",
+          "label": null,
         },
         {
           "item": "change_events",
@@ -17255,6 +17351,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "commitments",
+          "label": null,
+        },
+        {
+          "item": "workforce",
           "label": null,
         },
         {
@@ -17302,6 +17402,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
           "label": null,
         },
         {
+          "item": "foreman",
+          "label": null,
+        },
+        {
           "item": "my_jobs",
           "label": null,
         },
@@ -17323,6 +17427,10 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
         },
         {
           "item": "punch",
+          "label": null,
+        },
+        {
+          "item": "safety_center",
           "label": null,
         },
         {
@@ -17667,7 +17775,7 @@ exports[`compilePlan(specialty_trade, defaults) > matches the golden snapshot 1`
     "union_labor": false,
     "uses_retainage": true,
   },
-  "plan_hash": "46eb15b6209492aefe021a7f10119a2d190c6f4aa6918298ede155c641f2c9f5",
+  "plan_hash": "8e80a33ccfa0b0c19e1edeb42f0d8730e36e9769f3895db5e6c514a19ec58b9b",
   "price_book": [],
   "primary_pack": {
     "key": "specialty_trade",

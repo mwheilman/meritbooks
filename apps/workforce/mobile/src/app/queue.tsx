@@ -11,10 +11,19 @@ import { font } from '@/ui/theme';
 const KIND: Readonly<Record<QueuedCommand['kind'], StringKey>> = {
   clock: 'tabClock', 'time.update': 'fixHours', 'time.submit': 'submitWeek', 'log.submit': 'logTitle',
   'checklist.submit': 'checklists', 'punch.create': 'punch', 'crew.approve': 'crewTitle', 'photo.upload': 'takePhoto',
+  'approval.decide': 'approve', 'notification.mark': 'inboxTitle', 'kiosk.event': 'kioskTitle', 'ro.clock': 'roClockOn', 'ro.story': 'story',
+  'esign.sign': 'signTitle', 'fs.sell': 'q_sale', 'fs.decline': 'declineBtn',
+  'fs.form.submit': 'formsTitle', 'fs.note.save': 'notesTitle', 'fs.equipment.upsert': 'equipmentTitle', 'fs.willcall.pickup': 'willCallTitle',
+  'flr.omw': 'installOnMyWay', 'flr.signoff': 'installSignoff', 'flr.change': 'installChange', 'res.receipt': 'receiptTitle', 'ro.line.story': 'q_story',
+  'fs.paylink.send': 'payLinkSend', 'fs.message.send': 'messageCustomer',
 };
 
 function label(q: QueuedCommand, t: (k: StringKey) => string): string {
-  if (q.command.kind === 'clock') return t(q.command.event);
+  const c = q.command;
+  if (c.kind === 'clock') return t(c.event);
+  if (c.kind === 'approval.decide') return t(c.decision === 'reject' ? 'sendBack' : 'approve');
+  if (c.kind === 'ro.clock') return c.op === 'clock_off' ? t('roClockOff') : c.op === 'indirect' && c.indirectKind ? t(`indirect_${c.indirectKind}`) : t('roClockOn');
+  if (c.kind === 'kiosk.event') return `${t('kioskTitle')} · ${c.action.toLowerCase().replace('_', ' ')}`;
   return t(KIND[q.kind]);
 }
 

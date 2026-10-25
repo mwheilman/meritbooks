@@ -30,6 +30,15 @@ import { SubmittalsView } from '@/components/commercial/SubmittalsView';
 import { MeetingsView } from '@/components/commercial/MeetingsView';
 import { SiteRecords, type SiteLogRef, type TmTicketRef } from '@/components/commercial/SiteRecords';
 import { BuyoutTab, CloseoutTab, ProductivityTab, SafetyTab } from '@/components/job/tabs/CommercialTabs';
+import { jobsWithActiveSov, loadCorrespondence, loadDirectory, loadPayApps, loadReviewPackages, loadSpecs } from '@/lib/commercial/screens';
+import { PayAppsView } from '@/components/commercial/PayAppsView';
+import { DirectoryView } from '@/components/commercial/DirectoryView';
+import { SpecsView } from '@/components/commercial/SpecsView';
+import { CorrespondenceView } from '@/components/commercial/CorrespondenceView';
+import { ReviewPackageView } from '@/components/commercial/ReviewPackageView';
+import '@/components/ops/ops.css';
+import '@/components/commercial/commercial.css';
+import '@/components/dealer/dealer.css';
 import { PortalTab } from '@/components/job/tabs/PortalTab';
 import { FlooringJob } from '@/components/flooring/FlooringJob';
 import { DesignProject } from '@/components/design/DesignProject';
@@ -144,11 +153,13 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
     'design-project': ['projects.selections:view'],
     development: ['projects.financials:view'],
     portal: ['projects.jobs:view'],
+    'pay-apps': ['projects.billing:view'],
+    review: ['projects.financials:view'],
   };
   // Money tabs also need the money their figures are made of: commitments are cost, billing and draws contract.
   const TAB_MONEY: Partial<Record<JobTabValue, boolean>> = {
     commitments: mv.cost, receiving: mv.cost, billing: mv.contract, draws: mv.contract, 'capital-stack': mv.contract, buyout: mv.cost,
-    development: mv.cost,
+    development: mv.cost, 'pay-apps': mv.contract, review: mv.cost && mv.contract,
   };
   const resolved = resolveJobTabs({
     experience: experience?.experience,
@@ -317,6 +328,32 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       ]);
       body = <SiteRecords logs={(siteLogs.data ?? []) as SiteLogRef[]} tickets={(tickets.data ?? []) as TmTicketRef[]} jobs={jobs} today={today} initialTab="tm" initialItem={null} />;
     }
+  } else if (tab.value === 'pay-apps' || tab.value === 'directory' || tab.value === 'specs' || tab.value === 'correspondence' || tab.value === 'review') {
+    // The Wave C commercial screens, narrowed to this job (each also has its cross-job page).
+    const o = await opsScope();
+    const jobs = o ? jobRefs(o, (id) => id === list.job_id) : [];
+    const ids = [list.job_id];
+    const edit = (g: Grant) => may(g) && !scope.readOnly;
+    if (!o || jobs.length === 0) {
+      body = <LaterTab label={tab.label} what="This job is not in the companies in view. Switch to its company to work it here." />;
+    } else if (tab.value === 'pay-apps') {
+      const [rows, draftable] = await Promise.all([loadPayApps(db, ids), jobsWithActiveSov(db, jobs.filter((j) => j.open).map((j) => j.id))]);
+      body = <PayAppsView rows={rows} jobs={jobs} draftable={draftable} today={today} />;
+    } else if (tab.value === 'directory') {
+      const data = await loadDirectory(db, ids);
+      body = <DirectoryView {...data} jobs={jobs} today={today} initialJob={list.job_id} canEdit={edit('projects.jobs:edit')} canEditProfiles={edit('projects.commitments:edit')} />;
+    } else if (tab.value === 'specs') {
+      const data = await loadSpecs(db, ids);
+      body = <SpecsView {...data} jobs={jobs} today={today} initialJob={list.job_id} canEdit={edit('projects.documents:create')} />;
+    } else if (tab.value === 'correspondence') {
+      const data = await loadCorrespondence(db, ids);
+      body = <CorrespondenceView {...data} jobs={jobs} today={today} initialJob={list.job_id} canEdit={edit('projects.documents:create')} />;
+    } else {
+      const [y, mo] = today.split('-').map(Number) as [number, number];
+      const periods = Array.from({ length: 13 }, (_, k) => new Date(Date.UTC(y, mo - k, 0)).toISOString().slice(0, 10));
+      const packages = await loadReviewPackages(db, ids);
+      body = <ReviewPackageView packages={packages} jobs={jobs} periods={periods} jobId={list.job_id} periodEnd={periods[1] ?? periods[0]!} today={today} canBuild={edit('projects.financials:edit')} />;
+    }
   } else if (tab.value === 'productivity') {
     body = <ProductivityTab jobId={list.job_id} />;
   } else if (tab.value === 'buyout') {
@@ -335,6 +372,9 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
         <span className="btn-row">
           <ButtonLink variant="primary" href={`/homes/${list.job_id}`}>Open the home</ButtonLink>
           <ButtonLink href={`/homes/${list.job_id}?tab=decisions`}>Design-center decisions</ButtonLink>
+          <ButtonLink href={`/homes/${list.job_id}/client`}>Client view</ButtonLink>
+          <ButtonLink href={`/homes/${list.job_id}/capture`}>Site capture</ButtonLink>
+          {may('projects.financials:view') && mv.cost && <ButtonLink href={`/homes/${list.job_id}/money`}>Money</ButtonLink>}
         </span>
       </div>
     );
@@ -346,15 +386,26 @@ export default async function JobPage({ params, searchParams }: { params: { jobI
       list.customer_id ? db.schema('core').from('contacts').select('id, first_name, last_name, email').eq('customer_id', list.customer_id).not('email', 'is', null).limit(20) : Promise.resolve({ data: [] }),
     ]);
     body = (
+      <>
+      <span className="btn-row" style={{ marginBottom: 12 }}><ButtonLink href={`/design/${list.job_id}/rooms`}>Rooms and specs</ButtonLink><ButtonLink variant="quiet" href={`/design/${list.job_id}`}>Open the project</ButtonLink></span>
       <DesignProject
         jobId={list.job_id}
         today={today}
         vendors={((vres.data ?? []) as Array<{ id: string; name: string; display_name: string | null }>).map((v) => ({ id: v.id, name: v.display_name || v.name }))}
         contacts={((cres.data ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; email: string | null }>).map((c) => ({ id: c.id, name: [c.first_name, c.last_name].filter(Boolean).join(' ') || (c.email ?? 'Contact') }))}
       />
+      </>
     );
   } else if (tab.value === 'development') {
-    body = <DevProject jobId={list.job_id} today={today} />;
+    body = (
+      <>
+        <span className="btn-row" style={{ marginBottom: 12 }}>
+          <ButtonLink href={`/development/${list.job_id}/oversight`}>Construction oversight</ButtonLink>
+          <ButtonLink variant="quiet" href={`/development/${list.job_id}`}>Open the project</ButtonLink>
+        </span>
+        <DevProject jobId={list.job_id} today={today} />
+      </>
+    );
   } else if (tab.value === 'documents') {
     body = <JobDocumentsPanel jobId={list.job_id} canDrawings={may('projects.documents:view')} />;
   } else if (tab.value === 'team') {

@@ -5,7 +5,7 @@
  * of this app. The app never shows money, and neither does a push: the server masks per person.
  */
 
-export type AppRoute = '/' | '/punch' | '/(tabs)/crew' | '/(tabs)/clock' | '/(tabs)/log' | '/(tabs)/me' | '/queue';
+export type AppRoute = '/' | '/punch' | '/(tabs)/crew' | '/(tabs)/clock' | '/(tabs)/log' | '/(tabs)/me' | '/queue' | '/inbox' | '/drawings' | '/pay' | '/ro';
 
 export interface Target {
   route: AppRoute;
@@ -20,11 +20,18 @@ export function routeForUrl(url: unknown): Target {
   const [path = '/'] = url.split(/[?#]/);
   const parts = path.split('/').filter(Boolean);
   const head = parts[0] ?? '';
-  if (head === 'jobs' && parts[1] && UUID.test(parts[1])) return { route: '/', params: { job: parts[1] } };
+  if (head === 'jobs' && parts[1] && UUID.test(parts[1])) {
+    if (parts[2] === 'drawings' || parts[2] === 'documents') return { route: '/drawings', params: { jobId: parts[1] } };
+    return { route: '/', params: { job: parts[1] } };
+  }
+  if (head === 'approvals') return { route: '/(tabs)/crew', params: {} };
+  if (head === 'flooring' && parts[1] === 'pay') return { route: '/pay', params: {} };
+  if (head === 'dealer' && (parts[1] === 'tech' || parts[1] === 'ro')) return { route: '/ro', params: {} };
   if (head === 'punch-list') return { route: '/punch', params: {} };
   if (head === 'time' || head === 'review') return { route: '/(tabs)/crew', params: {} };
   if (head === 'daily-logs') return { route: '/(tabs)/log', params: {} };
-  if (head === 'inbox' || head === 'me') return { route: '/(tabs)/me', params: {} };
+  if (head === 'inbox') return { route: '/inbox', params: {} };
+  if (head === 'me') return { route: '/(tabs)/me', params: {} };
   return { route: '/', params: {} };
 }
 

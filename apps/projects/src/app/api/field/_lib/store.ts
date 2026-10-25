@@ -76,18 +76,24 @@ export function createFieldStore(db: SupabaseClient, who: { userId: string; orgI
       return (r.data ?? []) as TimeRow[];
     },
 
+    // Phone time (wf:seg rows) is written through definer RPCs (migration 1125, security review R3-b):
+    // members cannot insert or re-time field-sync rows directly; same write rule, DRAFT only, a replay of
+    // the same source_ref is a unique violation (23505 → DuplicateRowError).
     async insertTime(row: NewTime) {
-      const r = await pm().from('time_entries').insert({ ...row, pay_type: 'REG', approval_state: 'DRAFT' }).select('id');
+      const r = await pm().rpc('field_time_insert', {
+        p_job: row.job_id, p_employee: row.employee_id, p_user: row.user_id, p_work_date: row.work_date, p_hours: row.hours,
+        p_cost_code: row.cost_code_id, p_notes: row.notes, p_source_ref: row.source_ref,
+      });
       if (r.error) fail('add time', r.error);
-      const id = (r.data as Array<{ id: string }> | null)?.[0]?.id;
+      const id = r.data as string | null;
       if (!id) throw new HttpError(500, 'The time was not saved. It will be sent again.', 'CREATE_FAILED');
       return id;
     },
 
     async updateTime(id, patch) {
-      const r = await pm().from('time_entries').update(patch).eq('id', id).select('id');
+      const r = await pm().rpc('field_time_update', { p_id: id, p_patch: patch });
       if (r.error) fail('update time', r.error);
-      if (!(r.data as unknown[] | null)?.length) throw new HttpError(403, 'That time entry can’t be changed from your phone any more.', 'TIME_NOT_EDITABLE');
+      if (!r.data) throw new HttpError(403, 'That time entry can’t be changed from your phone any more.', 'TIME_NOT_EDITABLE');
     },
 
     async submitTime(ids) {

@@ -170,6 +170,9 @@ export type CommandKind = Command['kind'] | PhotoMeta['kind'];
 
 export const MAX_BATCH = 50;
 
+/** The envelope fields, for the v2 phone commands in phone-contract.ts. */
+export const EnvelopeShape = Envelope;
+
 /** POST /api/field/sync body. Commands are validated one by one so one bad command never sinks the batch. */
 export const SyncBodyZ = z.object({
   deviceId: z.string().max(80).nullish(),

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import {
   Button, Check, ConfirmDialog, Field, InlineNotice, Input, QueueTable, Select, Tag, WidgetState, count, money, shortDate, type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { TIME_APPROVAL_NOTE, approveBlock, pinnedRateText, sentToBooks } from '@/lib/pm/labor/time';
+import { TIME_APPROVAL_NOTE, approveBlock, lateLabel, needsLateAck, pinnedRateText, sentToBooks } from '@/lib/pm/labor/time';
 import { shiftDay } from '@/lib/pm/ops/dispatch-math';
 import { mondayOf } from '@/lib/pm/ops/week';
 import { APPROVAL_STATE, PAY_TYPE_WORDS, personName } from '@/lib/pm/ops/labels';
@@ -63,12 +63,16 @@ export function TimeView(p: TimeViewProps) {
   const [day, setDay] = useState<string>('');
   const [delEntry, setDelEntry] = useState<TimeEntryRow | null>(null);
   const [unEntry, setUnEntry] = useState<TimeEntryRow | null>(null);
+  const [lateEntry, setLateEntry] = useState<TimeEntryRow | null>(null);
   const [sel, setSel] = useState<Set<string>>(new Set());
   const shown = weekEntries.filter((t) => (!who || keyOf(t) === who) && (!day || t.work_date === day));
   const drafts = shown.filter((t) => t.approval_state === 'DRAFT');
   const clerkOf = (id: string) => emp.get(id)?.clerk_user_id ?? null;
   const canApprove = (t: TimeEntryRow) => approveBlock(t, p.meUserId, clerkOf) === null;
-  const approvable = shown.filter(canApprove);
+  // A late phone / kiosk tap (1125) is acknowledged one by one, so it never rides a bulk approval.
+  const canBulk = (t: TimeEntryRow) => canApprove(t) && !needsLateAck(t);
+  const approvable = shown.filter(canBulk);
+  const lateWaiting = shown.filter((t) => canApprove(t) && needsLateAck(t));
   const submittedMine = shown.filter((t) => approveBlock(t, p.meUserId, clerkOf) === 'YOURS').length;
   const approve = async (ids: string[], key: string) => {
     if (!ids.length) return;
@@ -95,13 +99,18 @@ export function TimeView(p: TimeViewProps) {
         ? <span title="Pinned at approval: pay + burden × the pay type. Overhead is never in job cost."><span className="l1" style={{ fontWeight: 400 }}>{r}</span><span className="l2">{money(Math.round(Number(t.hours) * t.cost_rate_cents!))}</span></span>
         : <span className="l2">at approval</span>;
     } }),
-    { id: 'st', header: 'State', width: 150, cell: (t) => (
-      <span><StatusMark mark={APPROVAL_STATE[t.approval_state]} />{sentToBooks(t) ? <span className="l2">Sent to Merit Books</span> : null}</span>
+    { id: 'st', header: 'State', width: 170, cell: (t) => (
+      <span>
+        <StatusMark mark={APPROVAL_STATE[t.approval_state]} />
+        {sentToBooks(t) ? <span className="l2">Sent to Merit Books</span> : null}
+        {t.late_tap ? <span className="l2"><Tag tone={t.late_ack_at ? undefined : 'warn'}>{lateLabel(t.late_tap_minutes)}</Tag>{t.late_ack_at ? ' · acknowledged' : null}</span> : null}
+      </span>
     ) },
     ...(readOnly ? [] : [{ id: 'a', header: <span className="sr">Actions</span>, width: 200, cell: (t: TimeEntryRow) => (
       <div className="btn-row">
         {t.approval_state === 'DRAFT' && <Button variant="quiet" disabled={busy === `t:${t.id}`} onClick={() => void act(`t:${t.id}`, 'patch', `/api/ops/time/${t.id}`, { state: 'submit' }, 'Submitted')}>Submit</Button>}
-        {t.approval_state === 'SUBMITTED' && canApprove(t) && <Button variant="quiet" disabled={busy === `ap:${t.id}`} onClick={() => void approve([t.id], `ap:${t.id}`)}>Approve</Button>}
+        {t.approval_state === 'SUBMITTED' && canApprove(t) && !needsLateAck(t) && <Button variant="quiet" disabled={busy === `ap:${t.id}`} onClick={() => void approve([t.id], `ap:${t.id}`)}>Approve</Button>}
+        {canApprove(t) && needsLateAck(t) && <Button variant="quiet" disabled={busy === `ack:${t.id}`} onClick={() => setLateEntry(t)}>Review late time</Button>}
         {(t.approval_state === 'SUBMITTED' || t.approval_state === 'REJECTED') && <Button variant="quiet" disabled={busy === `t:${t.id}`} onClick={() => void act(`t:${t.id}`, 'patch', `/api/ops/time/${t.id}`, { state: 'recall' }, 'Back to draft')}>Recall</Button>}
         {t.approval_state === 'APPROVED' && <Button variant="quiet" onClick={() => setUnEntry(t)}>Unapprove</Button>}
         {t.approval_state !== 'APPROVED' && <Button variant="quiet" iconOnly icon="x" aria-label="Delete entry" onClick={() => setDelEntry(t)} />}
@@ -127,6 +136,12 @@ export function TimeView(p: TimeViewProps) {
       {shown.some((t) => t.approval_state === 'SUBMITTED') && (
         <InlineNotice tone="info" title={approvable.length ? `${count(approvable.length)} ${approvable.length === 1 ? 'entry is' : 'entries are'} ready for you to approve.` : 'Submitted time waits for someone else to approve it.'}>
           {TIME_APPROVAL_NOTE}{submittedMine ? ` ${count(submittedMine)} submitted ${submittedMine === 1 ? 'entry is' : 'entries are'} yours, so another person approves ${submittedMine === 1 ? 'it' : 'them'}.` : ''}
+        </InlineNotice>
+      )}
+
+      {lateWaiting.length > 0 && (
+        <InlineNotice tone="warn" title={`${count(lateWaiting.length)} ${lateWaiting.length === 1 ? 'entry was' : 'entries were'} entered late from the phone.`}>
+          Look at each one and acknowledge it before it can be approved. Late entries are left out of “Approve all”.
         </InlineNotice>
       )}
 
@@ -180,8 +195,8 @@ export function TimeView(p: TimeViewProps) {
             )}
             <QueueTable aria-label="Time entries" columns={columns} rows={shown} getRowId={(t) => t.id} compact rowState={(t) => ({ done: t.approval_state === 'APPROVED' })} hotkeys={false}
               selectable={!readOnly && approvable.length > 0} selected={sel} onSelectedChange={setSel}
-              bulkSummary={(rs) => { const ok = rs.filter(canApprove); return [`${count(rs.length)} selected`, `${count(ok.length)} you can approve`, `${hours(total(ok))} hours`]; }}
-              bulkActions={(rs) => { const ok = rs.filter(canApprove); return <Button variant="primary" disabled={!ok.length || busy === 'approve-sel'} onClick={() => void approve(ok.map((t) => t.id), 'approve-sel')}>Approve {count(ok.length)}</Button>; }} />
+              bulkSummary={(rs) => { const ok = rs.filter(canBulk); return [`${count(rs.length)} selected`, `${count(ok.length)} you can approve`, `${hours(total(ok))} hours`]; }}
+              bulkActions={(rs) => { const ok = rs.filter(canBulk); return <Button variant="primary" disabled={!ok.length || busy === 'approve-sel'} onClick={() => void approve(ok.map((t) => t.id), 'approve-sel')}>Approve {count(ok.length)}</Button>; }} />
           </>
         )}
       </div>
@@ -199,6 +214,23 @@ export function TimeView(p: TimeViewProps) {
             {hours(Number(unEntry.hours))} hours on {shortDate(unEntry.work_date, p.today)} go back to submitted and the pinned cost rate is cleared, so they can be corrected and approved again.
             {sentToBooks(unEntry) ? ' Merit Books is told to reverse the labor cost it booked.' : ''}
             {unEntry.bill_rate_cents != null ? <> <Tag>Bill rate kept</Tag></> : null}
+          </>
+        ) : null}
+      </ConfirmDialog>
+      <ConfirmDialog open={!!lateEntry} onClose={() => setLateEntry(null)} title="Late time from the phone"
+        confirmLabel={lateEntry?.approval_state === 'SUBMITTED' ? 'Acknowledge and approve' : 'Acknowledge'}
+        onConfirm={async () => {
+          if (!lateEntry) return;
+          const t = lateEntry;
+          const r = t.approval_state === 'SUBMITTED'
+            ? await act<TimeApprovalWire>(`ack:${t.id}`, 'post', '/api/ops/time/approve', { ids: [t.id], ackLate: [t.id] }, (d) => `Acknowledged. ${timeApprovalText(d, 1)}`)
+            : await act<{ acknowledged: number }>(`ack:${t.id}`, 'post', '/api/ops/time/ack', { ids: [t.id] }, 'Acknowledged the late time');
+          if (!r) throw new Error('Not acknowledged. The reason is shown on the page.');
+        }}>
+        {lateEntry ? (
+          <>
+            {nameOf(keyOf(lateEntry))}: {hours(Number(lateEntry.hours))} hours on {shortDate(lateEntry.work_date, p.today)}, {lateLabel(lateEntry.late_tap_minutes)}.
+            {' '}The phone was offline or the tap was entered after the fact, so check the hours against the job before you acknowledge them.
           </>
         ) : null}
       </ConfirmDialog>

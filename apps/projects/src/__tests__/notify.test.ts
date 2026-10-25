@@ -54,8 +54,8 @@ describe('recipes per role (panel 06 §2e)', () => {
   it('approval needed is platform-mandatory', () => {
     expect(EVENT_INFO['approval.requested'].mandatory).toBe(true);
     expect(INTERNAL_EVENTS.filter((e) => EVENT_INFO[e].mandatory)[0]).toBe('approval.requested');
-    // Wave B internal events are all mandatory (inbox floor)
-    expect(INTERNAL_EVENTS.filter((e) => EVENT_INFO[e].mandatory)).toHaveLength(14);
+    // Wave B (13) and Wave C (7, 1124) internal events are all mandatory (inbox floor)
+    expect(INTERNAL_EVENTS.filter((e) => EVENT_INFO[e].mandatory)).toHaveLength(21);
   });
 });
 

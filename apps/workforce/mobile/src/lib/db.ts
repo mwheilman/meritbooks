@@ -65,15 +65,24 @@ export function database(): Promise<SQLite.SQLiteDatabase> {
   return opening;
 }
 
-/** Signed out: delete the database, the photos and the key (another person may use the phone next). */
+/** Signed out: delete the database, the photos, the drawings, signing documents and the key (another person may use the phone next). */
 export async function wipeLocalData(): Promise<void> {
   const current = opening;
   opening = null;
   if (current) await current.then((db) => db.closeAsync()).catch(() => undefined);
   await SQLite.deleteDatabaseAsync(NAME).catch(() => undefined);
+  // photos waiting to upload (and drawn signatures), the cached drawing set, documents being signed
+  for (const name of ['photos', 'drawings', 'signing']) {
+    try {
+      const d = new Directory(Paths.document, name);
+      if (d.exists) d.delete();
+    } catch {
+      // nothing to delete
+    }
+  }
+  // camera / image-manipulator / download temp copies
   try {
-    const photos = new Directory(Paths.document, 'photos');
-    if (photos.exists) photos.delete();
+    for (const item of new Directory(Paths.cache).list()) item.delete();
   } catch {
     // nothing to delete
   }

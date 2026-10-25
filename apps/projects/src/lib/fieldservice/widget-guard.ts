@@ -5,7 +5,9 @@
  *   - a honeypot field (`website`) people never see,
  *   - a timing check: the form token from the availability call must be 3 s – 2 h old (HMAC-signed
  *     when FS_WIDGET_FORM_SECRET / FS_WIDGET_SERVER_KEY is set, so it cannot be forged),
- *   - a Cloudflare Turnstile-shaped challenge, verified only when FS_TURNSTILE_SECRET is set.
+ *   - a Cloudflare Turnstile-shaped challenge, verified when FS_TURNSTILE_SECRET is set. Without the
+ *     secret it passes in development and tests, but FAILS CLOSED in production (VERCEL_ENV or
+ *     NODE_ENV = production) unless FS_TURNSTILE_DISABLED=1 says so explicitly.
  * Pure except verifyChallenge (fetch is injectable for tests).
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
@@ -59,14 +61,37 @@ export interface ChallengeResult {
   mode: 'disabled' | 'verified' | 'failed';
 }
 
+/** Where a missing secret is a misconfiguration (production) rather than development. */
+export interface ChallengeRuntime {
+  production: boolean;
+  /** FS_TURNSTILE_DISABLED=1: run production without a challenge, on purpose. */
+  explicitlyDisabled: boolean;
+}
+
+export function challengeRuntime(env: Readonly<Record<string, string | undefined>> = process.env): ChallengeRuntime {
+  return {
+    production: env.VERCEL_ENV === 'production' || env.NODE_ENV === 'production',
+    explicitlyDisabled: env.FS_TURNSTILE_DISABLED === '1',
+  };
+}
+
 type FetchLike = (url: string, init: { method: string; body: URLSearchParams; headers?: Record<string, string> }) => Promise<{ ok: boolean; json(): Promise<unknown> }>;
 
 /**
- * Turnstile-shaped verification (POST secret + response + remoteip to siteverify). Disabled — and
- * passing — until FS_TURNSTILE_SECRET is set; then a missing or rejected token fails closed.
+ * Turnstile-shaped verification (POST secret + response + remoteip to siteverify). With
+ * FS_TURNSTILE_SECRET set, a missing or rejected token fails closed. Without it: passes in
+ * development / tests; in production fails closed unless FS_TURNSTILE_DISABLED=1 (logged).
+ * The fifth argument exists for tests; callers keep the four-argument form.
  */
-export async function verifyChallenge(token: unknown, ip: string | null, env: { secret?: string | null; url?: string | null }, fetchImpl: FetchLike): Promise<ChallengeResult> {
-  if (!env.secret) return { ok: true, mode: 'disabled' };
+export async function verifyChallenge(token: unknown, ip: string | null, env: { secret?: string | null; url?: string | null }, fetchImpl: FetchLike,
+                                      runtime: ChallengeRuntime = challengeRuntime()): Promise<ChallengeResult> {
+  if (!env.secret) {
+    if (runtime.production && !runtime.explicitlyDisabled) {
+      console.error('[widget-guard] FS_TURNSTILE_SECRET is not set in production; refusing (set it, or FS_TURNSTILE_DISABLED=1)');
+      return { ok: false, mode: 'failed' };
+    }
+    return { ok: true, mode: 'disabled' };
+  }
   if (typeof token !== 'string' || token.length < 10 || token.length > 4096) return { ok: false, mode: 'failed' };
   try {
     const body = new URLSearchParams({ secret: env.secret, response: token });

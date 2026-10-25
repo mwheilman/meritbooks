@@ -125,15 +125,13 @@ export const POST = route({ access: { cap: 'projects.jobs', action: 'view' }, op
     case 'add_line': {
       if (!body.priceBookItemId && !body.description) throw new HttpError(422, 'Pick a price book item or describe the line.', 'VALIDATION');
       if (body.kind !== 'DISCOUNT' && body.unitPriceCents != null && body.unitPriceCents < 0) throw new HttpError(422, 'Only a discount line can be negative.', 'VALIDATION');
-      const last = rows<{ sort: number }>(await pm.from('work_order_lines').select('sort').eq('work_order_id', wo.id).order('sort', { ascending: false }).limit(1), 'last line');
-      await write(
-        pm.from('work_order_lines').insert({
-          job_id: wo.job_id, work_order_id: wo.id, sort: (last[0]?.sort ?? -1) + 1, kind: body.kind, price_book_item_id: body.priceBookItemId ?? null,
-          description: body.description || null, qty: body.qty, uom: body.uom || 'EA', unit_price_cents: body.unitPriceCents ?? null,
-          pay_type: body.payType, option_group: body.optionGroup || null, status: body.proposed ? 'PROPOSED' : 'APPROVED', flag_hours: body.flagHours ?? null,
-        }).select('id'),
-        'add line',
-      );
+      // Lines are written through the guarded RPC (migration 1125, security review R2): the store's
+      // discount limits and price guard apply; members no longer insert lines directly.
+      await call(db, 'add_work_order_line', { p_wo: wo.id, p_attrs: {
+        kind: body.kind, price_book_item_id: body.priceBookItemId ?? null, description: body.description || null, qty: body.qty, uom: body.uom || 'EA',
+        unit_price_cents: body.unitPriceCents ?? null, pay_type: body.payType, option_group: body.optionGroup || null, status: body.proposed ? 'PROPOSED' : 'APPROVED',
+        flag_hours: body.flagHours ?? null,
+      } });
       return { ok: true };
     }
     case 'update_line': {
@@ -145,13 +143,12 @@ export const POST = route({ access: { cap: 'projects.jobs', action: 'view' }, op
       if (body.description !== undefined && body.description) patch.description = body.description;
       if (body.flagHours !== undefined) patch.flag_hours = body.flagHours;
       if (!Object.keys(patch).length) throw new HttpError(422, 'Nothing to change.', 'VALIDATION');
-      const r = await write<unknown[]>(pm.from('work_order_lines').update(patch).eq('id', body.lineId).eq('work_order_id', wo.id).select('id'), 'update line');
-      if (!r.length) throw new HttpError(404, 'That line was not found on this work order.', 'NOT_FOUND');
+      await call(db, 'update_work_order_line', { p_line: body.lineId, p_patch: patch, p_wo: wo.id });
       return { ok: true };
     }
     case 'remove_line': {
-      const r = await write<unknown[]>(pm.from('work_order_lines').delete().eq('id', body.lineId).eq('work_order_id', wo.id).select('id'), 'remove line');
-      if (!r.length) throw new HttpError(404, 'That line was not found on this work order.', 'NOT_FOUND');
+      // through the guarded RPC (1125 R2-b): a charged line's removal needs approve; issued parts are returned first
+      await call(db, 'remove_work_order_line', { p_line: body.lineId, p_wo: wo.id });
       return { ok: true };
     }
     case 'update': {

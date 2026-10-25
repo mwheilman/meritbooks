@@ -9,12 +9,26 @@ import { Button } from '@/ui/components';
 import { color, font } from '@/ui/theme';
 import * as Network from 'expo-network';
 import { useAuth, useOrganizationList } from '@clerk/expo';
-import type { Command, Draft, FieldToday, Geo, JsonCommand } from '@/core/contract';
+import type { ApprovalInbox, Command, Draft, FieldExtras, FieldSiteCard, FieldToday, Geo, InboxPage, InstallerDay, JsonCommand, WillCall } from '@/core/contract';
+import { isApprovalInbox } from '@/core/approvals';
+import { isInboxPage } from '@/core/inbox';
 import { IDLE, isShiftState, step, type ShiftState, type StepInput } from '@/core/clock';
 import type { ClockEvent } from '@/core/contract';
 import { translate, type Lang, type StringKey } from '@/core/i18n';
 import { CommandQueue, type QueueCounts, type QueuedCommand } from '@/core/queue';
-import { createApi, isFieldToday, type Api } from '@/lib/api';
+import { createApi, isExtras, isFieldToday, type Api } from '@/lib/api';
+
+/** C2 / C3 reads cached with today's work (each absent on servers that do not have it yet). */
+export interface MoreToday {
+  siteCards: FieldSiteCard[];
+  installerDay: InstallerDay | null;
+  willCalls: WillCall[];
+}
+const isMore = (v: unknown): v is MoreToday => typeof v === 'object' && v !== null && Array.isArray((v as MoreToday).siteCards) && Array.isArray((v as MoreToday).willCalls);
+import { unregisterPush, type RegisterResult } from '@/notifications/push';
+import { usePushNotifications } from '@/notifications/usePushNotifications';
+import { syncDrawings } from '@/lib/drawingsSync';
+import { drawingJobs } from '@/state/selectors';
 import { currentFix, deviceLang, deviceTimeZone, newId, removePhoto } from '@/lib/device';
 import { getJson, setJson } from '@/lib/kv';
 import { SqliteQueueStore } from '@/lib/sqliteQueueStore';
@@ -52,6 +66,24 @@ export interface AppValue {
   /** The job the camera button attaches to: the shift's, else the first job today. */
   currentJobId: string | null;
   signOutEverywhere: () => Promise<void>;
+  // ---- Wave C (each cached on the phone; refreshed with today's work)
+  /** Site notes, visit details, drawing counts and which phone features I have. */
+  extras: FieldExtras | null;
+  /** My approvals queue (GET /api/approvals?mine). */
+  approvals: ApprovalInbox | null;
+  approvalsAt: number | null;
+  /** My notification inbox (GET /api/notifications?view=inbox). */
+  inbox: InboxPage | null;
+  inboxAt: number | null;
+  /** Re-read approvals and the inbox now (after a push, on pull-to-refresh). */
+  refreshSide: () => Promise<void>;
+  /** Push registration outcome: 'denied' shows a hint in the inbox. */
+  push: RegisterResult['state'] | null;
+  /** Lead-carpenter site cards, the installer's day, will-call pickups. */
+  more: MoreToday;
+  /** Station mode is on and locked on this tablet (null while the saved state loads). */
+  stationLocked: boolean | null;
+  setStationLocked: (on: boolean) => Promise<void>;
 }
 
 const Ctx = createContext<AppValue | null>(null);
@@ -65,7 +97,7 @@ export function useApp(): AppValue {
 const isLang = (v: unknown): v is Lang => v === 'en' || v === 'es';
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { getToken, signOut, orgId } = useAuth();
+  const { getToken, signOut, orgId, userId } = useAuth();
   const orgs = useOrganizationList({ userMemberships: true });
   const tokenRef = useRef(getToken);
   tokenRef.current = getToken;
@@ -95,7 +127,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [crewShift, setCrewShift] = useState<ShiftState>(IDLE);
   const onlineRef = useRef(online);
   onlineRef.current = online;
+  const [extras, setExtras] = useState<FieldExtras | null>(null);
+  const [approvals, setApprovals] = useState<ApprovalInbox | null>(null);
+  const [approvalsAt, setApprovalsAt] = useState<number | null>(null);
+  const [inbox, setInbox] = useState<InboxPage | null>(null);
+  const [inboxAt, setInboxAt] = useState<number | null>(null);
+  const [push, setPush] = useState<RegisterResult['state'] | null>(null);
+  const [more, setMore] = useState<MoreToday>({ siteCards: [], installerDay: null, willCalls: [] });
+  const [stationLocked, setStationLockedState] = useState<boolean | null>(null);
 
+  // ---- push: register this phone after sign-in, open the right screen when a push is tapped
+  const pushToken = useCallback(async (o?: { skipCache?: boolean }) => (await tokenRef.current(o?.skipCache ? { skipCache: true } : undefined)) ?? null, []);
+  const onRegistered = useCallback((r: RegisterResult) => setPush(r.state), []);
+  usePushNotifications({ getToken: pushToken, userId: userId ?? null, onRegistered });
+
+  const langRef = useRef(lang);
+  langRef.current = lang;
   const t = useCallback((key: StringKey, vars?: Readonly<Record<string, string | number>>) => translate(lang, key, vars), [lang]);
 
   // ---- one org for the phone session: Projects and Books both resolve the tenant from it
@@ -117,10 +164,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (alive) setDbState('ready');
-      const [cached, s, cs, l] = await Promise.all([
+      const [cached, s, cs, l, ex, ap, ib] = await Promise.all([
         getJson('today', isFieldToday), getJson('shift', isShiftState), getJson('crewShift', isShiftState), getJson('lang', isLang),
+        getJson('extras', isExtras), getJson('approvals', isApprovalInbox), getJson('inbox', isInboxPage),
       ]);
+      const [mo, st] = await Promise.all([getJson('more', isMore), getJson('kiosk.locked', (v): v is boolean => typeof v === 'boolean')]);
+      if (mo && alive) setMore(mo.value);
+      if (alive) setStationLockedState(st?.value ?? false);
       if (!alive) return;
+      if (ex) setExtras(ex.value);
+      if (ap) {
+        setApprovals(ap.value);
+        setApprovalsAt(ap.updatedAt);
+      }
+      if (ib) {
+        setInbox(ib.value);
+        setInboxAt(ib.updatedAt);
+      }
       if (cached) {
         setToday(cached.value);
         setTodayAt(cached.updatedAt);
@@ -148,6 +208,51 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return q.subscribe(() => void load());
   }, [q]);
 
+  const refreshSide = useCallback(async () => {
+    await Promise.all([
+      api.approvals().then(async (a) => {
+        setApprovals(a);
+        setApprovalsAt(Date.now());
+        await setJson('approvals', a).catch(() => undefined);
+      }).catch(() => undefined),
+      api.inbox().then(async (p) => {
+        setInbox(p);
+        setInboxAt(Date.now());
+        await setJson('inbox', p).catch(() => undefined);
+      }).catch(() => undefined),
+    ]);
+  }, [api]);
+
+  const refreshExtras = useCallback(async (t: FieldToday) => {
+    // today's visits and jobs first (the server caps the lists)
+    const visitJobs = t.assignments.map((a) => a.jobId);
+    const jobs = [...new Set([...visitJobs, ...t.jobs.map((j) => j.id)])].slice(0, 60);
+    try {
+      const x = await api.extras(t.assignments.map((a) => a.workOrderId), jobs);
+      setExtras(x);
+      await setJson('extras', x).catch(() => undefined);
+      // C2 / C3 reads (best effort; a server without them answers 404 and the saved copy stays)
+      const lang = langRef.current;
+      const [sites, day, tools] = await Promise.all([
+        jobs.length ? api.siteCards(jobs, lang).then((r) => r.cards).catch(() => null) : Promise.resolve([] as FieldSiteCard[]),
+        api.installerDay().catch(() => null),
+        api.fsTools().then((r) => r.willCalls).catch(() => null),
+      ]);
+      setMore((cur) => {
+        const next: MoreToday = { siteCards: sites ?? cur.siteCards, installerDay: day ?? cur.installerDay, willCalls: tools ?? cur.willCalls };
+        void setJson('more', next).catch(() => undefined);
+        return next;
+      });
+      // keep the current drawing set of my jobs on the phone (background, best effort)
+      if (x.features.drawings) {
+        const d = drawingJobs(t, x.drawings);
+        if (d.jobs.length) void syncDrawings(api, d.jobs, d.priority).catch(() => undefined);
+      }
+    } catch {
+      // keep the saved copy
+    }
+  }, [api]);
+
   const refresh = useCallback(async () => {
     try {
       const fresh = await api.today();
@@ -155,12 +260,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setTodayAt(Date.now());
       setTodayError(null);
       await setJson('today', fresh).catch(() => undefined);
+      void refreshExtras(fresh);
+      void refreshSide();
     } catch (e) {
       setTodayError(e instanceof Error ? e.message : 'Could not load your work.');
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, refreshExtras, refreshSide]);
 
   const flushing = useRef(false);
   const flush = useCallback(async () => {
@@ -190,7 +297,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
     const app = AppState.addEventListener('change', (st) => {
       if (st === 'active') {
-        void flush();
+        // unlocked / back in front: write anything held in memory, put interrupted sends back, then send
+        void q.resume().catch(() => undefined).then(() => flush());
         void refresh();
       }
     });
@@ -208,7 +316,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearInterval(tick);
       clearInterval(re);
     };
-  }, [flush, refresh]);
+  }, [flush, refresh, q]);
 
   const record = useCallback(
     async <C extends Command>(draft: Draft<C> & { id?: string }, opts: { fileUri?: string | null; dependsOn?: string | null; geo?: Geo | null } = {}): Promise<C> => {
@@ -233,12 +341,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const command: JsonCommand = { ...st.command, tz: deviceTimeZone(), offline: !onlineRef.current };
           await q.enqueue(command);
         }
+        // the punch itself is in the queue (held in memory if the disk refused); the shift state is a convenience copy
         if (opts.crew) {
           setCrewShift(st.next);
-          await setJson('crewShift', st.next);
+          await setJson('crewShift', st.next).catch(() => undefined);
         } else {
           setShift(st.next);
-          await setJson('shift', st.next);
+          await setJson('shift', st.next).catch(() => undefined);
         }
         if (onlineRef.current) void flush();
         return { ok: true, savedOffline: !onlineRef.current };
@@ -249,6 +358,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [crewShift, flush, q, shift],
   );
 
+  const setStationLocked = useCallback(async (on: boolean) => {
+    setStationLockedState(on);
+    await setJson('kiosk.locked', on).catch(() => undefined);
+  }, []);
+
   const setLang = useCallback((l: Lang) => {
     setLangState(l);
     void setJson('lang', l);
@@ -257,18 +371,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const currentJobId = shift.jobId ?? today?.assignments.find((a) => a.day === today.today && a.status !== 'DONE')?.jobId ?? today?.jobs[0]?.id ?? null;
 
   const signOutEverywhere = useCallback(async () => {
+    // stop pushes to this phone for this person BEFORE the session (and the saved registration) go
+    await unregisterPush(pushToken).catch(() => undefined);
     await wipeLocalData().catch(() => undefined);
     for (const c of queued) if (c.fileUri) removePhoto(c.fileUri);
     setToday(null);
+    setExtras(null);
+    setApprovals(null);
+    setInbox(null);
+    setMore({ siteCards: [], installerDay: null, willCalls: [] });
     setShift(IDLE);
     setCrewShift(IDLE);
     await signOut();
-  }, [queued, signOut]);
+  }, [pushToken, queued, signOut]);
 
   const value: AppValue = {
     lang, setLang, t, api, today, todayAt, todayError, loading, refresh, queued, counts, online, syncing, authProblem, flush,
     dismiss: (id) => q.dismiss(id), retry: async (id) => { await q.retry(id); void flush(); },
     record, newId, shift, crewShift, clock, currentJobId, signOutEverywhere,
+    extras, approvals, approvalsAt, inbox, inboxAt, refreshSide, push, more, stationLocked, setStationLocked,
   };
   if (dbState === 'failed') {
     return <OpenFailed t={t} onRetry={() => setDbAttempt((n) => n + 1)} />;
