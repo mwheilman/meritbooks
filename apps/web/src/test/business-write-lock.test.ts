@@ -183,7 +183,12 @@ const BUSINESS_LOCKED_TABLES_176: ReadonlyArray<readonly [schema: 'public' | 'co
 const APPEND_ONLY_EVIDENCE = ['audit_log', 'ai_audit_log', 'invoice_events', 'vendor_compliance_events'] as const;
 
 /** Every member-locked table (171 + 172 + 176). */
-const ALL_LOCKED_TABLES = [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172, ...BUSINESS_LOCKED_TABLES_176];
+/** 191 §2b (security review H3): scheduled + emailed report packs. */
+const BUSINESS_LOCKED_TABLES_191: ReadonlyArray<readonly [schema: 'public' | 'core', table: string]> = [
+  ['public', 'report_packs'],
+];
+
+const ALL_LOCKED_TABLES = [...BUSINESS_LOCKED_TABLES, ...BUSINESS_LOCKED_TABLES_172, ...BUSINESS_LOCKED_TABLES_176, ...BUSINESS_LOCKED_TABLES_191];
 
 /** 171 §2: member policies were already read-only / service-only; write GRANTs revoked. */
 const GRANT_HARDENED_TABLES: ReadonlyArray<readonly [string, string]> = [
@@ -218,7 +223,8 @@ const MEMBER_WRITABLE: Readonly<Record<string, string>> = {
   'public.ai_decisions': A_PROJECTS,
   // B
   'public.report_views': B,
-  'public.report_packs': B,
+  // public.report_packs: locked by 191 §2b (security review H3 — scheduled + emailed; writes are
+  // the service role after reports:export + the pack's client-scope check)
   // public.budgets: locked by 189 (the published budget of record; written by the version triggers)
   'public.budget_versions': B,
   'public.learned_preferences': B,
@@ -866,6 +872,8 @@ const SERVICE_ROLE_PARAMS: Readonly<Record<string, string>> = {
     "ensureFiscalPeriods' db IS the write client: callers pass serviceWriter() (onboarding/portfolio/periods) or createCompany's service-role writer (settings/entities, import, onboarding/portfolio/companies)",
   'lib/services/sandbox.ts::db': 'sandbox seed/reset: only app/api/sandbox (createAdminSupabase, sandbox guard)',
   'lib/services/posting-verify.ts::db': 'GATE-2 verification harness: only app/api/sandbox (createAdminSupabase, sandbox guard)',
+  'lib/reports/compiler/scheduled-delivery.tsx::admin':
+    'deliverDuePacks(admin): callers are the scheduler job (ctx.admin, the service role) and the secret-gated run-scheduled route (createAdminSupabase); only next_run_date / last_run_* are written',
 };
 
 /** Receiver expressions that ARE the service role. */

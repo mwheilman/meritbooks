@@ -59,12 +59,18 @@
 .gridWrap { position: relative; border: 1px solid var(--line); background: var(--canvas); overflow: auto; max-height: calc(100dvh - 260px); min-height: 240px; }
 .grid { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; table-layout: auto; }
 .grid thead th { position: sticky; top: 0; z-index: 2; background: var(--white); border-bottom: 1px solid var(--electric); padding: 8px 10px; text-align: right; white-space: nowrap; font: 500 var(--t-12)/var(--lh-12) var(--f-text); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); vertical-align: bottom; }
-.grid thead th.lbl { left: 0; z-index: 3; text-align: left; min-width: 300px; }
+.grid thead th.lbl { left: 0; z-index: 3; text-align: left; min-width: clamp(160px, 24vw, 300px); }
 .grid thead th .sub { display: block; text-transform: none; letter-spacing: 0; color: var(--ink-3); margin-top: 2px; font-weight: 400; }
 .grid thead th.cur { color: var(--ink); }
 .grid td { padding: 4px 10px; height: 30px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums lining-nums; border-bottom: 1px solid transparent; background: var(--canvas); }
 .grid td.cur { background: var(--white); }
-.grid td.lbl { position: sticky; left: 0; z-index: 1; text-align: left; background: var(--white); box-shadow: 1px 0 0 var(--line); max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.grid td.lbl { position: sticky; left: 0; z-index: 1; text-align: left; background: var(--white); box-shadow: 1px 0 0 var(--line); max-width: clamp(180px, 30vw, 420px); overflow: hidden; text-overflow: ellipsis; }
+/* Narrow screens: the pinned label column must never cover the figures — it shrinks (full label
+   on hover via title) and the figures scroll beneath it. */
+@media (max-width: 900px) {
+  .grid thead th.lbl { min-width: 140px; }
+  .grid td.lbl { max-width: 44vw; }
+}
 .grid tr.rHead td { padding-top: 18px; height: auto; font: 500 var(--t-12)/var(--lh-12) var(--f-text); letter-spacing: .14em; text-transform: uppercase; color: var(--ink-2); background: var(--canvas); }
 .grid tr.rHead td.lbl { background: var(--canvas); }
 .grid tr.rSpacer td { height: 10px; padding: 0; }

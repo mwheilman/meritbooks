@@ -1,8 +1,17 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Inbox, AlertCircle, Search, ShieldAlert, Clock, Briefcase, UserCheck, ChevronRight } from 'lucide-react';
-import { clsx } from 'clsx';
+import {
+  Button,
+  Icon,
+  Keyhints,
+  Search,
+  Status,
+  Tabs,
+  Tag,
+  cx,
+  useListKeynav,
+} from '@meritbooks/merit-ui';
 import { StatusBadge, EmptyState, TableSkeleton, CurrencyTag } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { ListPager } from '@/components/ui/list-pager';
@@ -12,6 +21,7 @@ import { BillPeek } from './bill-peek';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
 import { BillDetail } from './bill-detail';
+import s from './bills.module.css';
 
 interface BillRow {
   id: string;
@@ -44,11 +54,11 @@ interface BillResponse {
 }
 
 const TAB_CONFIG = [
-  { key: 'all', label: 'All Open' },
+  { key: 'all', label: 'All open' },
   { key: 'PENDING', label: 'Pending' },
   { key: 'APPROVED', label: 'Approved' },
   { key: 'SCHEDULED', label: 'Scheduled' },
-  { key: 'ON_HOLD', label: 'On Hold' },
+  { key: 'ON_HOLD', label: 'On hold' },
   { key: 'PAID', label: 'Paid' },
 ] as const;
 
@@ -110,169 +120,168 @@ export function BillList() {
   const counts = data?.counts ?? null;
   const homeCurrency = data?.homeCurrency ?? 'USD';
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
-        {TAB_CONFIG.map((tab) => {
-          const stats = counts?.[tab.key] ?? null;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-                activeTab === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
-                  : 'text-slate-400 hover:text-slate-300'
-              )}
-            >
-              <span>{tab.label}</span>
-              <span className={clsx(
-                'text-2xs font-mono tabular-nums',
-                activeTab === tab.key ? 'text-brand-400' : 'text-slate-600'
-              )}>
-                {stats ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}` : '--'}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+  // J/K move the cursor, Enter opens the bill (paused while the drawer is open).
+  const showTable = !isLoading && !error && bills.length > 0;
+  const { activeIndex, setActiveIndex, rowProps } = useListKeynav({
+    count: showTable ? bills.length : 0,
+    onOpen: (i) => {
+      const b = bills[i];
+      if (b) { close(); setSelectedId(b.id); }
+    },
+    enabled: !selectedId,
+    owner: 'Bills list',
+  });
 
-      <div className="relative max-w-md">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input
-          type="text"
+  const filtered = activeTab !== 'all' || !!debouncedSearch;
+
+  return (
+    <div className={s.stack}>
+      <Tabs<string>
+        aria-label="Bill status"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={TAB_CONFIG.map((tab) => {
+          const stats = counts?.[tab.key] ?? null;
+          return {
+            value: tab.key,
+            label: tab.label,
+            count: stats ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}` : '—',
+          };
+        })}
+      />
+
+      <div className={s.toolbar}>
+        <Search
+          aria-label="Search bills by bill number"
+          className={s.searchBox}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by bill number..."
-          className="input pl-9"
+          placeholder="Search by bill number"
+          slashToFocus
         />
+        <div className={s.grow} />
+        {pagination && pagination.total > 0 && (
+          <span className="t-cap tnum">{pagination.total} bill{pagination.total === 1 ? '' : 's'} · soonest due first</span>
+        )}
       </div>
 
       {isLoading ? (
         <TableSkeleton rows={6} cols={9} />
       ) : error ? (
-        <div className="card p-8 text-center">
-          <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
-          <p className="text-sm text-red-400 font-medium">{error}</p>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Couldn&apos;t load bills.</p>
+          <p className="ink-2">{error}</p>
+          <Button onClick={() => void refetch()}>Try again</Button>
         </div>
       ) : bills.length === 0 ? (
-        <EmptyState icon={Inbox} title="No bills" description="No bills match your filters." />
+        <EmptyState
+          title={filtered ? 'No bills match' : 'No open bills'}
+          description={
+            filtered
+              ? 'Try another status tab or clear the search.'
+              : 'Add a bill with New bill, auto-file one from a PDF, or email it to the AP inbox above.'
+          }
+          action={filtered ? { label: 'Show all open bills', onClick: () => { setActiveTab('all'); setSearch(''); } } : undefined}
+        />
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Bill #</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Vendor</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Approver</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Due</th>
-                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
-                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Balance</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
-                <th className="w-8" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {bills.map((bill) => {
-                const vendorName = bill.vendor?.display_name ?? bill.vendor?.name ?? 'Unknown';
-                const hasComplianceIssue = bill.compliance && (bill.compliance.missing.length > 0 || bill.compliance.hasHold);
-                const isOverdue = bill.daysUntilDue !== null && bill.daysUntilDue < 0;
-                const isDueSoon = bill.daysUntilDue !== null && bill.daysUntilDue >= 0 && bill.daysUntilDue <= 7;
+        <div>
+          <div className={s.tableWrap}>
+            <table className="tbl tbl-q" aria-label="Bills">
+              <colgroup>
+                <col style={{ width: 132 }} />
+                <col />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 156 }} />
+                <col style={{ width: 168 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 48 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Bill #</th>
+                  <th scope="col">Vendor</th>
+                  <th scope="col">Company</th>
+                  <th scope="col">Approver</th>
+                  <th scope="col">Due</th>
+                  <th scope="col" className="n">Amount</th>
+                  <th scope="col" className="n">Balance</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span className="sr">Open</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {bills.map((bill, i) => {
+                  const vendorName = bill.vendor?.display_name ?? bill.vendor?.name ?? 'Unknown vendor';
+                  const hasComplianceIssue = !!bill.compliance && (bill.compliance.missing.length > 0 || bill.compliance.hasHold);
+                  const isOverdue = bill.daysUntilDue !== null && bill.daysUntilDue < 0;
+                  const isDueSoon = bill.daysUntilDue !== null && bill.daysUntilDue >= 0 && bill.daysUntilDue <= 7;
+                  const { ref, 'data-active': active } = rowProps(i);
+                  const ccy = bill.currency ?? homeCurrency;
 
-                return (
-                  <tr
-                    key={bill.id}
-                    {...rowHandlers(bill)}
-                    onClick={() => setSelectedId(bill.id)}
-                    className="row-clickable"
-                  >
-                    <td className="px-4 py-3">
-                      <span className="text-sm font-mono text-slate-300">{bill.bill_number ?? '--'}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-slate-200">{vendorName}</span>
-                        {bill.jobLines > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-brand-500/10 text-brand-400" title={`${bill.jobLines} job-tagged line(s)`}>
-                            <Briefcase size={10} /> {bill.jobLines}
-                          </span>
+                  return (
+                    <tr
+                      key={bill.id}
+                      ref={ref}
+                      {...rowHandlers(bill)}
+                      onClick={() => { setActiveIndex(i); setSelectedId(bill.id); }}
+                      className={cx('q-row', active && 'is-cursor', (hasComplianceIssue || isOverdue) && 'is-attn')}
+                      aria-current={active ? 'true' : undefined}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td className="tnum">{bill.bill_number ?? '—'}</td>
+                      <td>
+                        <div className={s.cellRow}>
+                          <span className="l1">{vendorName}</span>
+                          {bill.jobLines > 0 && (
+                            <Tag tone="ai" title={`${bill.jobLines} job-tagged line(s)`}>
+                              <span className="tnum">{bill.jobLines}</span> job
+                            </Tag>
+                          )}
+                          {hasComplianceIssue && (
+                            <Tag tone="neg" title={bill.compliance?.missing.join(', ') || 'Payment hold'}>
+                              {bill.compliance?.hasHold ? 'Hold' : 'Docs missing'}
+                            </Tag>
+                          )}
+                          {bill.vendor?.is_1099_eligible && <Tag>1099</Tag>}
+                        </div>
+                      </td>
+                      <td>
+                        {bill.location ? <Tag title={bill.location.name}>{bill.location.short_code}</Tag> : <span className="ink-3">—</span>}
+                      </td>
+                      <td>
+                        {bill.approver_type ? (
+                          <span className="ink-2">{APPROVER_LABEL[bill.approver_type] ?? bill.approver_type}</span>
+                        ) : (
+                          <span className="ink-3">—</span>
                         )}
-                        {hasComplianceIssue && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium bg-red-500/10 text-red-400"
-                            title={bill.compliance?.missing.join(', ') ?? 'Payment hold'}
-                          >
-                            <ShieldAlert size={10} />
-                            {bill.compliance?.hasHold ? 'HOLD' : 'Docs'}
-                          </span>
-                        )}
-                        {bill.vendor?.is_1099_eligible && (
-                          <span className="text-2xs text-slate-600 font-mono">1099</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {bill.location ? (
-                        <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
-                          {bill.location.short_code}
+                      </td>
+                      <td>
+                        <span className={s.due}>
+                          <span className="tnum">{bill.due_date}</span>
+                          {isOverdue && (
+                            <Status kind="overdue">{Math.abs(bill.daysUntilDue ?? 0)}d late</Status>
+                          )}
+                          {isDueSoon && !isOverdue && <Status kind="risk">Soon</Status>}
                         </span>
-                      ) : '--'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {bill.approver_type ? (
-                        <span className="inline-flex items-center gap-1 text-2xs text-slate-400">
-                          <UserCheck size={11} className="text-slate-500" />
-                          {APPROVER_LABEL[bill.approver_type] ?? bill.approver_type}
+                      </td>
+                      <td className="n">
+                        <span className={s.due}>
+                          <CurrencyTag code={bill.currency} homeCurrency={homeCurrency} onlyForeign />
+                          {formatMoney(bill.total_cents, { currency: ccy })}
                         </span>
-                      ) : (
-                        <span className="text-2xs text-slate-600">--</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className={clsx(
-                          'text-sm font-mono tabular-nums',
-                          isOverdue ? 'text-red-400' : isDueSoon ? 'text-amber-400' : 'text-slate-400'
-                        )}>
-                          {bill.due_date}
-                        </span>
-                        {isOverdue && (
-                          <span className="text-2xs text-red-400 font-medium">
-                            {Math.abs(bill.daysUntilDue!)}d late
-                          </span>
-                        )}
-                        {isDueSoon && !isOverdue && (
-                          <Clock size={10} className="text-amber-400" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-200">
-                      <span className="inline-flex items-center justify-end gap-1.5">
-                        <CurrencyTag code={bill.currency} homeCurrency={homeCurrency} onlyForeign />
-                        {formatMoney(bill.total_cents, { currency: bill.currency ?? homeCurrency })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={clsx(
-                        'text-sm font-mono tabular-nums font-medium',
-                        bill.balance_cents > 0 ? 'text-slate-200' : 'text-emerald-400'
-                      )}>
-                        {formatMoney(bill.balance_cents, { currency: bill.currency ?? homeCurrency })}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge status={bill.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <ChevronRight size={14} className="row-chevron inline" />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="n">{formatMoney(bill.balance_cents, { currency: ccy })}</td>
+                      <td><StatusBadge status={bill.status} /></td>
+                      <td className="n ink-3" aria-hidden="true"><Icon name="right" /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           {pagination && (
             <ListPager
               page={pagination.page}
@@ -283,6 +292,14 @@ export function BillList() {
               isLoading={isLoading}
             />
           )}
+          <Keyhints
+            className={s.hints}
+            hints={[
+              { chord: 'j k', label: 'Move' },
+              { chord: 'enter', label: 'Open bill' },
+              { chord: '/', label: 'Search' },
+            ]}
+          />
         </div>
       )}
 

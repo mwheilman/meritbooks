@@ -8,7 +8,7 @@
  * current version and publishing the new one can't be half-done.
  */
 import { growSeries, latestEstimate, MONTHS } from '../generators';
-import { BudgetError, checkVersionAction, defaultLabel, nextVersionNumber, type VersionAction } from '../lifecycle';
+import { BudgetError, checkVersionAction, defaultLabel, nextVersionNumber, openDepartmentCount, type VersionAction } from '../lifecycle';
 import { canSeeDepartment } from '../scope';
 import type { BudgetVersion, CompareResponse, CompareRow, VersionBasis, VersionKind } from '../types';
 import { loadActualCells, naturalOf } from './actuals';
@@ -245,7 +245,7 @@ export async function transitionVersion(
   } else {
     requireFinance(ctx);
   }
-  const plans = await loadPlans(ctx.reader, v.id);
+  const [plans, versionLines] = await Promise.all([loadPlans(ctx.reader, v.id), loadLines(ctx.reader, v.id)]);
   const versions = await listVersions(ctx.reader, v.locationId, v.fiscalYear);
   const current = versions.find((x) => x.isCurrent && x.id !== v.id) ?? null;
   if (action === 'delete' && v.isCurrent) {
@@ -258,7 +258,7 @@ export async function transitionVersion(
     actor: ctx.userId,
     submittedBy: v.submittedBy,
     createdBy: v.createdBy,
-    openPlans: plans.filter((p) => p.status !== 'APPROVED').length,
+    openPlans: openDepartmentCount(plans, versionLines.map((l) => l.departmentId)),
     currentIsLockedOther: current?.status === 'LOCKED',
     isCurrent: v.isCurrent,
     note: opts.note ?? null,

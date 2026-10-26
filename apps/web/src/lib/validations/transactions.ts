@@ -95,6 +95,8 @@ export const createBillSchema = z.object({
     amount_cents: z.number().int(),
     job_id: z.string().uuid().optional().nullable(),
     cost_type: costTypeSchema.optional(),
+    /** Projects commitment line (public.ap_commitment_lines.id) this line bills against (migration 194). */
+    commitment_line_id: z.string().uuid().optional().nullable(),
   })).min(1, 'Bill must have at least one line'),
   tax_cents: z.number().int().min(0).default(0),
   retainage_pct: z.number().min(0).max(100).default(0),

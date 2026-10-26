@@ -24,7 +24,9 @@
 
 import { z } from 'zod';
 import { formatMoney, pct } from '@meritbooks/shared';
-import { formatMarginPct } from '@/lib/reports/percent';
+import { formatMarginPct, NO_PCT } from '@/lib/reports/percent';
+import { formatRatio } from '@/lib/format/ratio';
+import { formatCompactMoney } from '@/lib/format/money';
 import { formatIsoDateLong, isIsoDate } from '@/lib/dates/org-date';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -252,6 +254,12 @@ export interface KpiInputs {
   debt: DebtPayload;
   /** Reporting-period length in days — enables DSO/DPO. Null/absent → not computed. */
   periodDays?: number | null;
+  /**
+   * AR / AP control-account balances per the GL (lib/reports/control-balances.ts) — THE
+   * receivables / payables figures, tying to the balance sheet. When absent (older callers,
+   * tests) the subledger aging totals are used.
+   */
+  control?: { arCents: number; apCents: number } | null;
 }
 
 export function computeKpis(input: KpiInputs): KpiSummary {
@@ -275,8 +283,8 @@ export function computeKpis(input: KpiInputs): KpiSummary {
     bs.totalEquityCents !== 0 ? pct(s.netIncomeCents, bs.totalEquityCents) : null;
 
   const cashCents = input.cashFlow.endingCashCents;
-  const arCents = input.arAging.totalOutstanding;
-  const apCents = input.apAging.totalOutstanding;
+  const arCents = input.control?.arCents ?? input.arAging.totalOutstanding;
+  const apCents = input.control?.apCents ?? input.apAging.totalOutstanding;
 
   // DSO/DPO — activity ratios, only when a period length and the relevant
   // income-statement denominator (revenue for DSO, COGS for DPO) are present.
@@ -362,7 +370,7 @@ export function computeKpis(input: KpiInputs): KpiSummary {
       key: 'current_ratio',
       label: 'Current Ratio',
       kind: 'ratio',
-      valueText: currentRatio != null ? `${currentRatio.toFixed(2)}x` : 'n/a',
+      valueText: currentRatio != null ? formatRatio(currentRatio) : 'n/a',
       favorable: currentRatio != null ? currentRatio >= 1 : null,
       hint: workingCapital != null ? `${formatMoney(workingCapital)} working capital` : undefined,
     },
@@ -370,7 +378,7 @@ export function computeKpis(input: KpiInputs): KpiSummary {
       key: 'debt_to_equity',
       label: 'Debt / Equity',
       kind: 'ratio',
-      valueText: debtToEquity != null ? `${debtToEquity.toFixed(2)}x` : 'n/a',
+      valueText: debtToEquity != null ? formatRatio(debtToEquity) : 'n/a',
       favorable: debtToEquity != null ? debtToEquity <= 2 : null,
     },
     {
@@ -547,10 +555,10 @@ export function buildKpiTrend(series: TrendPoint[]): KpiTrend {
     get: (p: TrendPoint) => number;
     fmt: (v: number) => string;
   }> = [
-    { key: 'revenue', label: 'Revenue', kind: 'money', get: (p) => p.revenueCents, fmt: (v) => formatMoney(v, { compact: true }) },
+    { key: 'revenue', label: 'Revenue', kind: 'money', get: (p) => p.revenueCents, fmt: (v) => formatCompactMoney(v) },
     { key: 'gross_margin', label: 'Gross Margin', kind: 'pct', get: (p) => p.grossMarginPct, fmt: (v) => `${v}%` },
-    { key: 'net_income', label: 'Net Income', kind: 'money', get: (p) => p.netIncomeCents, fmt: (v) => formatMoney(v, { compact: true }) },
-    { key: 'cash', label: 'Cash', kind: 'money', get: (p) => p.endingCashCents, fmt: (v) => formatMoney(v, { compact: true }) },
+    { key: 'net_income', label: 'Net Income', kind: 'money', get: (p) => p.netIncomeCents, fmt: (v) => formatCompactMoney(v) },
+    { key: 'cash', label: 'Cash', kind: 'money', get: (p) => p.endingCashCents, fmt: (v) => formatCompactMoney(v) },
   ];
 
   const metrics: TrendMetric[] = defs.map((d) => {
@@ -614,8 +622,8 @@ export function buildMdna(input: {
     id: 'results_of_operations',
     heading: 'Results of Operations',
     paragraphs: [
-      `For ${input.periodLabel}, ${input.entityLabel} recorded revenue of ${formatMoney(k.revenueCents)}, which ${trendWord(k.deltas.revenuePct)}${vs}. Gross profit was ${formatMoney(k.grossProfitCents)}, a ${formatMarginPct(k.grossMarginPct, k.revenueCents)} gross margin, and ${trendWord(k.deltas.grossProfitPct)} against the prior period.`,
-      `Operating income was ${formatMoney(k.operatingIncomeCents)}. Net income ${trendWord(k.deltas.netIncomePct)} to ${formatMoney(k.netIncomeCents)}, representing a ${formatMarginPct(k.netMarginPct, k.revenueCents)} net margin.`,
+      `For ${input.periodLabel}, ${input.entityLabel} recorded revenue of ${formatMoney(k.revenueCents)}, which ${trendWord(k.deltas.revenuePct)}${vs}. Gross profit was ${formatMoney(k.grossProfitCents)}${marginClause(k.grossMarginPct, k.revenueCents, 'gross margin', ', a')}, and ${trendWord(k.deltas.grossProfitPct)} against the prior period.`,
+      `Operating income was ${formatMoney(k.operatingIncomeCents)}. Net income ${trendWord(k.deltas.netIncomePct)} to ${formatMoney(k.netIncomeCents)}${marginClause(k.netMarginPct, k.revenueCents, 'net margin', ', representing a')}.`,
     ],
     bullets: [],
   });
@@ -639,7 +647,7 @@ export function buildMdna(input: {
   const cashDir = k.netChangeInCashCents >= 0 ? 'increased' : 'decreased';
   const liq =
     k.currentRatio != null
-      ? `The current ratio stood at ${k.currentRatio.toFixed(2)}x`
+      ? `The current ratio stood at ${formatRatio(k.currentRatio)}`
       : 'A current ratio was not derivable from the chart of accounts';
   const wc = k.workingCapitalCents != null ? `, on working capital of ${formatMoney(k.workingCapitalCents)}` : '';
   blocks.push({
@@ -647,7 +655,7 @@ export function buildMdna(input: {
     heading: 'Liquidity & Capital Resources',
     paragraphs: [
       `Cash and equivalents ${cashDir} ${formatMoney(Math.abs(k.netChangeInCashCents))} during the period, ending at ${formatMoney(k.cashCents)}. ${liq}${wc}.`,
-      `Total debt was ${formatMoney(k.totalDebtCents)} at a ${k.weightedAvgRatePct}% weighted-average rate, carrying ${formatMoney(k.annualDebtServiceCents)} of annualized debt service; debt-to-equity was ${k.debtToEquity != null ? `${k.debtToEquity.toFixed(2)}x` : 'not derivable'}.`,
+      `Total debt was ${formatMoney(k.totalDebtCents)} at a ${k.weightedAvgRatePct}% weighted-average rate, carrying ${formatMoney(k.annualDebtServiceCents)} of annualized debt service; debt-to-equity was ${k.debtToEquity != null ? formatRatio(k.debtToEquity) : 'not derivable'}.`,
     ],
     bullets: [],
   });
@@ -713,6 +721,8 @@ export function buildBoardNotes(input: {
   evaluatedThrough?: string | null;
   /** Org timezone, used when only `generatedAt` (an instant) is available. */
   timeZone?: string | null;
+  /** GL control balances (the KPI AR / AP) — when given, a subledger gap is named. */
+  kpis?: Pick<KpiSummary, 'arCents' | 'apCents'> | null;
 }): BoardNotes {
   const notes: NoteSection[] = [];
 
@@ -772,8 +782,9 @@ export function buildBoardNotes(input: {
     id: 'receivables',
     title: 'Note 4 — Accounts Receivable',
     body: [
-      `Gross trade receivables outstanding totaled ${formatMoney(arTotal)} as of the reporting date, of which ${formatMoney(arPastDue)} (${pct(arPastDue, arTotal)}%) was past due.`,
-      `Trade payables outstanding totaled ${formatMoney(input.apAging.totalOutstanding)}.`,
+      `Open customer invoices (the receivables subledger) totaled ${formatMoney(arTotal)} as of the reporting date, of which ${formatMoney(arPastDue)} (${pct(arPastDue, arTotal)}%) was past due.`,
+      `Open vendor bills (the payables subledger) totaled ${formatMoney(input.apAging.totalOutstanding)}.`,
+      ...(input.kpis ? subledgerTieNotes(input.kpis, arTotal, input.apAging.totalOutstanding) : []),
     ],
     table: {
       columns: ['Aging bucket', 'Count', 'Amount'],
@@ -813,6 +824,31 @@ export function buildBoardNotes(input: {
 // Executive summary (AI phrases; deterministic fallback always truthful)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * " at 12.5% gross margin" — or nothing when the margin is not meaningful (no revenue), so no
+ * summary ever prints a "—" placeholder where a margin should be.
+ */
+export function marginClause(marginPct: number | null | undefined, revenueCents: number, noun: string, lead = ' at'): string {
+  const m = formatMarginPct(marginPct, revenueCents);
+  return m === NO_PCT ? '' : `${lead} ${m} ${noun}`;
+}
+
+/** " (12.5% margin)" or nothing. */
+function marginParen(marginPct: number | null | undefined, revenueCents: number): string {
+  const m = formatMarginPct(marginPct, revenueCents);
+  return m === NO_PCT ? '' : ` (${m} margin)`;
+}
+
+/** Name any gap between the GL control balances (the KPI figures) and the open-item subledgers. */
+export function subledgerTieNotes(k: Pick<KpiSummary, 'arCents' | 'apCents'>, arSubledgerCents: number, apSubledgerCents: number): string[] {
+  const out: string[] = [];
+  const dAr = arSubledgerCents - k.arCents;
+  const dAp = apSubledgerCents - k.apCents;
+  if (dAr !== 0) out.push(`Accounts receivable per the general ledger is ${formatMoney(k.arCents)}; open invoices differ by ${formatMoney(Math.abs(dAr))} (${dAr > 0 ? 'more' : 'less'} than the ledger) and should be reconciled.`);
+  if (dAp !== 0) out.push(`Accounts payable per the general ledger is ${formatMoney(k.apCents)}; open bills differ by ${formatMoney(Math.abs(dAp))} (${dAp > 0 ? 'more' : 'less'} than the ledger) and should be reconciled.`);
+  return out;
+}
+
 export const EXEC_SUMMARY_FEATURE = 'BOARD_NARRATIVE';
 
 const withDelta = (label: string, cents: number, deltaPctVal: number | null): string =>
@@ -826,14 +862,15 @@ export function buildExecutiveSummaryFacts(k: KpiSummary, entityLabel: string, p
     `Entity: ${entityLabel}`,
     `Period: ${periodLabel}`,
     withDelta('Revenue:', k.revenueCents, k.deltas.revenuePct),
-    withDelta('Gross profit:', k.grossProfitCents, k.deltas.grossProfitPct) + ` at ${formatMarginPct(k.grossMarginPct, k.revenueCents)} gross margin`,
+    withDelta('Gross profit:', k.grossProfitCents, k.deltas.grossProfitPct) + marginClause(k.grossMarginPct, k.revenueCents, 'gross margin'),
     `Operating income: ${formatMoney(k.operatingIncomeCents)}`,
-    withDelta('Net income:', k.netIncomeCents, k.deltas.netIncomePct) + ` at ${formatMarginPct(k.netMarginPct, k.revenueCents)} net margin`,
+    withDelta('Net income:', k.netIncomeCents, k.deltas.netIncomePct) + marginClause(k.netMarginPct, k.revenueCents, 'net margin'),
+    ...(k.revenueCents === 0 ? ['Margins: not meaningful (no revenue in the period); do not state a margin'] : []),
     `Cash & equivalents: ${formatMoney(k.cashCents)} (net change ${formatMoney(k.netChangeInCashCents, { showSign: true })})`,
     `Accounts receivable: ${formatMoney(k.arCents)}; accounts payable: ${formatMoney(k.apCents)}`,
     `Total assets ${formatMoney(k.totalAssetsCents)}; total liabilities ${formatMoney(k.totalLiabilitiesCents)}; total equity ${formatMoney(k.totalEquityCents)}`,
-    k.currentRatio != null ? `Current ratio: ${k.currentRatio.toFixed(2)}x` : 'Current ratio: not determinable from the COA',
-    k.debtToEquity != null ? `Debt-to-equity: ${k.debtToEquity.toFixed(2)}x` : 'Debt-to-equity: not determinable',
+    k.currentRatio != null ? `Current ratio: ${formatRatio(k.currentRatio)}` : 'Current ratio: not determinable from the COA',
+    k.debtToEquity != null ? `Debt-to-equity: ${formatRatio(k.debtToEquity)}` : 'Debt-to-equity: not determinable',
     `Total debt: ${formatMoney(k.totalDebtCents)} at ${k.weightedAvgRatePct}% weighted-average rate; annual debt service ${formatMoney(k.annualDebtServiceCents)}`,
   ];
   return lines.join('\n');
@@ -852,13 +889,13 @@ export function deterministicExecutiveSummary(k: KpiSummary, entityLabel: string
   const revMove =
     k.deltas.revenuePct == null ? '' : ` (${k.deltas.revenuePct > 0 ? 'up' : k.deltas.revenuePct < 0 ? 'down' : 'flat'} ${Math.abs(k.deltas.revenuePct)}% vs the prior period)`;
   parts.push(
-    `For ${periodLabel}, ${entityLabel} generated revenue of ${formatMoney(k.revenueCents)}${revMove}, producing gross profit of ${formatMoney(k.grossProfitCents)} (${formatMarginPct(k.grossMarginPct, k.revenueCents)} margin) and net income of ${formatMoney(k.netIncomeCents)} (${formatMarginPct(k.netMarginPct, k.revenueCents)} margin).`,
+    `For ${periodLabel}, ${entityLabel} generated revenue of ${formatMoney(k.revenueCents)}${revMove}, producing gross profit of ${formatMoney(k.grossProfitCents)}${marginParen(k.grossMarginPct, k.revenueCents)} and net income of ${formatMoney(k.netIncomeCents)}${marginParen(k.netMarginPct, k.revenueCents)}.`,
   );
   parts.push(
     `Cash and equivalents ended the period at ${formatMoney(k.cashCents)}, a net ${k.netChangeInCashCents >= 0 ? 'increase' : 'decrease'} of ${formatMoney(Math.abs(k.netChangeInCashCents))}; receivables stood at ${formatMoney(k.arCents)} and payables at ${formatMoney(k.apCents)}.`,
   );
-  const liq = k.currentRatio != null ? `a current ratio of ${k.currentRatio.toFixed(2)}x` : 'liquidity ratios not derivable from the chart of accounts';
-  const lev = k.debtToEquity != null ? `debt-to-equity of ${k.debtToEquity.toFixed(2)}x` : 'debt-to-equity not derivable';
+  const liq = k.currentRatio != null ? `a current ratio of ${formatRatio(k.currentRatio)}` : 'liquidity ratios not derivable from the chart of accounts';
+  const lev = k.debtToEquity != null ? `debt-to-equity of ${formatRatio(k.debtToEquity)}` : 'debt-to-equity not derivable';
   parts.push(
     `The balance sheet shows total assets of ${formatMoney(k.totalAssetsCents)} against total equity of ${formatMoney(k.totalEquityCents)}, with ${liq} and ${lev}. Total debt of ${formatMoney(k.totalDebtCents)} carries a ${k.weightedAvgRatePct}% weighted-average rate.`,
   );
@@ -942,6 +979,8 @@ export interface AssembleInput {
   priorPeriodLabel?: string | null;
   /** Trailing multi-period series that powers the KPI trend strip. */
   trendSeries?: TrendPoint[];
+  /** GL AR / AP control balances (lib/reports/control-balances.ts) — THE receivables / payables. */
+  control?: { arCents: number; apCents: number } | null;
 }
 
 export function assembleBoardPackage(input: AssembleInput): BoardPackage {
@@ -954,6 +993,7 @@ export function assembleBoardPackage(input: AssembleInput): BoardPackage {
     apAging: input.apAging,
     debt: input.debt,
     periodDays: input.periodDays ?? null,
+    control: input.control ?? null,
   });
 
   const variances = computeVariances(input.currentIS, input.priorIS ?? null);
@@ -990,6 +1030,7 @@ export function assembleBoardPackage(input: AssembleInput): BoardPackage {
     basisLabel: input.meta.basisLabel,
     evaluatedThrough: input.meta.evaluatedThrough ?? null,
     timeZone: input.meta.timeZone ?? null,
+    kpis,
   });
 
   return {

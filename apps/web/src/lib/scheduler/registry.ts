@@ -41,6 +41,9 @@ import { NOTIFICATIONS_DIGEST_JOB } from './jobs/digest';
 // Wave 2 sibling slices (2A vendor W-9/COI, 2B receipts) export their own definitions.
 import { RECEIPTS_CHASE_SYNC_JOB, RECEIPTS_DIGEST_JOB } from './jobs/receipts-chase';
 import { VENDOR_AI_RECHECK_JOB } from './jobs/vendor-compliance-recheck';
+// Wave 4: cash forecast accuracy snapshots (mig 192) and the Merit Projects seam cycle (mig 194).
+import { CASH_FORECAST_SNAPSHOT_JOB } from '@/lib/cash/forecast/snapshot-job';
+import { PROJECTS_SEAM_JOB } from './jobs/projects-seam-jobs';
 import {
   SCHEDULED_DEPRECIATION_FEATURE,
   SCHEDULED_EVENT_DRAIN_FEATURE,
@@ -376,6 +379,9 @@ export const JOBS: readonly JobDefinition[] = [
   RECEIPTS_CHASE_SYNC_JOB,
   RECEIPTS_DIGEST_JOB,
   VENDOR_AI_RECHECK_JOB,
+  // Wave 4
+  CASH_FORECAST_SNAPSHOT_JOB,
+  PROJECTS_SEAM_JOB,
 
   // ── stubs: named in IA §6, not built yet (never run) ───────────────────────
   stub('connectors.sync', 'Connected-system sync', '*/30 * * * *', 'Integrations (07-INTEGRATIONS-PLAN Phase 0)', 'int.sync_runs',

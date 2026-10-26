@@ -2,7 +2,7 @@
  * Display helpers for the department-budget workspace (Wave 4B). Pure; no React.
  */
 import type { BridgeStep as ChartBridgeStep } from '@/components/charts';
-import type { BridgeOut, PlanStatus, VersionStatus } from '@/lib/budgets/types';
+import type { BoardStatus, BridgeOut, VersionStatus } from '@/lib/budgets/types';
 
 export const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] as const;
 
@@ -17,9 +17,10 @@ export function versionTone(s: VersionStatus): 'default' | 'pos' | 'warn' | 'sol
   }
 }
 
-/** Status pip kind for a department plan. */
-export function planKind(s: PlanStatus, overdue: boolean): 'ready' | 'track' | 'risk' | 'overdue' | 'blocked' {
+/** Status pip kind for a department plan; null = no department review in this version (plain text, no pip). */
+export function planKind(s: BoardStatus, overdue: boolean): 'ready' | 'track' | 'risk' | 'overdue' | 'blocked' | null {
   if (s === 'APPROVED') return 'ready';
+  if (s === 'NOT_IN_VERSION' || s === 'NO_REVIEW') return null;
   if (overdue) return 'overdue';
   if (s === 'RETURNED') return 'risk';
   if (s === 'SUBMITTED') return 'track';
@@ -86,11 +87,32 @@ export function monthOptions(): Array<{ value: number; label: string }> {
 }
 
 /** The default month for a department view: last closed-ish month of the year. */
-export function defaultMonth(fiscalYear: number, today = new Date()): number {
+/**
+ * The last month a "Through" picker may offer for a fiscal year (calendar-year budgets): a past
+ * year → 12, the current year → this month, a year that hasn't started → 0 (nothing selectable).
+ */
+export function maxThroughMonth(fiscalYear: number, today = new Date()): number {
   const y = today.getFullYear();
   if (fiscalYear < y) return 12;
-  if (fiscalYear > y) return 1;
-  return Math.max(1, today.getMonth()); // last full month
+  if (fiscalYear > y) return 0;
+  return today.getMonth() + 1;
+}
+
+/**
+ * The month a budget-vs-actual view opens "through" — never in the future:
+ *  - a year that hasn't started → null (there are no actuals; the view says so);
+ *  - the current year → the last full month (January: January), pulled back to the latest
+ *    month that has actuals when the books stop earlier;
+ *  - a past year → the latest month with actuals, else December.
+ * `latestActualMonth` is 1–12 within the fiscal year, or null when unknown / none.
+ */
+export function defaultMonth(fiscalYear: number, today = new Date(), latestActualMonth: number | null = null): number | null {
+  const max = maxThroughMonth(fiscalYear, today);
+  if (max === 0) return null;
+  const actual = latestActualMonth !== null && latestActualMonth >= 1 && latestActualMonth <= 12 ? latestActualMonth : null;
+  if (fiscalYear < today.getFullYear()) return actual ?? 12;
+  const lastFull = Math.max(1, max - 1);
+  return actual !== null ? Math.min(lastFull, actual) : lastFull;
 }
 
 export function fiscalYears(today = new Date()): number[] {

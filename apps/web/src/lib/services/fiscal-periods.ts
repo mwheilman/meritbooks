@@ -15,7 +15,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { scopedWriter } from '@/lib/db/scoped-writer';
+import { scopedWriter, serviceWriter } from '@/lib/db/scoped-writer';
 
 type DB = SupabaseClient;
 
@@ -116,6 +116,28 @@ export async function generateYear(
   return { locationId, created: rows.length, skipped: have.size };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * fiscal_periods.closed_by is a UUID (migration 004; verified live) — the closer's core.users.id.
+ * Callers hold the Clerk user id (`user_…`), which the column rejects ("invalid input syntax for
+ * type uuid"), so every HARD_CLOSE through setPeriodStatus failed. Resolve the Clerk id to
+ * core.users.id (service-role read, the identity spine), pass a uuid through, else null — the
+ * Clerk id itself is recorded by the caller's audit event (logHumanAction / onboarding logEvent).
+ */
+export async function closerUserUuid(actor: string | null | undefined, reader?: DB | null): Promise<string | null> {
+  const a = (actor ?? '').trim();
+  if (!a) return null;
+  if (UUID_RE.test(a)) return a;
+  try {
+    const { data } = await (reader ?? serviceWriter()).schema('core').from('users').select('id').eq('clerk_user_id', a).maybeSingle();
+    const id = (data as { id?: string } | null)?.id;
+    return id && UUID_RE.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Transition a period's status. Reopening a HARD_CLOSE requires a reason. */
 export async function setPeriodStatus(
   db: DB,
@@ -124,7 +146,7 @@ export async function setPeriodStatus(
   status: PeriodStatus,
   actor: string,
   reason: string | null,
-  opts: { writer?: DB } = {},
+  opts: { writer?: DB; userReader?: DB | null } = {},
 ): Promise<void> {
   const { data: current } = await db
     .from('fiscal_periods')
@@ -144,7 +166,7 @@ export async function setPeriodStatus(
   const update: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
   if (status === 'HARD_CLOSE') {
     update.closed_at = new Date().toISOString();
-    update.closed_by = actor;
+    update.closed_by = await closerUserUuid(actor, opts.userReader ?? opts.writer ?? null);
   } else {
     update.closed_at = null;
     update.closed_by = null;

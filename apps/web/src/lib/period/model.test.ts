@@ -79,7 +79,7 @@ describe('summarizeClose', () => {
   });
   it('a company with nothing hard-closed → null; empty → null', () => {
     expect(summarizeClose([...rows('a', [[2026, 1, 'HARD_CLOSE']]), ...rows('b', [[2026, 1, 'OPEN']])]).closedThrough).toBeNull();
-    expect(summarizeClose([])).toEqual({ closedThrough: null, months: {}, companies: 0 });
+    expect(summarizeClose([])).toEqual({ closedThrough: null, months: {}, companies: 0, openBefore: [] });
   });
 });
 

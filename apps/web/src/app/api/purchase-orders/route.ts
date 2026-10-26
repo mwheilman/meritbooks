@@ -7,6 +7,7 @@ import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { logHumanAction } from '@/lib/trust/action-log';
 import { assertOrgRefs, assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
+import { jobPoBlock } from '@/lib/projects-seam/job-po-block';
 
 /**
  * AP Purchase Orders (GATE 11b, migration 080) — general (non-job) vendor
@@ -136,6 +137,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Validation failed', code: 'VALIDATION_ERROR', details }, { status: 422 });
   }
   const body: CreateBody = parsed.data;
+
+  // G14 (migration 194): when the client uses Merit Projects, Projects owns job purchase
+  // orders (commitments). A job-tagged Books PO is refused with a pointer to Projects; non-job
+  // POs are unaffected. The DB trigger guard_job_po_projects enforces the same rule.
+  const block = await jobPoBlock(supabase as unknown as SupabaseClient, orgId, body.lines.map((l) => l.job_id ?? null));
+  if (block) return NextResponse.json(block, { status: 409 });
 
   const orderDate = body.order_date ?? new Date().toISOString().slice(0, 10);
   const subtotalCents = body.lines.reduce(

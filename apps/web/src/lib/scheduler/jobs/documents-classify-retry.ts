@@ -59,7 +59,11 @@ export const DOCUMENTS_CLASSIFY_RETRY_JOB: JobDefinition = {
   ownerCapability: 'audit_trail',
   owner: 'Document intelligence (FPB-document-intelligence)',
   postsToGl: false,
-  timeoutMs: 240_000,
+  // MUST stay well under the scheduler tick budget (dispatch.ts TICK_BUDGET_MS = 240 s): a unit
+  // only starts while `budget left ≥ timeoutMs`, so at 240 s this job was deferred on EVERY tick
+  // and never ran — stored documents stayed "Not analyzed". 150 s leaves room for the tick's
+  // own reads and the units ahead of it; the sweep stops early on ctx.signal anyway.
+  timeoutMs: 150_000,
   maxLatenessMinutes: 60,
   maxAttempts: 3,
   run: (ctx) => runDocumentsClassifyRetryJob(ctx),

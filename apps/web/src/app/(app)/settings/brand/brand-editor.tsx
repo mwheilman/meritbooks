@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { Button, Eyebrow, InlineNotice, Input, Seg, Switch } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks';
 import { onColorFor, ratioLabel } from '@/lib/branding/color';
-import { fixPalette, suggestPalettes, PALETTE_ROLES, type BrandPalette, type PaletteRole, type SuggestedPalette } from '@/lib/branding/palette';
+import { contrastVerdict, fixPalette, suggestPalettes, PALETTE_ROLES, type BrandPalette, type PaletteRole, type SuggestedPalette } from '@/lib/branding/palette';
 import { draftReport, paletteErrors, type BrandDraft } from '@/lib/branding/draft';
 import { BRAND_FONTS, BRAND_FONT_LABELS, BRAND_FONT_STACKS, type LogoSlot, type ResolvedBrand } from '@/lib/branding/types';
 import { extractFromFile, extractFromUrl } from './logo-colors';
@@ -264,7 +264,7 @@ export function BrandEditor({ kind, scopeName, locationId, draft, onChange, tena
                   {!valid
                     ? errs[role]
                     : checks.length
-                      ? checks.map((c) => `${ratioLabel(c.ratio)} ${c.id.endsWith('white') ? 'on white' : c.id === 'on_primary' ? 'on the brand colour' : 'on the tint'}${c.pass ? ' · passes' : c.required ? ` · needs ${c.min}:1` : ' · low'}`).join(' · ')
+                      ? checks.map((c) => `${ratioLabel(c.ratio)} ${c.id.endsWith('white') ? 'on white' : c.id === 'on_primary' ? 'on the brand colour' : 'on the tint'} · ${contrastVerdict(c)}`).join(' · ')
                       : ROLE_LABEL[role].help}
                 </span>
               </div>

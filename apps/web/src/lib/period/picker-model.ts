@@ -25,6 +25,7 @@ import {
   type PeriodSelection,
   type PresetDef,
 } from './resolve';
+import { lastClosedPresetLabel } from './closed';
 
 export const BASIS_LABELS: Record<PeriodBasis, string> = {
   month: 'Month',
@@ -158,4 +159,9 @@ export function presetMeta(id: PresetDef['id'], ctx: PeriodContext): string {
   if (b.start.slice(0, 4) === b.end.slice(0, 4)) return rangeName(b.start, b.end);
   const short = (k: MonthKey) => `${monthShort(k)} ’${k.slice(2, 4)}`;
   return `${short(b.start)}–${short(b.end)}`;
+}
+
+/** A preset's name today — "Last 12 closed months" only when a month is actually closed. */
+export function presetLabel(p: PresetDef, ctx: PeriodContext): string {
+  return p.id === 'last_12_closed' ? lastClosedPresetLabel(ctx.closedThrough) : p.label;
 }

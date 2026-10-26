@@ -1,0 +1,199 @@
+/* Recurring JE builder (kit Dialog) — layout only, kit tokens only. Mirrors the
+   /journal-entries entry-form idioms (je.module.css) so both grids read the same. */
+
+/* Wide dialog that scrolls its body, never the page. */
+.dialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 120px);
+}
+
+.dialog > :global(.dialog-body) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.body > * + * {
+  margin-top: var(--s2);
+}
+
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.span2 {
+  grid-column: span 2;
+}
+
+@media (max-width: 1000px) {
+  .grid4 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.optional {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+
+.explain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.explain > p {
+  max-width: 72ch;
+}
+
+/* ── Allocation helper ───────────────────────────────────────────── */
+.alloc {
+  border: 1px solid var(--line-2);
+  border-left: 3px solid var(--electric);
+  background: var(--canvas);
+  padding: 16px;
+}
+
+.alloc > * + * {
+  margin-top: 16px;
+}
+
+.allocHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.allocHead h3 {
+  font: 600 var(--t-13) / var(--lh-13) var(--f-text);
+  color: var(--ink);
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.deptLabel {
+  padding: 0;
+
+  display: block;
+  margin-bottom: 8px;
+}
+
+.depts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(176px, 1fr));
+  gap: 8px 16px;
+}
+
+.allocFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Money input with a $ prefix ─────────────────────────────────── */
+.money {
+  position: relative;
+  display: block;
+}
+
+.money > span {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.money > :global(.input) {
+  width: 100%;
+  padding-left: 22px;
+}
+
+/* ── Lines grid. No overflow clip on wide screens: the account popover
+   must be able to drop below the last line. Narrow screens scroll. ── */
+.lines {
+  border: 1px solid var(--line);
+}
+
+.lines > :global(.tbl) {
+  width: 100%;
+  table-layout: fixed;
+}
+
+@media (max-width: 1100px) {
+  .lines {
+    overflow-x: auto;
+  }
+  .lines > :global(.tbl) {
+    min-width: 880px;
+  }
+}
+
+.lines :global(.tbl) td {
+  vertical-align: top;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lines :global(.tbl) th {
+  padding: 0 8px;
+  height: 40px;
+  background: var(--warm);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.lines :global(.tbl) tr > *:first-child {
+  padding-left: 16px;
+}
+
+.lines :global(.tbl) tr > *:last-child {
+  padding-right: 16px;
+}
+
+.lines :global(.tbl) tfoot td {
+  border-top: 1px solid var(--midnight);
+  border-bottom: 0;
+  font-weight: 600;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.lineNo {
+  display: block;
+  padding-top: 6px;
+  color: var(--ink-3);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}

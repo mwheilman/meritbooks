@@ -66,17 +66,17 @@ const packOf = (...periods: (typeof JUL)[]): ResolvedPack => ({
 function admin(updates: Array<Record<string, unknown>>): SupabaseClient {
   const row = { id: 'pack-1', org_id: 'org-1', name: 'Monthly pack', entity_label: 'Alpha', location_ids: [CO_A], specs: {}, schedule_cadence: 'MONTHLY', recipients: ['lender@bank.example'], next_run_date: '2026-10-24' };
   const base = chainSupabase(() => ({ data: [row], error: null }));
-  return {
-    from: (t: string) => {
-      const q = base.from(t) as unknown as Record<string, unknown>;
-      return new Proxy(q, {
-        get(target, prop) {
-          if (prop === 'update') return (v: Record<string, unknown>) => { updates.push(v); return q; };
-          return (target as Record<string | symbol, unknown>)[prop];
-        },
-      });
-    },
-  } as unknown as SupabaseClient;
+  const from = (t: string) => {
+    const q = base.from(t) as unknown as Record<string, unknown>;
+    return new Proxy(q, {
+      get(target, prop) {
+        if (prop === 'update') return (v: Record<string, unknown>) => { updates.push(v); return q; };
+        return (target as Record<string | symbol, unknown>)[prop];
+      },
+    });
+  };
+  // core.* reads (the H3 creator-scope check): the org's client_scope_rls_mode is unset → 'off'.
+  return { from, schema: () => ({ from }) } as unknown as SupabaseClient;
 }
 
 beforeEach(() => {

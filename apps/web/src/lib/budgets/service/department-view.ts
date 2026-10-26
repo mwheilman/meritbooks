@@ -5,9 +5,10 @@
  */
 import type { MonthKey } from '@/lib/analytics';
 import { isPayrollAccount, groupBridge, pyToBudgetBridge, type PyBudgetRow } from '../bridges';
-import { cellKey, departmentBva, monthKey, priorYearMonths, windowLabel, windowMonths } from '../bva';
+import { cellKey, departmentBva, latestActualMonthOf, monthKey, priorYearMonths, windowLabel, windowMonths } from '../bva';
 import { latestEstimate } from '../generators';
 import { BudgetError } from '../lifecycle';
+import { companyCloseRun } from '@/lib/period/closed';
 import { canSeeDepartment } from '../scope';
 import type { AccountLite, BudgetVersion, BvaWindow, DepartmentViewResponse, GlDrillLine, VarianceNote } from '../types';
 import { drillLines, loadActualCells, naturalOf } from './actuals';
@@ -28,16 +29,27 @@ const lastDay = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).getUTCDate
 const isoStart = (k: MonthKey) => `${k}-01`;
 const isoEnd = (k: MonthKey) => `${k}-${String(lastDay(Number(k.slice(0, 4)), Number(k.slice(5, 7)))).padStart(2, '0')}`;
 
-/** Closed periods (SOFT / HARD close), contiguous from period 1, for one company-year. */
+/**
+ * How many months of `fiscalYear` have locked actuals (SOFT or HARD close) — THE close resolver
+ * (lib/period/closed.ts `companyCloseRun`, SOFT_CLOSE minimum) over the company's whole period
+ * history, clipped to the year. Drives the latest-estimate split (actuals through here, budget after).
+ */
 export async function closedThrough(ctx: BudgetCtx, locationId: string, fiscalYear: number): Promise<number> {
   const rows = must(
-    await ctx.reader.from('fiscal_periods').select('period_month, status').eq('location_id', locationId).eq('period_year', fiscalYear),
+    await ctx.reader.from('fiscal_periods').select('period_year, period_month, status').eq('location_id', locationId).lte('period_year', fiscalYear),
     'fiscal periods',
-  ) as Array<{ period_month: number; status: string }>;
-  const closed = new Set(rows.filter((r) => r.status === 'SOFT_CLOSE' || r.status === 'HARD_CLOSE').map((r) => Number(r.period_month)));
-  let k = 0;
-  while (k < 12 && closed.has(k + 1)) k++;
-  return k;
+  ) as Array<{ period_year: number; period_month: number; status: string }>;
+  const run = companyCloseRun(rows.map((r) => ({ key: monthKey(Number(r.period_year), Number(r.period_month)), status: r.status })), 'SOFT_CLOSE');
+  return lockedMonthsInYear(run.closedThrough, fiscalYear);
+}
+
+/** Months of `year` on or before `through` (0–12). */
+export function lockedMonthsInYear(through: string | null, year: number): number {
+  if (!through) return 0;
+  const y = Number(through.slice(0, 4));
+  if (y < year) return 0;
+  if (y > year) return 12;
+  return Number(through.slice(5, 7));
 }
 
 async function pickVersion(ctx: BudgetCtx, q: DepartmentViewQuery): Promise<{ budget: BudgetVersion | null; forecast: BudgetVersion | null }> {
@@ -227,6 +239,7 @@ export async function getDepartmentView(ctx: BudgetCtx, q: DepartmentViewQuery):
     bridges: { pyToBudget, budgetToActual, budgetToForecast },
     forecastLabel,
     closedThrough: closed > 0 ? shortMonth(q.fiscalYear, closed) : null,
+    latestActualMonth: latestActualMonthOf(actual, fyMonths),
     access: ctx.access,
   };
 }

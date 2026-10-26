@@ -1,10 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { useQuery } from '@/hooks/use-query';
 import { formatMoney } from '@meritbooks/shared';
-import { CurrencyTag, EmptyState } from '@/components/ui';
+import {
+  Button,
+  ButtonLink,
+  Keyhints,
+  Search,
+  Seg,
+  Select,
+  Tabs,
+  Tag,
+  cx,
+  useListKeynav,
+} from '@meritbooks/merit-ui';
+import { useQuery } from '@/hooks/use-query';
+import { CurrencyTag, EmptyState, PageHeader, TableSkeleton } from '@/components/ui';
+import { ListPager } from '@/components/ui/list-pager';
 import { InvoiceDrawer } from './invoice-drawer';
 import { CreditMemosPanel, type CreditMemoPrefill } from './credit-memos-panel';
 import { RecurringPanel } from './recurring-panel';
@@ -13,72 +26,83 @@ import { DocumentProposalsBanner } from '@/components/documents/document-proposa
 import { useDocumentProposal, type ProposalWithDoc } from '@/components/documents/intelligence-client';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { InvoicePeek } from './invoice-peek';
-import { OnlineStatusCell, type OnlineSummary } from './online-status';
-import { ButtonLink } from '@meritbooks/merit-ui';
-import {
-  FileText, Plus, DollarSign, Clock, AlertCircle, Search, ChevronDown,
-  Check, Send, CreditCard, X, Loader2, Building2, ChevronRight, TrendingUp, Sparkles } from 'lucide-react';
+import { OnlineStatusCell } from './online-status';
+import { InvoiceStatus } from './invoice-status';
+import { CreateInvoiceForm } from './create-invoice-dialog';
+import { PaymentDialog } from './receive-payment-dialog';
+import type { InvoiceRow, LocationOption } from './invoice-types';
+import s from './invoices.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────
-
-interface InvoiceRow {
-  id: string;
-  invoiceNumber: string;
-  invoiceDate: string;
-  dueDate: string;
-  currency: string;
-  totalCents: number;
-  amountPaidCents: number;
-  balanceCents: number;
-  status: string;
-  isProgressBill: boolean;
-  daysOverdue: number;
-  memo: string | null;
-  customer: { id: string; name: string; email: string | null } | null;
-  location: { id: string; name: string; shortCode: string } | null;
-  job: { id: string; jobNumber: string; name: string } | null;
-  /** What the customer did with the online link (viewed / paying / paid online). */
-  online?: OnlineSummary;
-}
 
 interface StatusCounts {
   [key: string]: { count: number; totalCents: number; balanceCents: number };
 }
 
-interface CustomerOption {
-  id: string;
-  name: string;
-  email: string | null;
-  paymentTermsDays: number;
+interface Pagination {
+  page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
 }
 
-interface LocationOption {
-  id: string;
-  name: string;
-  short_code: string;
+type StatusTab = 'ALL' | 'DRAFT' | 'SENT' | 'PARTIALLY_PAID' | 'OVERDUE' | 'PAID';
+type SortKey = 'invoiceNumber' | 'customer' | 'invoiceDate' | 'dueDate' | 'totalCents' | 'balanceCents';
+type View = 'invoices' | 'recurring' | 'credit-memos' | 'unapplied';
+
+const STATUS_TABS: ReadonlyArray<{ value: StatusTab; label: string }> = [
+  { value: 'ALL', label: 'All' },
+  { value: 'DRAFT', label: 'Draft' },
+  // Open, unpaid and not yet due — issued (never emailed) or sent.
+  { value: 'SENT', label: 'Not yet due' },
+  { value: 'PARTIALLY_PAID', label: 'Partly paid' },
+  { value: 'OVERDUE', label: 'Overdue' },
+  { value: 'PAID', label: 'Paid' },
+];
+
+/** Payment can be received on a posted invoice with an open balance. */
+const canReceive = (inv: InvoiceRow) => inv.status !== 'PAID' && inv.status !== 'VOIDED' && inv.status !== 'DRAFT';
+
+function sortValue(inv: InvoiceRow, key: SortKey): string | number {
+  switch (key) {
+    case 'customer':
+      return (inv.customer?.name ?? '').toLowerCase();
+    case 'totalCents':
+      return inv.totalCents;
+    case 'balanceCents':
+      return inv.balanceCents;
+    default:
+      return inv[key] ?? '';
+  }
 }
 
 // ─── Invoice List Component ───────────────────────────────────────────
 
 function InvoiceList({
   onCreateClick,
-  onImportClick,
   onPaymentClick,
   onRowClick,
+  keysEnabled,
 }: {
   onCreateClick: () => void;
-  onImportClick: () => void;
   onPaymentClick: (inv: InvoiceRow) => void;
   onRowClick: (id: string) => void;
+  /** Off while a drawer or dialog owns the keyboard. */
+  keysEnabled: boolean;
 }) {
-  const [status, setStatus] = useState('ALL');
+  const [status, setStatus] = useState<StatusTab>('ALL');
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [locationId, setLocationId] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' } | null>(null);
   const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<InvoiceRow>();
 
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -86,229 +110,299 @@ function InvoiceList({
   if (status !== 'ALL') params.set('status', status);
   if (debouncedSearch) params.set('search', debouncedSearch);
   if (locationId) params.set('location_id', locationId);
+  if (page > 1) params.set('page', String(page));
 
-  const { data, isLoading, error } = useQuery<{
+  const { data, isLoading, error, refetch } = useQuery<{
     data: InvoiceRow[];
     counts: StatusCounts;
     homeCurrency?: string;
+    pagination?: Pagination;
   }>(`/api/invoices?${params}`);
   const homeCurrency = data?.homeCurrency ?? 'USD';
 
   const { data: locData } = useQuery<{ data: LocationOption[] }>('/api/locations');
   const locations = locData?.data ?? [];
 
-  const invoices = data?.data ?? [];
   const counts = data?.counts ?? {};
+  const pagination = data?.pagination;
+  const filtered = status !== 'ALL' || !!debouncedSearch || !!locationId;
 
-  const tabs = ['ALL', 'DRAFT', 'SENT', 'PARTIALLY_PAID', 'OVERDUE', 'PAID'];
+  // Sorting is client-side over the loaded page; the server orders by invoice date.
+  const invoices = useMemo(() => {
+    const rows = data?.data ?? [];
+    if (!sort) return rows;
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = sortValue(a, sort.key);
+      const bv = sortValue(b, sort.key);
+      return av < bv ? -dir : av > bv ? dir : 0;
+    });
+  }, [data, sort]);
 
-  if (error) {
+  const { activeIndex, setActiveIndex, rowProps } = useListKeynav({
+    count: invoices.length,
+    onOpen: (i) => {
+      const inv = invoices[i];
+      if (inv) onRowClick(inv.id);
+    },
+    onAction: (i) => {
+      const inv = invoices[i];
+      if (inv && canReceive(inv)) onPaymentClick(inv);
+    },
+    actionKey: 'p',
+    enabled: keysEnabled,
+    owner: 'Invoices list',
+  });
+
+  const toggleSort = (key: SortKey) =>
+    setSort((cur) => (cur?.key !== key ? { key, dir: key === 'invoiceNumber' || key === 'customer' ? 'asc' : 'desc' } : cur.dir === 'asc' ? { key, dir: 'desc' } : null));
+
+  const chooseStatus = (v: StatusTab) => {
+    setStatus(v);
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setStatus('ALL');
+    setSearch('');
+    setDebouncedSearch('');
+    setLocationId('');
+    setPage(1);
+  };
+
+  const sortHead = (key: SortKey, label: string, numeric = false) => {
+    const dir = sort?.key === key ? sort.dir : null;
     return (
-      <div className="p-8 text-center">
-        <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
-        <p className="text-red-400">Failed to load invoices</p>
-        <p className="text-sm text-gray-500 mt-1">{error}</p>
-      </div>
+      <th scope="col" className={numeric ? 'n' : undefined} aria-sort={dir === 'asc' ? 'ascending' : dir === 'desc' ? 'descending' : undefined}>
+        <button type="button" className="th-sort" onClick={() => toggleSort(key)} aria-label={`Sort by ${label.toLowerCase()}`}>
+          {label}
+          {dir === 'asc' ? ' ↑' : dir === 'desc' ? ' ↓' : ''}
+        </button>
+      </th>
     );
-  }
+  };
+
+  const loadingFirst = isLoading && !data;
+
+  // Outstanding = ALL open AR (sent + partially paid + overdue); Overdue is the
+  // derived past-due subset (server: lib/ar/overdue), so the two always tie.
+  const figures: ReadonlyArray<{ label: string; key: string; value: number; tab?: StatusTab; href?: string; link: string }> = [
+    { label: 'Outstanding', key: 'OPEN', value: counts.OPEN?.balanceCents ?? 0, href: '/invoices/collections', link: 'Collections & DSO' },
+    { label: 'Overdue', key: 'OVERDUE', value: counts.OVERDUE?.balanceCents ?? 0, tab: 'OVERDUE', link: 'Show overdue' },
+    { label: 'Paid this month', key: 'PAID', value: counts.PAID?.totalCents ?? 0, tab: 'PAID', link: 'Show paid' },
+    { label: 'Draft', key: 'DRAFT', value: counts.DRAFT?.totalCents ?? 0, tab: 'DRAFT', link: 'Show drafts' },
+  ];
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-semibold text-white">Invoices & AR</h1>
-          <p className="text-sm text-gray-400 mt-1">Create, send, and track customer invoices</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/invoices/collections"
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 rounded-lg text-sm font-medium transition-colors"
-          >
-            <TrendingUp className="w-4 h-4 text-indigo-400" />
-            Collections &amp; DSO
-          </Link>
-          {/* Invoice design (Slice 1B) — kit button so it reads as Merit on the bridged page. */}
-          <ButtonLink href="/invoices/design">Design invoices</ButtonLink>
-          <button
-            onClick={onImportClick}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Sparkles className="w-4 h-4 text-indigo-400" />
-            Import from contract
-          </button>
-          <button
-            onClick={onCreateClick}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            New Invoice
-          </button>
-        </div>
-      </div>
-
-      {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          // Outstanding = ALL open AR (sent + partially paid + overdue); Overdue is the
-          // derived past-due subset (server: lib/ar/overdue), so the two always tie.
-          { label: 'Outstanding', key: 'OPEN', value: counts.OPEN?.balanceCents ?? 0, icon: FileText, color: 'text-blue-400' },
-          { label: 'Overdue', key: 'OVERDUE', value: counts.OVERDUE?.balanceCents ?? 0, icon: AlertCircle, color: 'text-red-400' },
-          { label: 'Paid This Month', key: 'PAID', value: counts.PAID?.totalCents ?? 0, icon: Check, color: 'text-emerald-400' },
-          { label: 'Draft', key: 'DRAFT', value: counts.DRAFT?.totalCents ?? 0, icon: Clock, color: 'text-gray-400' },
-        ].map((card) => (
-          <div key={card.label} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-gray-400">{card.label}</span>
-              <card.icon className={`w-4 h-4 ${card.color}`} />
-            </div>
-            <p className="text-xl font-mono font-semibold text-white">{formatMoney(card.value)}</p>
-            <p className="text-xs text-gray-500 mt-1">{counts[card.key]?.count ?? 0} invoices</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Company filter + search */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative">
-          <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <select
-            value={locationId}
-            onChange={(e) => setLocationId(e.target.value)}
-            aria-label="Filter invoices by company"
-            className="pl-9 pr-8 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white appearance-none cursor-pointer"
-          >
-            <option value="">All Companies</option>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>{l.name}</option>
-            ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-        </div>
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search invoices..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search invoices"
-            className="w-full pl-9 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
-          />
-        </div>
-      </div>
-
-      {/* Status tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-700/50 pb-px">
-        {tabs.map((t) => {
-          const c = counts[t];
+      {/* Summary figures — each one goes somewhere. */}
+      <div className={s.figs}>
+        {figures.map((f) => {
+          const n = counts[f.key]?.count ?? 0;
           return (
-            <button
-              key={t}
-              onClick={() => setStatus(t)}
-              className={`px-3 py-2 text-sm rounded-t-lg transition-colors ${
-                status === t
-                  ? 'bg-gray-800 text-emerald-400 border-b-2 border-emerald-400'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {t.replace('_', ' ')} <span className="text-xs ml-1 opacity-70">{c?.count ?? 0}</span>
-            </button>
+            <div key={f.label} className="fig">
+              <span className="fig-l">{f.label}</span>
+              {loadingFirst ? (
+                <span className={cx('mb-skel', s.figSkel)} aria-hidden="true" />
+              ) : (
+                <span className="fig-v fig-v--dense tnum">{formatMoney(f.value)}</span>
+              )}
+              <span className="fig-vs">
+                <span className="tnum">{loadingFirst ? '—' : `${n} invoice${n === 1 ? '' : 's'}`}</span>
+              </span>
+              {f.href ? (
+                <Link href={f.href} className={s.figLink}>{f.link}</Link>
+              ) : (
+                <button type="button" className={s.figLink} onClick={() => f.tab && chooseStatus(f.tab)} aria-pressed={status === f.tab}>
+                  {f.link}
+                </button>
+              )}
+            </div>
           );
         })}
       </div>
 
-      {/* Table */}
-      {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
-        </div>
-      ) : invoices.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="No invoices"
-          description="Create your first invoice to start billing customers and tracking receivables."
-          action={{ label: 'New Invoice', onClick: onCreateClick }}
+      {/* Status · company · search */}
+      <div className={s.toolbar}>
+        <Seg<StatusTab>
+          aria-label="Invoice status"
+          value={status}
+          onChange={chooseStatus}
+          items={STATUS_TABS.map((t) => ({ value: t.value, label: t.label, count: counts[t.value]?.count ?? 0 }))}
         />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
-                <th className="pb-3 pr-4">Invoice #</th>
-                <th className="pb-3 pr-4">Customer</th>
-                <th className="pb-3 pr-4">Company</th>
-                <th className="pb-3 pr-4">Date</th>
-                <th className="pb-3 pr-4">Due</th>
-                <th className="pb-3 pr-4 text-right">Total</th>
-                <th className="pb-3 pr-4 text-right">Paid</th>
-                <th className="pb-3 pr-4 text-right">Balance</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3 pr-4">Online</th>
-                <th className="pb-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id} {...rowHandlers(inv)} onClick={() => onRowClick(inv.id)} className="border-b border-gray-800/50 row-clickable">
-                  <td className="py-3 pr-4">
-                    <span className="font-mono text-white">{inv.invoiceNumber}</span>
-                    {inv.isProgressBill && (
-                      <span className="ml-2 px-1.5 py-0.5 text-xs bg-indigo-500/20 text-indigo-300 rounded">AIA</span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-gray-300">{inv.customer?.name ?? '—'}</td>
-                  <td className="py-3 pr-4">
-                    {inv.location && (
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="w-6 h-6 rounded bg-gray-700 text-[10px] font-mono text-gray-300 flex items-center justify-center">
-                          {inv.location.shortCode}
-                        </span>
-                        <span className="text-gray-400 text-xs">{inv.location.name}</span>
-                      </span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 font-mono text-gray-400 text-xs">{inv.invoiceDate}</td>
-                  <td className="py-3 pr-4">
-                    <span className={`font-mono text-xs ${inv.daysOverdue > 0 && inv.status !== 'PAID' ? 'text-red-400' : 'text-gray-400'}`}>
-                      {inv.dueDate}
-                    </span>
-                    {inv.daysOverdue > 0 && inv.status !== 'PAID' && (
-                      <span className="ml-1 text-[10px] text-red-400">{inv.daysOverdue}d late</span>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-right font-mono text-white">
-                    <span className="inline-flex items-center justify-end gap-1.5">
-                      <CurrencyTag code={inv.currency} homeCurrency={homeCurrency} onlyForeign />
-                      {formatMoney(inv.totalCents, { currency: inv.currency })}
-                    </span>
-                  </td>
-                  <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(inv.amountPaidCents, { currency: inv.currency })}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-white font-medium">{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
-                  <td className="py-3 pr-4">
-                    <StatusBadge status={inv.status} />
-                  </td>
-                  <td className="py-3 pr-4">
-                    <OnlineStatusCell online={inv.online} status={inv.status} />
-                  </td>
-                  <td className="py-3">
-                    {inv.status !== 'PAID' && inv.status !== 'VOIDED' && inv.status !== 'DRAFT' && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); onPaymentClick(inv); }}
-                        className="p-1.5 text-gray-400 hover:text-emerald-400 hover:bg-gray-700/50 rounded transition-colors"
-                        title="Receive payment"
-                        aria-label={`Receive payment for invoice ${inv.invoiceNumber}`}
-                      >
-                        <DollarSign className="w-4 h-4" />
-                      </button>
-                    )}
-                    <ChevronRight size={15} className="row-chevron inline ml-1 align-middle" />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <span className={s.toolbarSp} />
+        <Select
+          className={s.companySelect}
+          value={locationId}
+          onChange={(e) => {
+            setLocationId(e.target.value);
+            setPage(1);
+          }}
+          aria-label="Filter invoices by company"
+        >
+          <option value="">All companies</option>
+          {locations.map((l) => (
+            <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </Select>
+        <Search
+          className={s.search}
+          placeholder="Search number or memo"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search invoices"
+        />
+      </div>
+
+      {/* Table — all four states */}
+      {error ? (
+        <div className={cx('surface', s.state)}>
+          <div className="wg-state" role="alert">
+            <Tag tone="neg">Not loaded</Tag>
+            <span className="t-head">Invoices didn&apos;t load</span>
+            <p>{error}</p>
+            <Button onClick={() => void refetch()}>Try again</Button>
+          </div>
         </div>
+      ) : loadingFirst ? (
+        <TableSkeleton rows={8} cols={8} />
+      ) : invoices.length === 0 ? (
+        <div className="surface">
+          {filtered ? (
+            <EmptyState
+              title="No invoices match"
+              description="Nothing fits this status, company and search. Clear the filters to see every invoice."
+              action={{ label: 'Clear filters', onClick: clearFilters }}
+            />
+          ) : (
+            <EmptyState
+              title="No invoices yet"
+              description="Create your first invoice to start billing customers and tracking receivables."
+              action={{ label: 'New invoice', onClick: onCreateClick }}
+            />
+          )}
+        </div>
+      ) : (
+        <>
+          <div className={s.tableWrap} aria-busy={isLoading || undefined}>
+            <table className={cx('tbl', 'tbl-q', s.table)} aria-label="Invoices">
+              <colgroup>
+                <col style={{ width: 150 }} />
+                <col />
+                <col style={{ width: 180 }} />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 150 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 168 }} />
+                <col style={{ width: 104 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {sortHead('invoiceNumber', 'Invoice')}
+                  {sortHead('customer', 'Customer')}
+                  <th scope="col">Company</th>
+                  {sortHead('invoiceDate', 'Date')}
+                  {sortHead('dueDate', 'Due')}
+                  {sortHead('totalCents', 'Total', true)}
+                  <th scope="col" className="n">Paid</th>
+                  {sortHead('balanceCents', 'Balance', true)}
+                  <th scope="col">Status</th>
+                  <th scope="col">Online</th>
+                  <th scope="col"><span className="sr">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {invoices.map((inv, i) => {
+                  const late = inv.daysOverdue > 0 && inv.status !== 'PAID';
+                  return (
+                    <tr
+                      key={inv.id}
+                      {...rowProps(i)}
+                      {...rowHandlers(inv)}
+                      onClick={() => {
+                        setActiveIndex(i);
+                        onRowClick(inv.id);
+                      }}
+                      className={cx('q-row', s.row, i === activeIndex && 'is-cursor', late && 'is-attn')}
+                      aria-current={i === activeIndex || undefined}
+                    >
+                      <td>
+                        <span className={s.inline}>
+                          <span className="tnum" style={{ fontWeight: 600 }}>{inv.invoiceNumber}</span>
+                          {inv.isProgressBill && <Tag title="Progress bill (AIA)">AIA</Tag>}
+                        </span>
+                      </td>
+                      <td>{inv.customer?.name ?? '—'}</td>
+                      <td>
+                        {inv.location ? (
+                          <span className={s.inline} title={inv.location.name}>
+                            <Tag>{inv.location.shortCode}</Tag>
+                            <span className="ink-2">{inv.location.name}</span>
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="tnum ink-2">{inv.invoiceDate}</td>
+                      <td>
+                        <span className={s.inline}>
+                          <span className={cx('tnum', !late && 'ink-2')}>{inv.dueDate}</span>
+                          {late && <Tag tone="neg">{inv.daysOverdue}d late</Tag>}
+                        </span>
+                      </td>
+                      <td className="n">
+                        <span className={s.inline}>
+                          <CurrencyTag code={inv.currency} homeCurrency={homeCurrency} onlyForeign />
+                          <span>{formatMoney(inv.totalCents, { currency: inv.currency })}</span>
+                        </span>
+                      </td>
+                      <td className="n ink-2">{formatMoney(inv.amountPaidCents, { currency: inv.currency })}</td>
+                      <td className="n" style={{ fontWeight: 600 }}>{formatMoney(inv.balanceCents, { currency: inv.currency })}</td>
+                      <td><InvoiceStatus status={inv.status} hint={inv.statusHint} /></td>
+                      <td><OnlineStatusCell online={inv.online} status={inv.status} /></td>
+                      <td className="n">
+                        {canReceive(inv) && (
+                          <Button
+                            variant="quiet"
+                            onClick={(e) => { e.stopPropagation(); onPaymentClick(inv); }}
+                            title="Receive payment (P)"
+                            aria-label={`Receive payment for invoice ${inv.invoiceNumber}`}
+                          >
+                            Receive
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.tableFoot}>
+            <Keyhints
+              hints={[
+                { chord: 'j k', label: 'move' },
+                { chord: 'enter', label: 'open' },
+                { chord: 'p', label: 'receive payment' },
+                { chord: 'n', label: 'new invoice' },
+              ]}
+            />
+            {pagination && pagination.total_pages > 1 && sort && (
+              <span className="t-cap">Sorting applies to this page.</span>
+            )}
+          </div>
+          {pagination && (
+            <ListPager
+              page={pagination.page}
+              perPage={pagination.per_page}
+              total={pagination.total}
+              noun="invoices"
+              onPageChange={setPage}
+              isLoading={isLoading}
+            />
+          )}
+        </>
       )}
 
       <HoverPeekCard
@@ -323,467 +417,21 @@ function InvoiceList({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const config: Record<string, { bg: string; text: string; label: string }> = {
-    DRAFT: { bg: 'bg-gray-500/20', text: 'text-gray-300', label: 'Draft' },
-    SENT: { bg: 'bg-blue-500/20', text: 'text-blue-300', label: 'Sent' },
-    PARTIALLY_PAID: { bg: 'bg-amber-500/20', text: 'text-amber-300', label: 'Partial' },
-    PAID: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', label: 'Paid' },
-    OVERDUE: { bg: 'bg-red-500/20', text: 'text-red-300', label: 'Overdue' },
-    VOIDED: { bg: 'bg-gray-500/20', text: 'text-gray-500', label: 'Voided' },
-  };
-  const c = config[status] ?? config.DRAFT;
-  return <span className={`px-2 py-0.5 text-xs rounded-full ${c.bg} ${c.text}`}>{c.label}</span>;
-}
-
-// ─── Create Invoice Form ──────────────────────────────────────────────
-
-interface InvoiceLine {
-  description: string;
-  account_id: string;
-  quantity: number;
-  unit_price_cents: number;
-}
-
-function CreateInvoiceForm({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [locationId, setLocationId] = useState('');
-  const [customerId, setCustomerId] = useState('');
-  const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().split('T')[0]);
-  const [dueDate, setDueDate] = useState('');
-  const [memo, setMemo] = useState('');
-  const [taxCents, setTaxCents] = useState(0);
-  // Auto sales-tax (GATE 11d): compute tax from the tenant's configured rate rows +
-  // the customer's jurisdiction. Toggle off to key tax by hand. Degrade-safe.
-  const [autoTax, setAutoTax] = useState(true);
-  const [taxInfo, setTaxInfo] = useState<
-    { ratePct: number; jurisdictionLabel: string | null; exempt: boolean; rateResolved: boolean } | null
-  >(null);
-  const [lines, setLines] = useState<InvoiceLine[]>([{ description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  const { data: locData } = useQuery<{ data: LocationOption[] }>('/api/locations');
-  const { data: custData } = useQuery<{ data: CustomerOption[] }>('/api/customers?per_page=200');
-  const { data: acctData } = useQuery<{ data: { id: string; account_number: string; name: string }[] }>(
-    locationId ? `/api/accounts/search?location_id=${locationId}&q=4` : null
-  );
-
-  const locations = locData?.data ?? [];
-  const customers = custData?.data ?? [];
-  const accounts = acctData?.data ?? [];
-
-  // Close on Escape (modal a11y).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  // Auto-calculate due date from customer terms
-  useEffect(() => {
-    if (customerId && invoiceDate) {
-      const cust = customers.find((c) => c.id === customerId);
-      if (cust) {
-        const d = new Date(invoiceDate);
-        d.setDate(d.getDate() + cust.paymentTermsDays);
-        setDueDate(d.toISOString().split('T')[0]);
-      }
-    }
-  }, [customerId, invoiceDate, customers]);
-
-  const subtotal = lines.reduce((s, l) => s + Math.round(l.quantity * l.unit_price_cents), 0);
-  const total = subtotal + taxCents;
-
-  // Live sales-tax resolution (GATE 11d). Debounced: when auto-tax is on and we have a
-  // customer + taxable subtotal, ask the server for the jurisdiction rate and set the
-  // accrual. No configured rate / exempt customer → tax 0 (behaves as before).
-  useEffect(() => {
-    if (!autoTax) { setTaxInfo(null); return; }
-    if (!customerId || subtotal <= 0 || !invoiceDate) {
-      setTaxCents(0);
-      setTaxInfo(null);
-      return;
-    }
-    let cancelled = false;
-    const t = setTimeout(async () => {
-      try {
-        const res = await fetch('/api/tax/resolve', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            customer_id: customerId,
-            invoice_date: invoiceDate,
-            line_amounts_cents: [subtotal],
-          }),
-        });
-        if (!res.ok) return;
-        const j = await res.json();
-        if (cancelled) return;
-        setTaxCents(Number(j.taxCents) || 0);
-        setTaxInfo({
-          ratePct: Number(j.ratePct) || 0,
-          jurisdictionLabel: j.jurisdictionLabel ?? null,
-          exempt: !!j.exempt,
-          rateResolved: !!j.rateResolved,
-        });
-      } catch {
-        /* leave prior tax; degrade-safe */
-      }
-    }, 350);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [autoTax, customerId, invoiceDate, subtotal]);
-
-  const addLine = () => setLines([...lines, { description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
-  const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, j) => j !== i)); };
-  const updateLine = (i: number, field: keyof InvoiceLine, value: string | number) => {
-    setLines(lines.map((l, j) => j === i ? { ...l, [field]: value } : l));
-  };
-
-  const handleSubmit = async () => {
-    setFormError('');
-    if (!locationId || !customerId || !invoiceDate || !dueDate) {
-      setFormError('Please fill all required fields');
-      return;
-    }
-    if (lines.some((l) => !l.description || !l.account_id)) {
-      setFormError('All lines must have a description and GL account');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      const res = await fetch('/api/invoices', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_id: locationId,
-          customer_id: customerId,
-          invoice_date: invoiceDate,
-          due_date: dueDate,
-          memo: memo || undefined,
-          tax_cents: taxCents,
-          auto_tax: autoTax,
-          lines: lines.map((l) => ({
-            description: l.description,
-            account_id: l.account_id,
-            quantity: l.quantity,
-            unit_price_cents: l.unit_price_cents,
-          })),
-        }),
-      });
-      const result = await res.json();
-      if (!res.ok) {
-        setFormError(result.error ?? 'Failed to create invoice');
-        return;
-      }
-      onCreated();
-    } catch {
-      setFormError('Network error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div role="dialog" aria-modal="true" aria-label="Create invoice" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-white">Create Invoice</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
-        </div>
-
-        <div className="p-6 space-y-5">
-          {formError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{formError}</div>
-          )}
-
-          {/* Top row: company, customer, dates */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Company *</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
-                <option value="">Select company</option>
-                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Customer *</label>
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
-                <option value="">Select customer</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Invoice Date *</label>
-              <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Due Date *</label>
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Memo</label>
-              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500" />
-            </div>
-          </div>
-
-          {/* Line items */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-400 uppercase tracking-wider">Line Items</label>
-              <button onClick={addLine} className="text-xs text-emerald-400 hover:text-emerald-300">+ Add line</button>
-            </div>
-            <div className="space-y-2">
-              {lines.map((line, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end">
-                  <div className="col-span-4">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Description</label>}
-                    <input
-                      type="text" value={line.description} onChange={(e) => updateLine(i, 'description', e.target.value)}
-                      placeholder="Service or item description"
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600"
-                    />
-                  </div>
-                  <div className="col-span-3">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">GL Account</label>}
-                    <select value={line.account_id} onChange={(e) => updateLine(i, 'account_id', e.target.value)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white">
-                      <option value="">Select account</option>
-                      {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
-                    </select>
-                  </div>
-                  <div className="col-span-1">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Qty</label>}
-                    <input type="number" value={line.quantity} min={0} step={0.01}
-                      onChange={(e) => updateLine(i, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    {i === 0 && <label className="block text-[10px] text-gray-500 mb-0.5">Unit Price</label>}
-                    <input type="number" value={(line.unit_price_cents / 100).toFixed(2)} min={0} step={0.01}
-                      onChange={(e) => updateLine(i, 'unit_price_cents', Math.round(parseFloat(e.target.value) * 100) || 0)}
-                      className="w-full px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
-                    />
-                  </div>
-                  <div className="col-span-1 text-right font-mono text-sm text-white py-1.5">
-                    {formatMoney(Math.round(line.quantity * line.unit_price_cents))}
-                  </div>
-                  <div className="col-span-1">
-                    {lines.length > 1 && (
-                      <button onClick={() => removeLine(i)} className="p-1 text-gray-500 hover:text-red-400"><X className="w-4 h-4" /></button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="border-t border-gray-700/50 pt-4 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-400">Subtotal</span>
-              <span className="font-mono text-white">{formatMoney(subtotal)}</span>
-            </div>
-            <div className="flex justify-between text-sm items-center">
-              <span className="flex items-center gap-2 text-gray-400">
-                Tax
-                <label className="flex items-center gap-1 text-[11px] text-gray-500 cursor-pointer select-none">
-                  <input type="checkbox" checked={autoTax} onChange={(e) => setAutoTax(e.target.checked)}
-                    className="accent-emerald-500" />
-                  Auto
-                </label>
-              </span>
-              {autoTax ? (
-                <span className="font-mono text-white text-sm tabular-nums">{formatMoney(taxCents)}</span>
-              ) : (
-                <input type="number" value={(taxCents / 100).toFixed(2)} min={0} step={0.01}
-                  onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                  className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono"
-                />
-              )}
-            </div>
-            {autoTax && (
-              <div className="text-[11px] text-gray-500 text-right -mt-1">
-                {taxInfo?.exempt
-                  ? 'Customer is tax-exempt — no tax'
-                  : taxInfo?.rateResolved
-                    ? `${taxInfo.jurisdictionLabel ?? 'Jurisdiction'} · ${taxInfo.ratePct}%`
-                    : customerId
-                      ? 'No sales-tax rate configured for this jurisdiction'
-                      : 'Select a customer to resolve tax'}
-              </div>
-            )}
-            <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2">
-              <span className="text-white">Total</span>
-              <span className="font-mono text-emerald-400">{formatMoney(total)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium"
-          >
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Create Invoice
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Payment Application Dialog ───────────────────────────────────────
-
-function PaymentDialog({
-  invoice,
-  onClose,
-  onPaid,
-}: {
-  invoice: InvoiceRow;
-  onClose: () => void;
-  onPaid: () => void;
-}) {
-  const [amountCents, setAmountCents] = useState(invoice.balanceCents);
-  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-  const [method, setMethod] = useState('CHECK');
-  const [reference, setReference] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState('');
-
-  // Close on Escape (modal a11y).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
-  const handleSubmit = async () => {
-    if (amountCents <= 0) { setFormError('Amount must be positive'); return; }
-    if (amountCents > invoice.balanceCents) { setFormError('Amount exceeds invoice balance'); return; }
-
-    setSubmitting(true);
-    setFormError('');
-    try {
-      const res = await fetch('/api/payments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          customer_id: invoice.customer?.id,
-          location_id: invoice.location?.id,
-          payment_date: paymentDate,
-          amount_cents: amountCents,
-          payment_method: method,
-          reference_number: reference || undefined,
-          applications: [{ invoice_id: invoice.id, amount_cents: amountCents }],
-        }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        setFormError(err.error ?? 'Failed to apply payment');
-        return;
-      }
-      onPaid();
-    } catch {
-      setFormError('Network error');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
-      <div role="dialog" aria-modal="true" aria-label="Receive payment" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md">
-        <div className="flex items-center justify-between p-5 border-b border-gray-700/50">
-          <div>
-            <h2 className="text-base font-semibold text-white">Receive Payment</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Invoice {invoice.invoiceNumber} — {invoice.customer?.name}</p>
-          </div>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {formError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{formError}</div>
-          )}
-
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-400">Invoice balance</span>
-            <span className="font-mono text-white font-medium">{formatMoney(invoice.balanceCents)}</span>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Amount *</label>
-              <input type="number" value={(amountCents / 100).toFixed(2)} min={0} step={0.01}
-                onChange={(e) => setAmountCents(Math.round(parseFloat(e.target.value) * 100) || 0)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white font-mono text-right"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Date *</label>
-              <input type="date" value={paymentDate} onChange={(e) => setPaymentDate(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Method</label>
-              <select value={method} onChange={(e) => setMethod(e.target.value)}
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
-                <option value="CHECK">Check</option>
-                <option value="ACH">ACH</option>
-                <option value="WIRE">Wire</option>
-                <option value="CREDIT_CARD">Credit Card</option>
-                <option value="CASH">Cash</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Reference #</label>
-              <input type="text" value={reference} onChange={(e) => setReference(e.target.value)}
-                placeholder="Check # or ref"
-                className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-500"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-end gap-3 p-5 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-            Apply Payment
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Manager ─────────────────────────────────────────────────────
+
+const VIEWS: ReadonlyArray<{ value: View; label: string }> = [
+  { value: 'invoices', label: 'Invoices' },
+  { value: 'recurring', label: 'Recurring' },
+  { value: 'credit-memos', label: 'Credit memos' },
+  { value: 'unapplied', label: 'Unapplied payments' },
+];
 
 export function InvoiceManager() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [paymentInvoice, setPaymentInvoice] = useState<InvoiceRow | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [view, setView] = useState<'invoices' | 'credit-memos' | 'recurring' | 'unapplied'>('invoices');
+  const [view, setView] = useState<View>('invoices');
   const [creditPrefill, setCreditPrefill] = useState<CreditMemoPrefill | null>(null);
   // Document intelligence: a customer contract AI found in Documents (banner Review or ?proposal=).
   const deepLinked = useDocumentProposal('customer_contract');
@@ -812,28 +460,32 @@ export function InvoiceManager() {
     setPaymentInvoice(null);
   }, []);
 
+  const overlayOpen = !!detailId || showCreate || showImport || !!paymentInvoice || !!reviewingContract;
+
   return (
-    <div className="p-6" key={refreshKey}>
-      {/* View switcher: customer invoices ⇄ credit memos (both live in the AR area). */}
-      <div className="inline-flex items-center gap-1 mb-5 p-1 rounded-lg bg-gray-800/60 border border-gray-700/50">
-        {(['invoices', 'recurring', 'credit-memos', 'unapplied'] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              view === v ? 'bg-emerald-600 text-white' : 'text-gray-400 hover:text-white'
-            }`}
-          >
-            {v === 'invoices'
-              ? 'Invoices'
-              : v === 'recurring'
-                ? 'Recurring'
-                : v === 'credit-memos'
-                  ? 'Credit memos'
-                  : 'Unapplied payments'}
-          </button>
-        ))}
-      </div>
+    <div key={refreshKey}>
+      <PageHeader
+        eyebrow={['Receivables', VIEWS.find((v) => v.value === view)?.label ?? 'Invoices']}
+        title="Invoices"
+        description="Create, send and track customer invoices, recurring billing and credits."
+        actions={
+          <>
+            <ButtonLink href="/invoices/collections">Collections &amp; DSO</ButtonLink>
+            <ButtonLink href="/invoices/design">Design invoices</ButtonLink>
+            {view === 'invoices' && (
+              <>
+                <Button onClick={() => setShowImport(true)}>Import from contract</Button>
+                <Button variant="primary" icon="plus" chord="n" bindChord={!overlayOpen} onClick={() => setShowCreate(true)}>
+                  New invoice
+                </Button>
+              </>
+            )}
+          </>
+        }
+      />
+
+      {/* View switcher: customer invoices ⇄ recurring ⇄ credit memos ⇄ unapplied (all AR). */}
+      <Tabs<View> aria-label="Receivables views" className={s.viewTabs} value={view} onChange={setView} items={VIEWS} />
 
       {view === 'invoices' ? (
         <>
@@ -841,9 +493,9 @@ export function InvoiceManager() {
           <DocumentProposalsBanner kind="customer_contract" refreshKey={refreshKey} onReview={(p) => setFromDoc(p)} />
           <InvoiceList
             onCreateClick={() => setShowCreate(true)}
-            onImportClick={() => setShowImport(true)}
             onPaymentClick={(inv) => setPaymentInvoice(inv)}
             onRowClick={(id) => setDetailId(id)}
+            keysEnabled={!overlayOpen}
           />
           <InvoiceDrawer
             invoiceId={detailId}
@@ -875,24 +527,17 @@ export function InvoiceManager() {
         // "Unapplied payments" embed (Bank Feed / Cash-App slice). This is a stub
         // tab that reserves the spot and links out to /cash-application for now.
         // When that panel lands, replace this block with the embedded component;
-        // do NOT change the `unapplied` tab key or the pill above.
-        <div className="max-w-2xl rounded-xl border border-gray-800 bg-gray-900/40 p-8 text-center">
-          <div className="mx-auto mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-500/10">
-            <CreditCard className="h-5 w-5 text-emerald-400" />
+        // do NOT change the `unapplied` tab key or the tab above.
+        <div className="surface">
+          <div className={cx('wg-state', s.state)}>
+            <span className="wg-empty-mark" aria-hidden="true" />
+            <span className="t-head">Unapplied payments live in Cash application</span>
+            <p>
+              Received payments that aren&apos;t yet matched to an open invoice show up there. Apply them to clear
+              customer balances and keep receivables tied out.
+            </p>
+            <ButtonLink href="/cash-application" variant="primary" iconAfter="right">Open cash application</ButtonLink>
           </div>
-          <h3 className="text-base font-semibold text-white">Cash application — unapplied payments</h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-gray-400">
-            Received payments that aren&apos;t yet matched to an open invoice show up here. Apply them
-            to clear customer balances and keep AR tied out. The full workspace lives on the Cash
-            Application screen.
-          </p>
-          <Link
-            href="/cash-application"
-            className="mt-5 inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-emerald-500"
-          >
-            Open Cash Application
-            <ChevronRight className="h-4 w-4" />
-          </Link>
         </div>
       )}
     </div>

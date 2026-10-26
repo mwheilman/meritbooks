@@ -1,0 +1,227 @@
+/* AP intake queue — layout only; every visual token comes from the kit (system.css). */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+/* S3 grammar: the queue on the left, the review panel beside it (never over it). */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(480px, 7fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 1180px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.queueHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.queue {
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.queueScroll {
+  max-height: calc(100vh - 360px);
+  min-height: 200px;
+  overflow: auto;
+}
+
+.queueScroll > :global(.tbl) {
+  width: 100%;
+}
+
+.tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.state {
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.skel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+.hints {
+  padding: 8px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.panelWrap {
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 140px);
+  display: flex;
+  border: 1px solid var(--line);
+}
+
+.panelWrap > :global(.panel) {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  border-left: 0;
+}
+
+.placeholder {
+  border: 1px dashed var(--line-2);
+  background: var(--white);
+  min-height: 400px;
+}
+
+.notices > * + * {
+  margin-top: 8px;
+}
+
+.notices {
+  padding-top: 16px;
+}
+
+.prov {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.prov > span {
+  min-width: 0;
+}
+
+.cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line-2);
+}
+
+.fieldRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.extracted > * + * {
+  margin-top: 4px;
+}
+
+.lineCard {
+  border: 1px solid var(--line);
+  padding: 12px;
+}
+
+.lineCard + .lineCard {
+  margin-top: 8px;
+}
+
+.lineTop {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.lineTop > :global(.input) {
+  flex: 1;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px 16px;
+  margin-top: 16px;
+}
+
+.totals dd {
+  margin: 0;
+  text-align: right;
+}
+
+.taxInput {
+  width: 128px !important;
+}
+
+.grand {
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 8px;
+  border-top: 1px solid var(--midnight);
+}
+
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.foot > span {
+  flex: 1;
+}
+
+.dialogBody > * + * {
+  margin-top: var(--s2);
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 32px 24px;
+  border: 1px dashed var(--line-2);
+  background: var(--white);
+  color: var(--ink-2);
+  text-align: center;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.drop:hover:not(:disabled),
+.drop:focus-visible,
+.dropOver {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+
+.drop:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dropIcon {
+  color: var(--electric);
+  display: inline-flex;
+}

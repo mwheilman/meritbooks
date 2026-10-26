@@ -65,6 +65,7 @@ const backfillOrg = vi.fn(async (_d: unknown, input: { canDraft?: Authorizer }) 
 vi.mock('@/lib/documents/intelligence/service', () => ({
   analyzeDocument: (...a: unknown[]) => analyzeDocument(...(a as [unknown, { canDraft?: Authorizer }])),
   backfillOrg: (...a: unknown[]) => backfillOrg(...(a as [unknown, { canDraft?: Authorizer }])),
+  backfillMessage: () => 'Analyzed.',
   IntelligenceError: class extends Error { status = 400; code = 'X'; },
 }));
 

@@ -9,6 +9,7 @@
  * PostgREST emulator — only the builder surface Books' services use exists:
  *
  *   .schema(s).from(t) · .select(cols?, { count, head }) · .insert(rows) · .update(vals)
+ *   .upsert(rows, { onConflict: 'a,b', ignoreDuplicates? })
  *   .delete() · .eq/.neq/.gt/.gte/.lt/.lte/.in/.is/.like/.ilike/.not(col, op, v)
  *   .or('a.eq.x,b.is.null') · .order(col, { ascending }) · .limit(n) · .range(a, b)
  *   .single() / .maybeSingle() / await · .rpc(fn, namedArgs)
@@ -51,6 +52,7 @@ class PgQuery implements PromiseLike<Resp> {
   private lim: number | null = null;
   private off: number | null = null;
   private mode: 'many' | 'single' | 'maybe' = 'many';
+  private conflict: { cols: string[]; ignore: boolean } | null = null;
 
   constructor(private readonly db: PGlite, private readonly schema: string, private readonly table: string) {}
 
@@ -67,6 +69,12 @@ class PgQuery implements PromiseLike<Resp> {
     return this;
   }
   insert(rows: Row | Row[]): this { this.op = 'insert'; this.payload = Array.isArray(rows) ? rows : [rows]; return this; }
+  /** INSERT … ON CONFLICT (onConflict) DO UPDATE every supplied column (or DO NOTHING). */
+  upsert(rows: Row | Row[], opts: { onConflict: string; ignoreDuplicates?: boolean }): this {
+    this.insert(rows);
+    this.conflict = { cols: opts.onConflict.split(',').map((c) => c.trim()).filter(Boolean), ignore: !!opts.ignoreDuplicates };
+    return this;
+  }
   update(vals: Row): this { this.op = 'update'; this.updates = vals; return this; }
   delete(): this { this.op = 'delete'; return this; }
 
@@ -135,7 +143,15 @@ class PgQuery implements PromiseLike<Resp> {
         return o;
       })));
       const list = cols.map(ident).join(', ');
-      return `insert into ${this.rel} (${list}) select ${list} from jsonb_populate_recordset(null::${this.rel}, ${json}::jsonb) returning to_jsonb(${ident(this.table)}.*) as j`;
+      let onConflict = '';
+      if (this.conflict) {
+        const target = this.conflict.cols.map(ident).join(', ');
+        const upd = cols.filter((c) => !this.conflict!.cols.includes(c));
+        onConflict = this.conflict.ignore || upd.length === 0
+          ? ` on conflict (${target}) do nothing`
+          : ` on conflict (${target}) do update set ${upd.map((c) => `${ident(c)} = excluded.${ident(c)}`).join(', ')}`;
+      }
+      return `insert into ${this.rel} (${list}) select ${list} from jsonb_populate_recordset(null::${this.rel}, ${json}::jsonb)${onConflict} returning to_jsonb(${ident(this.table)}.*) as j`;
     }
     if (this.op === 'update') {
       const cols = Object.keys(this.updates);
@@ -179,9 +195,25 @@ class PgQuery implements PromiseLike<Resp> {
   }
 }
 
+/** A JS array for a Postgres ARRAY-typed argument → an array literal ('{a,b}'); PostgREST does this from JSON. */
+function arrayLiteral(v: unknown[]): string {
+  return `{${v.map((x) => (x === null || x === undefined ? 'NULL' : `"${String(x).replace(/(["\\])/g, '\\$1')}"`)).join(',')}}`;
+}
+
 async function rpc(db: PGlite, schema: string, fn: string, args: Record<string, unknown> = {}): Promise<Resp> {
   const keys = Object.keys(args);
-  const params = keys.map((k) => param(args[k]));
+  let arrayArgs = new Set<string>();
+  try {
+    const at = await db.query<{ name: string }>(
+      `select a.name from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         cross join lateral unnest(p.proargnames, p.proargtypes::oid[]) as a(name, typ)
+         join pg_type t on t.oid = a.typ
+        where n.nspname = $1 and p.proname = $2 and t.typcategory = 'A'`, [schema, fn]);
+    arrayArgs = new Set(at.rows.map((r) => r.name));
+  } catch {
+    arrayArgs = new Set();
+  }
+  const params = keys.map((k) => (Array.isArray(args[k]) && arrayArgs.has(k) ? arrayLiteral(args[k] as unknown[]) : param(args[k])));
   const named = keys.map((k, i) => `${ident(k)} => $${i + 1}`).join(', ');
   try {
     const meta = await db.query<{ retset: boolean; composite: boolean }>(

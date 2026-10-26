@@ -842,6 +842,23 @@ export interface SweepResult {
   errors: string[];
 }
 
+/**
+ * The plain-English result of "Analyze existing documents" (PURE). Failures are never reported
+ * as "everything has already been analyzed" — that wording hid documents the read could not
+ * process, so they sat as "Not analyzed" with nobody told.
+ */
+export function backfillMessage(r: Pick<SweepResult, 'analyzed' | 'proposals' | 'needsReview' | 'duplicates' | 'linksCreated' | 'remaining' | 'errors'>): string {
+  const failed = r.errors.filter((e) => !e.startsWith('links:')).length;
+  const failedNote = failed > 0 ? ` ${failed} document${failed === 1 ? '' : 's'} couldn’t be read — open ${failed === 1 ? 'it' : 'each one'} and choose Read again, or set the type yourself.` : '';
+  const more = r.remaining > 0 ? ` ${r.remaining} more to go — run it again.` : '';
+  if (r.analyzed === 0) {
+    if (failed > 0) return `Nothing new was analyzed.${failedNote}${more}`;
+    if (r.remaining > 0) return `Nothing new was analyzed.${more}`;
+    return r.linksCreated > 0 ? `Everything was already analyzed. ${r.linksCreated} existing link(s) recorded.` : 'Everything here has already been analyzed.';
+  }
+  return `Analyzed ${r.analyzed} document(s): ${r.proposals} proposal(s) ready for review, ${r.needsReview} need a type${r.duplicates ? `, ${r.duplicates} duplicate(s)` : ''}.${failedNote}${more}`;
+}
+
 /** Module-filed documents (entity_id set) get a two-way link row. Idempotent. */
 async function backfillModuleLinks(deps: IntelDeps, orgId: string): Promise<number> {
   const { data } = await deps.db.from('documents').select('id, entity_type, entity_id').eq('org_id', orgId).not('entity_id', 'is', null).limit(1000);

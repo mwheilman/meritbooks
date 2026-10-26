@@ -138,27 +138,27 @@ export function FluxReview() {
         header: 'Account',
         cell: (l) => (
           <>
-            <span className="l1">{l.accountName}{l.dimensionLabel ? ` — ${l.dimensionLabel}` : ''}</span>
+            <span className="l1" title={`${l.accountNumber} · ${l.accountName}${l.dimensionLabel ? ` — ${l.dimensionLabel}` : ''}`}>{l.accountName}{l.dimensionLabel ? ` — ${l.dimensionLabel}` : ''}</span>
             <span className="l2">{l.accountNumber} · {l.statement === 'BS' ? 'Balance sheet' : l.groupName ?? 'P&L'}</span>
           </>
         ),
       },
-      { id: 'current', header: 'This month', width: 120, numeric: true, cell: (l) => <span className="tnum">{money(l.currentCents)}</span> },
-      { id: 'comparison', header: data ? BASIS_LABEL[data.policy.comparisonBasis] : 'Comparison', width: 130, numeric: true, cell: (l) => <span className="tnum">{money(l.comparisonCents)}</span> },
+      { id: 'current', header: 'This month', width: 112, numeric: true, cell: (l) => <span className="tnum">{money(l.currentCents)}</span> },
+      { id: 'comparison', header: data ? BASIS_LABEL[data.policy.comparisonBasis] : 'Comparison', width: 120, numeric: true, cell: (l) => <span className="tnum">{money(l.comparisonCents)}</span> },
       {
         id: 'change',
         header: 'Change',
-        width: 150,
+        width: 120,
         numeric: true,
         cell: (l) => (
           <>
             <span className="l1 tnum">{money(l.changeCents)}</span>
-            <span className="l2 tnum">{pctText(l.changePctBps)}</span>
+            <span className="l2 tnum">{pctText(l)}</span>
           </>
         ),
       },
-      { id: 'trend', header: 'Trend', width: 88, cell: (l) => <Sparkline points={l.trailing.map((t) => t.cents)} label={`${l.accountName}, last six months`} /> },
-      { id: 'status', header: 'Status', width: 160, cell: (l) => <StatusPill l={l} /> },
+      { id: 'trend', header: 'Trend', width: 76, cell: (l) => <Sparkline points={l.trailing.map((t) => t.cents)} label={`${l.accountName}, last six months`} /> },
+      { id: 'status', header: 'Status', width: 140, cell: (l) => <StatusPill l={l} /> },
     ],
     [data],
   );
@@ -284,6 +284,7 @@ export function FluxReview() {
                   <p>{emptyBody(band, data)}</p>
                 </div>
               ) : (
+                <div className={s.tableScroll}>
                 <QueueTable<FluxBoardLine>
                   aria-label={`${data.location.name}, flux lines for ${data.period.label}`}
                   columns={columns}
@@ -295,6 +296,7 @@ export function FluxReview() {
                   onOpen={(l) => setCursor(l.lineKey)}
                   openOnClick
                 />
+                </div>
               )}
             </div>
             <div className={s.sticky}>

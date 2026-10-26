@@ -1,0 +1,112 @@
+/* AttachmentsPanel — layout only; every visual token comes from the kit (system.css). */
+
+.panel {
+  border: 1px solid var(--line);
+  background: var(--white);
+  padding: 16px;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.over {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.skel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 8px 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+  font: inherit;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.file:hover .name,
+.file:focus-visible .name {
+  color: var(--electric);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.meta {
+  flex: none;
+  white-space: nowrap;
+}
+
+.acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  margin: 2px 0 6px;
+  background: var(--neg-wash);
+  box-shadow: inset 3px 0 var(--neg);
+}

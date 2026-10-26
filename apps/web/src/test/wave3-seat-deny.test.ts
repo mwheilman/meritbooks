@@ -1,11 +1,11 @@
 /**
- * H1 guard (security review): every RLS table created by migrations 185–190 carries the 1110
+ * H1 guard (security review): every RLS table created by migrations 185–194 carries the 1110
  * Projects-only seat deny (RESTRICTIVE `projects_only_seat_deny`).
  *
  * 1110_pm_access.sql is NOT in the PGlite replay (only NNN_ files are), so the migrations
  * guard their call with to_regprocedure(...). This test replays through 184, installs the 1110
  * contract (core.apply_projects_only_seat_deny copied verbatim; core.is_projects_only_seat
- * stubbed on a test GUC), applies 185–190, and asserts the policy is on every table they create.
+ * stubbed on a test GUC), applies 185–194 (Wave 4 added 191–194), and asserts the policy is on every table they create.
  * A static check also requires each file to name every table it creates in its seat-deny block.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -17,7 +17,7 @@ import { applyMigrationFile, createTestDb, listMigrationFiles } from './pg';
 import { asClaims } from './wave3-db-helpers';
 
 const MIGRATIONS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../packages/supabase/migrations');
-const WAVE3 = ['185', '186', '187', '188', '189', '190'];
+const WAVE3 = ['185', '186', '187', '188', '189', '190', '191', '192', '193', '194'];
 const files = listMigrationFiles().filter((f) => WAVE3.includes(f.slice(0, 3)));
 
 function createdTables(sql: string): string[] {
@@ -56,7 +56,7 @@ const INSTALL_1110_CONTRACT = `
   grant execute on function core.apply_projects_only_seat_deny(regclass) to service_role;
 `;
 
-describe('H1 static: every 185–190 table is named in its migration\'s seat-deny block', () => {
+describe('H1 static: every 185–194 table is named in its migration\'s seat-deny block', () => {
   for (const f of files) {
     it(f, () => {
       const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8');
@@ -68,7 +68,7 @@ describe('H1 static: every 185–190 table is named in its migration\'s seat-den
   }
 });
 
-describe('H1 replay: projects_only_seat_deny is on every RLS table 185–190 create', () => {
+describe('H1 replay: projects_only_seat_deny is on every RLS table 185–194 create', () => {
   let db: PGlite;
   const all = files.flatMap((f) => createdTables(fs.readFileSync(path.join(MIGRATIONS_DIR, f), 'utf8')));
 

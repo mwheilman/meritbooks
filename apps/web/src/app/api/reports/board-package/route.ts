@@ -26,6 +26,7 @@ import {
   fetchTrendSeries,
 } from './queries';
 import type { TrendPoint } from '@/lib/reports/board-package';
+import { fetchControlBalances, type ControlBalances } from '@/lib/reports/control-balances';
 import { getOrgDateContext } from '@/lib/dates/org-today';
 import { monthBoundsIso } from '@/lib/dates/org-date';
 import {
@@ -136,9 +137,10 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   let currentIS: IncomeStatementPayload;
   let priorIS: IncomeStatementPayload | null = null;
   let balanceSheet, cashFlow, arAging, apAging, debt;
+  let control: ControlBalances;
   let trendSeries: TrendPoint[] = [];
   try {
-    [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, trendSeries] = await Promise.all([
+    [currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, trendSeries, control] = await Promise.all([
       fetchIncomeStatement(ctx.supabase, { startDate, endDate, locationIds, basis }),
       priorShown ? fetchIncomeStatement(ctx.supabase, { startDate: prior.s, endDate: prior.e, locationIds, basis }) : Promise.resolve(null),
       fetchBalanceSheet(ctx.supabase, { asOfDate, locationIds, orgId: ctx.orgId }),
@@ -149,6 +151,8 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
       // Debt outstanding as of the statement date (schedule-derived).
       fetchDebt(ctx.supabase, locationIds, asOfDate),
       fetchTrendSeries(ctx.supabase, ctx.orgId ?? '', { endDate, locationIds, basis, periods: TREND_PERIODS }),
+      // THE receivables / payables: AR / AP control balances per the GL at the statement date.
+      fetchControlBalances(ctx.supabase, ctx.orgId, { asOfDate, locationIds }),
     ]);
   } catch (e) {
     return NextResponse.json(
@@ -188,7 +192,7 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
   };
 
   // 2. Executive summary. Deterministic by default; AI phrasing only on ai=1.
-  const kpis = computeKpis({ currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, periodDays });
+  const kpis = computeKpis({ currentIS, priorIS, balanceSheet, cashFlow, arAging, apAging, debt, periodDays, control });
   let executiveSummary: { text: string; source: 'ai' | 'deterministic'; model: string | null } = {
     text: deterministicExecutiveSummary(kpis, entityLabel, periodLabel),
     source: 'deterministic',
@@ -271,6 +275,7 @@ export const GET = apiQueryHandler(schema, async (params: Params, ctx: ApiContex
     periodDays,
     priorPeriodLabel,
     trendSeries,
+    control,
   });
 
   return NextResponse.json({

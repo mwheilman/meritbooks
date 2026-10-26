@@ -74,6 +74,17 @@ export function contrastReport(p: BrandPalette): ContrastReport {
   return { ok: checks.every((c) => !c.required || c.pass), checks };
 }
 
+/**
+ * Plain-English verdict for one check. WCAG AA: 4.5:1 for body text; 3:1 is enough only for
+ * large text (≥ 24px, or ≥ 18.66px bold) and UI parts (icons, borders, focus rings) — so a
+ * colour that clears 3:1 but not 4.5:1 "passes for large text and UI only", never just "passes".
+ */
+export function contrastVerdict(c: Pick<ContrastCheck, 'ratio' | 'min' | 'pass' | 'required'>): string {
+  if (!c.pass) return c.required ? `needs ${c.min}:1` : 'low';
+  if (c.ratio < AA_TEXT) return 'passes for large text and UI only (body text needs 4.5:1)';
+  return 'passes';
+}
+
 /** Make a palette pass every required check (and the advisory ones), hues kept. */
 export function fixPalette(p: BrandPalette): BrandPalette {
   const primary = ensureContrast(p.primary, WHITE, AA_TEXT);

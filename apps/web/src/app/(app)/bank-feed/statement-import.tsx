@@ -1,14 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { clsx } from 'clsx';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { Button, Check, Dialog, Field, Icon, InlineNotice, Input, Select, Tag } from '@meritbooks/merit-ui';
 import { formatMoney, centsToDollars } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
-import {
-  UploadCloud, FileText, Loader2, X, Trash2, Sparkles, AlertTriangle, CheckCircle2, Info, CreditCard, CopyCheck,
-} from 'lucide-react';
+import s from './bank-feed-panels.module.css';
 
 type StatementAccountType = 'CHECKING' | 'SAVINGS' | 'CREDIT_CARD' | 'LINE_OF_CREDIT';
 
@@ -90,15 +88,13 @@ export function StatementImport({
     '/api/bank-feed/import-statement',
   );
 
-  // Close on Escape (skip while actively parsing/confirming so a keystroke can't
-  // abandon in-flight work).
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape' && phase !== 'parsing' && phase !== 'confirming') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose, phase]);
+  // Esc / the scrim close the dialog, except while parsing or confirming so a
+  // keystroke can't abandon in-flight work.
+  const busy = phase === 'parsing' || phase === 'confirming';
+  const requestClose = useCallback(() => {
+    if (!busy) onClose();
+  }, [busy, onClose]);
+
   const accounts = acctData?.accounts ?? [];
   const manualAccounts = accounts.filter((a) => !a.plaidLinked);
   const selected = accounts.find((a) => a.id === accountId) ?? null;
@@ -211,66 +207,85 @@ export function StatementImport({
     onImported(inserted);
   }
 
-  const inputCls =
-    'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
+  const allIncluded = rows.length > 0 && includedCount === rows.length;
+  const someIncluded = includedCount > 0 && includedCount < rows.length;
+  const setAllIncluded = (on: boolean) => setRows((rs) => rs.map((r) => ({ ...r, include: on })));
+  const acctLabel = (a: { label: string; mask: string | null }) => `${a.label}${a.mask ? ` ••${a.mask}` : ''}`;
+  const dropState = phase === 'parsing' ? 'busy' : !canUpload ? 'off' : dragOver ? 'over' : 'idle';
+  const openPicker = () => {
+    if (canUpload && phase === 'select') fileInput.current?.click();
+  };
+  const inReview = (phase === 'review' || phase === 'confirming') && !!parsed;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="statement-import-title"
-        className="card w-full max-w-5xl max-h-[92vh] overflow-y-auto p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles size={18} className="text-indigo-400" />
-            <div>
-              <h2 id="statement-import-title" className="text-lg font-semibold text-white">Import statement (PDF)</h2>
-              <p className="text-[11px] text-slate-500">
-                For manual accounts without a Plaid feed. Drop a bank or credit-card statement — AI extracts the
-                transactions; you review and confirm. Nothing is imported until you confirm.
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
+    <Dialog
+      open
+      onClose={requestClose}
+      title="Import a statement"
+      className={s.importDialog}
+      dismissOnScrim={!busy}
+      footNote={
+        inReview ? (
+          <span className={s.footNote}>
+            Imported lines land in the bank feed as Pending and go through the same AI coding and reconciliation as a live
+            feed. Negative = money out (debit or card charge); positive = money in.
+          </span>
+        ) : undefined
+      }
+      actions={
+        <>
+          <Button variant="quiet" onClick={requestClose} disabled={busy} chord="escape">
+            Cancel
+          </Button>
+          {inReview && (
+            <Button
+              variant="primary"
+              onClick={() => void confirmImport()}
+              disabled={phase === 'confirming' || includedCount === 0}
+              aria-busy={phase === 'confirming' || undefined}
+            >
+              {phase === 'confirming' ? 'Importing…' : `Import ${includedCount} transaction${includedCount === 1 ? '' : 's'}`}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <p className={s.lede}>
+        For manual accounts without a Plaid feed. Drop a bank or credit-card statement (PDF or image); AI reads the
+        transactions and you review them. Nothing is imported until you confirm.
+      </p>
 
+      <div className={s.stack}>
         {error && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {error}
-          </div>
+          <InlineNotice tone="neg" title="That statement wasn’t read.">
+            {error}
+          </InlineNotice>
         )}
 
         {/* ── Select account + upload ─────────────────────────────────── */}
         {(phase === 'select' || phase === 'parsing') && (
           <>
-            <div className="mb-4">
-              <label htmlFor="statement-target-account" className="block text-[11px] text-slate-500 mb-1">Target account</label>
-              {acctLoading ? (
-                <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <Loader2 size={13} className="animate-spin" /> Loading accounts…
-                </div>
-              ) : accounts.length === 0 ? (
-                <div className="text-xs text-slate-500">No bank accounts found. Add a bank account first.</div>
-              ) : (
-                <select
-                  id="statement-target-account"
-                  className={clsx(inputCls, 'max-w-md')}
+            {acctLoading ? (
+              <div className="wg-loading" aria-busy="true">
+                <span className="bar-l" style={{ width: 320 }} aria-hidden="true" />
+                <span className="t-cap" role="status">Loading accounts…</span>
+              </div>
+            ) : accounts.length === 0 ? (
+              <InlineNotice title="No bank accounts yet.">Add a bank or card account first, then import its statement here.</InlineNotice>
+            ) : (
+              <Field label="Target account" id="statement-target-account" className={s.acctField} help="Only manual accounts can take a statement import.">
+                <Select
                   value={accountId}
                   onChange={(e) => { setAccountId(e.target.value); setError(null); }}
                   disabled={phase === 'parsing'}
+                  data-autofocus
                 >
                   <option value="">Select an account…</option>
                   {manualAccounts.length > 0 && (
                     <optgroup label="Manual (importable)">
                       {manualAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.label}{a.mask ? ` ••${a.mask}` : ''} · {a.locationName}
+                          {acctLabel(a)} · {a.locationName}
                         </option>
                       ))}
                     </optgroup>
@@ -279,59 +294,61 @@ export function StatementImport({
                     <optgroup label="Plaid-linked (live feed — not importable)">
                       {accounts.filter((a) => a.plaidLinked).map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.label}{a.mask ? ` ••${a.mask}` : ''} · {a.locationName}
+                          {acctLabel(a)} · {a.locationName}
                         </option>
                       ))}
                     </optgroup>
                   )}
-                </select>
-              )}
-            </div>
+                </Select>
+              </Field>
+            )}
 
             {isPlaid && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                <CreditCard size={14} className="mt-0.5 shrink-0" />
-                This account is linked to Plaid — its live feed is the source of truth. Statement import is only for
-                manual (non-Plaid) accounts.
-              </div>
+              <InlineNotice tone="warn" icon={<Icon name="plug" />} title="This account has a live Plaid feed.">
+                The feed is the source of truth. Statement import is only for manual (non-Plaid) accounts.
+              </InlineNotice>
             )}
 
             <div
+              role="button"
+              tabIndex={canUpload && phase === 'select' ? 0 : -1}
+              aria-disabled={!canUpload || phase !== 'select'}
+              aria-label={canUpload ? 'Choose a statement file to upload' : 'Select an importable account to upload a statement'}
+              data-state={dropState}
+              className={s.drop}
               onDragOver={(e) => { e.preventDefault(); if (canUpload) setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              onClick={() => canUpload && phase === 'select' && fileInput.current?.click()}
-              className={clsx(
-                'flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors',
-                phase === 'parsing'
-                  ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
-                  : !canUpload
-                    ? 'border-slate-800 bg-slate-900/40 opacity-60 cursor-not-allowed'
-                    : dragOver
-                      ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
-                      : 'border-slate-700 hover:border-slate-600 cursor-pointer',
-              )}
+              onClick={openPicker}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  openPicker();
+                }
+              }}
             >
               <input
                 ref={fileInput}
                 type="file"
                 accept=".pdf,image/*"
-                className="hidden"
+                className={s.hiddenInput}
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) void parse(f); e.target.value = ''; }}
               />
               {phase === 'parsing' ? (
-                <>
-                  <Loader2 className="w-9 h-9 text-indigo-400 animate-spin mb-3" />
-                  <p className="text-sm text-slate-300">Reading the statement and extracting transactions…</p>
-                  <p className="text-[11px] text-slate-500 mt-1">This can take 15-30 seconds for a long statement.</p>
-                </>
+                <div className="wg-loading" aria-busy="true">
+                  <span className={`bar-l ${s.busyBar}`} aria-hidden="true" />
+                  <span className="t-head" role="status">Reading the statement and pulling out transactions…</span>
+                  <span className="t-cap">A long statement can take 15–30 seconds.</span>
+                </div>
               ) : (
                 <>
-                  <UploadCloud className="w-10 h-10 text-slate-500 mb-3" />
-                  <p className="text-sm text-slate-200 font-medium">
-                    {canUpload ? 'Drop a bank / credit-card statement here' : 'Select an importable account to continue'}
-                  </p>
-                  <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 15MB</p>
+                  <span className={s.dropMark} aria-hidden="true">
+                    <Icon name="upload" />
+                  </span>
+                  <span className="t-head">
+                    {canUpload ? 'Drop a bank or credit-card statement here' : 'Select an importable account to continue'}
+                  </span>
+                  <span className="t-cap">or click to browse · PDF, PNG, JPEG · up to 15 MB</span>
                 </>
               )}
             </div>
@@ -339,159 +356,158 @@ export function StatementImport({
         )}
 
         {/* ── Review ──────────────────────────────────────────────────── */}
-        {(phase === 'review' || phase === 'confirming') && parsed && (
+        {inReview && parsed && (
           <>
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                <FileText size={13} className="text-indigo-400" />
-                <span className="truncate max-w-[220px]">{parsed.meta.fileName}</span>
-                <span className="text-slate-600">·</span>
-                <span>{parsed.account.label}{parsed.account.mask ? ` ••${parsed.account.mask}` : ''}</span>
+            <div className={s.reviewHead}>
+              <span className="t-cap">
+                <span className="ink">{parsed.meta.fileName}</span>
+                {' · '}
+                {acctLabel(parsed.account)}
                 {(parsed.statement.periodStart || parsed.statement.periodEnd) && (
-                  <>
-                    <span className="text-slate-600">·</span>
-                    <span>{parsed.statement.periodStart ?? '?'} → {parsed.statement.periodEnd ?? '?'}</span>
-                  </>
+                  <span className="tnum">
+                    {' · '}
+                    {parsed.statement.periodStart ?? '?'} → {parsed.statement.periodEnd ?? '?'}
+                  </span>
                 )}
-              </div>
-              <div className="text-[11px] text-slate-500">
+              </span>
+              <span className="t-cap tnum">
                 {includedCount} of {rows.length} line{rows.length === 1 ? '' : 's'} selected
-              </div>
+              </span>
             </div>
 
-            {/* Balance tie-out banner */}
+            {/* Balance tie-out */}
             {checkable ? (
-              <div
-                className={clsx(
-                  'mb-3 flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-xs',
-                  tied
-                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                    : 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  {tied ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+              <InlineNotice tone={tied ? 'default' : 'warn'}>
+                <span className={s.tie}>
                   <span>
+                    <b>{tied ? 'Balances tie out.' : 'Balances don’t tie.'}</b>{' '}
                     {tied
-                      ? 'Balances tie out: opening + selected lines = closing.'
-                      : 'Balances do not tie — the selected lines do not foot to the statement change.'}
+                      ? 'Opening + selected lines = closing.'
+                      : 'The selected lines don’t add up to the statement’s change in balance.'}
                   </span>
-                </div>
-                <div className="flex items-center gap-3 font-mono">
-                  <span>Open {formatMoney(parsed.statement.openingCents ?? 0)}</span>
-                  <span>Close {formatMoney(parsed.statement.closingCents ?? 0)}</span>
-                  {!tied && liveDiff != null && <span className="font-semibold">Off by {formatMoney(Math.abs(liveDiff))}</span>}
-                </div>
-              </div>
+                  <span className={`${s.tieFigs} tnum`}>
+                    <span>Open {formatMoney(parsed.statement.openingCents ?? 0)}</span>
+                    <span>Close {formatMoney(parsed.statement.closingCents ?? 0)}</span>
+                    {!tied && liveDiff != null && <b>Off by {formatMoney(Math.abs(liveDiff))}</b>}
+                  </span>
+                </span>
+              </InlineNotice>
             ) : (
-              <div className="mb-3 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] text-slate-400">
-                <Info size={13} className="shrink-0 text-slate-500" />
-                The statement did not state both an opening and closing balance, so a tie-out check is not possible.
-                Review the lines carefully.
-              </div>
+              <InlineNotice title="No tie-out possible.">
+                The statement doesn’t state both an opening and a closing balance. Review the lines carefully.
+              </InlineNotice>
             )}
 
-            {parsed.statement.documentNote && (
-              <div className="mb-3 flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] text-slate-400">
-                <Info size={13} className="mt-0.5 shrink-0 text-slate-500" /> {parsed.statement.documentNote}
-              </div>
-            )}
+            {parsed.statement.documentNote && <InlineNotice>{parsed.statement.documentNote}</InlineNotice>}
 
             {duplicateCount > 0 && (
-              <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 px-3 py-2 text-[11px] text-blue-300">
-                <span className="flex items-center gap-2">
-                  <CopyCheck size={13} /> {duplicateCount} line{duplicateCount === 1 ? '' : 's'} already exist in this account (matched by date, amount &amp; description).
+              <InlineNotice tone="info">
+                <span className={s.tie}>
+                  <span>
+                    <b className="tnum">
+                      {duplicateCount} line{duplicateCount === 1 ? '' : 's'} already in this account
+                    </b>{' '}
+                    (same date, amount and description).
+                  </span>
+                  <Button variant="quiet" onClick={excludeDuplicates}>
+                    Exclude all duplicates
+                  </Button>
                 </span>
-                <button onClick={excludeDuplicates} className="underline hover:text-blue-200">Exclude all duplicates</button>
-              </div>
+              </InlineNotice>
             )}
 
             {rows.length === 0 ? (
-              <div className="rounded-xl border border-slate-800 bg-slate-900/40 px-6 py-12 text-center">
-                <FileText className="w-8 h-8 mx-auto text-slate-600 mb-2" />
-                <p className="text-sm text-slate-300">No transactions were detected in this statement.</p>
+              <div className="wg-state">
+                <span className="wg-empty-mark" aria-hidden="true">
+                  <Icon name="file-text" />
+                </span>
+                <span className="t-head">No transactions were found in this statement.</span>
+                <p>Check it’s the right file, or try a clearer scan.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-800">
-                <table className="w-full text-xs">
+              <div className={s.tableWrap}>
+                <table className="tbl tbl-q tbl-q--compact tbl-q--flush" aria-label="Statement lines to import">
+                  <colgroup>
+                    <col style={{ width: 48 }} />
+                    <col style={{ width: 168 }} />
+                    <col />
+                    <col style={{ width: 160 }} />
+                    <col style={{ width: 56 }} />
+                  </colgroup>
                   <thead>
-                    <tr className="border-b border-slate-800 text-left text-[10px] uppercase tracking-wide text-slate-500">
-                      <th className="px-2 py-2 w-8"></th>
-                      <th className="px-2 py-2 w-32">Date</th>
-                      <th className="px-2 py-2">Description</th>
-                      <th className="px-2 py-2 w-36 text-right">Amount</th>
-                      <th className="px-2 py-2 w-16"></th>
+                    <tr>
+                      <th>
+                        <Check
+                          aria-label="Include all lines"
+                          checked={allIncluded}
+                          indeterminate={someIncluded}
+                          onChange={(e) => setAllIncluded(e.target.checked)}
+                        />
+                      </th>
+                      <th>Date</th>
+                      <th>Description</th>
+                      <th className="n">Amount</th>
+                      <th><span className="sr">Remove</span></th>
                     </tr>
                   </thead>
                   <tbody>
                     {rows.map((r) => (
                       <tr
                         key={r._id}
-                        className={clsx(
-                          'border-b border-slate-900/70',
-                          !r.include && 'opacity-40',
-                          r.lowConfidence && 'bg-amber-500/[0.04]',
-                        )}
+                        className={[!r.include && s.excluded, r.lowConfidence && s.lowConf].filter(Boolean).join(' ') || undefined}
                       >
-                        <td className="px-2 py-1.5 align-middle">
-                          <input
-                            type="checkbox"
+                        <td>
+                          <Check
                             checked={r.include}
                             onChange={(e) => setRow(r._id, 'include', e.target.checked)}
-                            className="accent-emerald-500"
                             aria-label="Include line"
                           />
                         </td>
-                        <td className="px-2 py-1.5">
-                          <input
+                        <td>
+                          <Input
                             type="date"
-                            className={clsx(inputCls, r.transaction_date == null && 'border-amber-500/60')}
+                            className="tnum"
+                            invalid={r.transaction_date == null}
                             value={r.transaction_date ?? ''}
                             onChange={(e) => setRow(r._id, 'transaction_date', e.target.value || null)}
+                            aria-label="Date"
                           />
                         </td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              className={inputCls}
+                        <td>
+                          <div className={s.descCell}>
+                            <Input
                               value={r.description}
                               onChange={(e) => setRow(r._id, 'description', e.target.value)}
                               placeholder="Description"
+                              aria-label="Description"
                             />
                             {r.duplicate && (
-                              <span className="shrink-0 rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-medium text-blue-300" title="Already exists in this account">
-                                DUP
-                              </span>
+                              <Tag title="Already exists in this account">Duplicate</Tag>
+                            )}
+                            {r.lowConfidence && (
+                              <Tag tone="warn" title="The AI was unsure about this line — check it against the statement">
+                                Check
+                              </Tag>
                             )}
                           </div>
                         </td>
-                        <td className="px-2 py-1.5">
-                          <input
+                        <td>
+                          <Input
                             type="number"
                             step="0.01"
-                            className={clsx(
-                              inputCls,
-                              'text-right font-mono',
-                              r.amount_cents == null && 'border-amber-500/60',
-                              (r.amount_cents ?? 0) < 0 ? 'text-red-300' : 'text-emerald-300',
-                            )}
+                            className="input--money"
+                            invalid={r.amount_cents == null}
                             value={r.amount_cents == null ? '' : centsToDollars(r.amount_cents)}
                             onChange={(e) =>
                               setRow(r._id, 'amount_cents', e.target.value === '' ? null : Math.round(Number(e.target.value) * 100))
                             }
                             placeholder="0.00"
+                            aria-label="Amount"
                             title="Negative = money out (debit / charge); positive = money in"
                           />
                         </td>
-                        <td className="px-2 py-1.5 text-right">
-                          <button
-                            onClick={() => removeRow(r._id)}
-                            className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800"
-                            aria-label="Remove line"
-                            title="Remove"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                        <td className="n">
+                          <Button variant="quiet" iconOnly icon="x" onClick={() => removeRow(r._id)} aria-label="Remove line" title="Remove" />
                         </td>
                       </tr>
                     ))}
@@ -499,27 +515,9 @@ export function StatementImport({
                 </table>
               </div>
             )}
-
-            <div className="mt-5 flex items-center justify-between">
-              <p className="text-[11px] text-slate-600 max-w-md">
-                Imported lines land in the bank feed as PENDING and flow through the same AI categorization and
-                reconciliation as a live feed. Negative = money out (debit / card charge); positive = money in.
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                <button
-                  onClick={confirmImport}
-                  disabled={phase === 'confirming' || includedCount === 0}
-                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
-                >
-                  {phase === 'confirming' && <Loader2 size={14} className="animate-spin" />}
-                  Import {includedCount} transaction{includedCount === 1 ? '' : 's'}
-                </button>
-              </div>
-            </div>
           </>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

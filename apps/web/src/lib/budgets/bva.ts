@@ -84,6 +84,17 @@ export function contributionOf(nature: 'income' | 'expense', naturalCents: numbe
   return nature === 'income' ? naturalCents : -naturalCents;
 }
 
+/**
+ * F / U for a line. With no budget for the window there is nothing to be favourable or
+ * unfavourable AGAINST, so the call is 'no_budget' (shown as "—"). The variance amount still
+ * shows, and unbudgeted activity over the materiality amount is still material — unbudgeted
+ * spend is exactly what a reviewer wants explained.
+ */
+export function bvaVerdict(nature: 'income' | 'expense', actualCents: number, budgetCents: number): BvaLine['verdict'] {
+  if (budgetCents === 0) return 'no_budget';
+  return varianceVerdict(nature, actualCents - budgetCents);
+}
+
 export function departmentBva(i: BvaInput): BvaOutput {
   const ids = new Set<string>();
   for (const k of [...i.actual.keys(), ...i.budget.keys()]) ids.add(k.slice(0, k.indexOf('|')));
@@ -114,7 +125,7 @@ export function departmentBva(i: BvaInput): BvaOutput {
       variancePct: budgetCents === 0 ? null : varianceCents / Math.abs(budgetCents),
       pyChangeCents,
       pyChangePct: pyCents === 0 ? null : pyChangeCents / Math.abs(pyCents),
-      verdict: varianceVerdict(nature, varianceCents),
+      verdict: bvaVerdict(nature, actualCents, budgetCents),
       material: isMaterial(varianceCents, budgetCents, rule),
       explanation: i.explanations?.get(id) ?? null,
     });
@@ -139,4 +150,16 @@ export function departmentBva(i: BvaInput): BvaOutput {
     totals: { actualCents: total((l) => l.actualCents), budgetCents: total((l) => l.budgetCents), pyCents: total((l) => l.pyCents), measure },
     materialCount: lines.filter((l) => l.material).length,
   };
+}
+
+/** Latest month (1–12) of `fyMonths` with any non-zero actual cell; null when the year has none. */
+export function latestActualMonthOf(actual: CentsByAccountMonth, fyMonths: readonly MonthKey[]): number | null {
+  const inYear = new Set(fyMonths);
+  let latest: MonthKey | null = null;
+  for (const [k, v] of actual) {
+    if (v === 0) continue;
+    const m = k.slice(k.indexOf('|') + 1);
+    if (inYear.has(m) && (latest === null || m > latest)) latest = m;
+  }
+  return latest === null ? null : Number(latest.slice(5, 7));
 }

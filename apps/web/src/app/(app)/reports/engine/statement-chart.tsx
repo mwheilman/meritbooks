@@ -5,6 +5,12 @@ import { Seg } from '@meritbooks/merit-ui';
 import { ChartCard, TimeSeriesChart, summarizeTimeSeries, timeSeriesTable, type TimeSeriesData } from '@/components/charts';
 import type { ReportResult } from '@/lib/reports/engine/types';
 
+/** "Total revenue" → "Revenue" (a tab names the series; sentence case, never a lowercase start). */
+export function seriesTabLabel(label: string): string {
+  const t = label.replace(/^Total\s+/i, '').trim();
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : label;
+}
+
 /**
  * Chart slot for time-split statements (3C ChartCard contract: summary sentence, view as
  * table, CSV / XLSX). Draws one key row (revenue, gross profit, net income …) across the
@@ -38,7 +44,7 @@ export function StatementChart({ result }: { result: ReportResult }) {
       height={220}
       actions={
         series.length > 1 ? (
-          <Seg<string> aria-label="Series" value={active.rowId} onChange={setRowId} items={series.map((x) => ({ value: x.rowId, label: x.label.replace(/^Total /, '') }))} />
+          <Seg<string> aria-label="Series" value={active.rowId} onChange={setRowId} items={series.map((x) => ({ value: x.rowId, label: seriesTabLabel(x.label) }))} />
         ) : undefined
       }
     >

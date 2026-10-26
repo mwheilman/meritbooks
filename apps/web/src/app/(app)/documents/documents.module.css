@@ -20,10 +20,27 @@
   align-items: start;
 }
 
-@media (max-width: 1180px) {
+/* Below this the panel stacks under the table instead of squeezing it (1280 px laptops
+   included: sidebar + a 420 px panel left the table ~550 px and the columns collapsed). */
+@media (max-width: 1360px) {
   .split {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The table never squeezes below a readable width: it scrolls sideways instead. */
+.tableWrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tableWrap > * {
+  min-width: 880px;
+}
+
+/* Panel open: three columns (document · type · status) need far less. */
+.tableWrapNarrow > * {
+  min-width: 520px;
 }
 
 .state {

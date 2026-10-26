@@ -2,7 +2,7 @@
 
 import { usePeekDetail } from '@/components/hover-peek';
 import { formatMoney } from '@meritbooks/shared';
-import { Loader2 } from 'lucide-react';
+import s from './bills.module.css';
 
 interface BillLine { id: string; description: string | null; amount_cents: number; }
 interface BillDetail {
@@ -16,45 +16,54 @@ interface BillDetail {
 /** A miniature of the vendor bill for the hover-peek. */
 export function BillPeek({ billId }: { billId: string }) {
   const { data, loading } = usePeekDetail<BillDetail>(`/api/bills/${billId}`);
-  if (loading && !data) return <div className="flex items-center justify-center py-10"><Loader2 size={18} className="animate-spin text-slate-500" /></div>;
-  if (!data) return <div className="px-3 py-6 text-center text-xs text-slate-500">Preview unavailable</div>;
+  if (loading && !data) {
+    return (
+      <div className={`wg-loading ${s.peekState}`} aria-busy="true">
+        <span className="bar-l" style={{ width: '60%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '85%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '40%' }} aria-hidden="true" />
+        <span className="sr" role="status">Loading the bill preview</span>
+      </div>
+    );
+  }
+  if (!data) return <div className={s.peekState}><p className="t-cap">Preview unavailable — open the bill to see it.</p></div>;
 
   const shown = data.lines.slice(0, 6);
   const more = data.lines.length - shown.length;
   const vendorName = data.vendor?.display_name ?? data.vendor?.name ?? 'Vendor';
 
   return (
-    <div className="bg-white text-slate-800 m-2 rounded-lg p-3 text-[11px] leading-relaxed">
-      <div className="flex items-start justify-between mb-2">
-        <div>
-          <div className="font-semibold text-slate-900 text-xs">{vendorName}</div>
-          <div className="text-[10px] text-slate-500">Vendor Bill{data.location ? ` · ${data.location.short_code}` : ''}</div>
+    <div className={s.peek}>
+      <div className={s.peekHead}>
+        <div style={{ minWidth: 0 }}>
+          <span className="l1">{vendorName}</span>
+          <span className="l2">Vendor bill{data.location ? ` · ${data.location.short_code}` : ''}</span>
         </div>
-        <div className="text-right">
-          <div className="font-mono font-semibold text-slate-900">{data.bill_number ?? '--'}</div>
-          <div className="text-[10px] text-slate-500">{data.bill_date}</div>
+        <div className="n">
+          <span className="l1 tnum">{data.bill_number ?? '—'}</span>
+          <span className="l2 tnum">{data.bill_date}</span>
         </div>
       </div>
-      <div className="border-t border-slate-200 pt-1.5 mb-1.5 text-[10px] text-slate-500">
-        Due <span className="font-medium text-slate-700">{data.due_date}</span>
+      <div className={`t-cap ${s.peekDue}`}>
+        Due <span className="ink tnum">{data.due_date}</span>
       </div>
-      <table className="w-full">
+      <table className={s.peekLines}>
         <tbody>
           {shown.map((l) => (
-            <tr key={l.id} className="border-b border-slate-100">
-              <td className="py-0.5 pr-2 text-slate-700 truncate max-w-[180px]">{l.description ?? 'Line'}</td>
-              <td className="py-0.5 text-right font-mono text-slate-700 whitespace-nowrap">{formatMoney(l.amount_cents)}</td>
+            <tr key={l.id}>
+              <td className="ink-2">{l.description ?? 'Line'}</td>
+              <td className="n">{formatMoney(l.amount_cents)}</td>
             </tr>
           ))}
-          {more > 0 && <tr><td className="py-0.5 text-[10px] text-slate-400 italic" colSpan={2}>+ {more} more line{more > 1 ? 's' : ''}</td></tr>}
+          {more > 0 && <tr><td className="t-cap" colSpan={2}>+ {more} more line{more > 1 ? 's' : ''}</td></tr>}
         </tbody>
       </table>
-      <div className="mt-1.5 pt-1.5 border-t border-slate-200 space-y-0.5">
-        <div className="flex justify-between"><span className="text-slate-500">Subtotal</span><span className="font-mono text-slate-700">{formatMoney(data.subtotal_cents)}</span></div>
-        {data.tax_cents > 0 && <div className="flex justify-between"><span className="text-slate-500">Tax</span><span className="font-mono text-slate-700">{formatMoney(data.tax_cents)}</span></div>}
-        <div className="flex justify-between"><span className="font-semibold text-slate-900">Total</span><span className="font-mono font-semibold text-slate-900">{formatMoney(data.total_cents)}</span></div>
-        <div className="flex justify-between"><span className="font-semibold text-slate-900">Balance</span><span className={`font-mono font-semibold ${data.balance_cents > 0 ? 'text-rose-600' : 'text-slate-900'}`}>{formatMoney(data.balance_cents)}</span></div>
-      </div>
+      <dl className={s.peekTotals}>
+        <dt className="ink-2">Subtotal</dt><dd>{formatMoney(data.subtotal_cents)}</dd>
+        {data.tax_cents > 0 && <><dt className="ink-2">Tax</dt><dd>{formatMoney(data.tax_cents)}</dd></>}
+        <dt className={s.strong}>Total</dt><dd className={s.strong}>{formatMoney(data.total_cents)}</dd>
+        <dt className={s.strong}>Balance due</dt><dd className={s.strong}>{formatMoney(data.balance_cents)}</dd>
+      </dl>
     </div>
   );
 }

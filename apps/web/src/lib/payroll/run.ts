@@ -762,6 +762,16 @@ export async function postRun(db: DB, orgId: string, runId: string): Promise<Pos
     .is('gl_entry_id', null);
   if (error) throw new RunStateError(`Failed to link GL entry to run: ${error.message}`);
 
+  // Projects seam (migration 194): for a client that uses Merit Projects, allocate this run's
+  // actual labor cost to jobs by approved hours. Best effort — the payroll post stands on its
+  // own; a failure is recorded on job_labor_allocations and retried by the seam cron.
+  try {
+    const { allocateLaborForRun } = await import('@/lib/projects-seam/labor-allocation');
+    await allocateLaborForRun(db, orgId, runId);
+  } catch (e) {
+    console.error('[payroll] job labor allocation deferred:', e instanceof Error ? e.message : e);
+  }
+
   return { glEntryId: result.gl_entry_id, alreadyPosted: false };
 }
 

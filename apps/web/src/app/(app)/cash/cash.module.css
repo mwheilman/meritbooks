@@ -1,0 +1,205 @@
+/* /cash — layout only; every visual token comes from the kit (packages/merit-ui/styles/system.css). */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.grow {
+  flex: 1;
+  min-width: 120px;
+}
+
+.figs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+
+.figs > * {
+  background: var(--white);
+  padding: 16px;
+}
+
+.grid2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.full {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 1100px) {
+  .grid2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.section {
+  margin: 24px 0 8px;
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.tableWrap table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tableWrap td,
+.tableWrap th {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sticky {
+  position: sticky;
+  left: 0;
+  background: var(--white);
+  z-index: 1;
+}
+
+.grid td.cell,
+.grid th.cell {
+  min-width: 92px;
+}
+
+.cellBtn {
+  all: unset;
+  display: block;
+  width: 100%;
+  text-align: right;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellBtn:focus-visible {
+  outline: 2px solid var(--electric);
+  outline-offset: 2px;
+}
+
+.weekHead {
+  all: unset;
+  cursor: pointer;
+  display: block;
+  text-align: right;
+}
+
+.weekHead:focus-visible {
+  outline: 2px solid var(--electric);
+  outline-offset: 2px;
+}
+
+.selected {
+  background: var(--sky);
+}
+
+.breach {
+  box-shadow: inset 0 -2px 0 var(--neg);
+}
+
+.neg {
+  color: var(--neg);
+}
+
+.pos {
+  color: var(--pos);
+}
+
+.muted {
+  color: var(--ink-3);
+}
+
+.days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--line);
+  border: 1px solid var(--line);
+  margin: 8px 0 16px;
+}
+
+.day {
+  all: unset;
+  background: var(--white);
+  padding: 8px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.day:focus-visible {
+  outline: 2px solid var(--electric);
+  outline-offset: -2px;
+}
+
+.dayOn {
+  background: var(--sky);
+  box-shadow: inset 0 -2px 0 var(--electric);
+}
+
+.dayPast {
+  color: var(--ink-3);
+  cursor: default;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+
+.formWide {
+  grid-column: 1 / -1;
+}
+
+.list > * + * {
+  border-top: 1px solid var(--line);
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--white);
+}
+
+.listRow > .grow {
+  min-width: 0;
+}
+
+.notes {
+  margin: 8px 0 16px;
+}
+
+.notes > * + * {
+  margin-top: 8px;
+}
+
+.recs > * + * {
+  margin-top: 8px;
+}

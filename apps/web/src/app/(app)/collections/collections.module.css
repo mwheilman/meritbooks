@@ -1,0 +1,242 @@
+/* Collections (risk & cadence) — layout only; every visual token comes from the kit (system.css). */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 16px;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.companySelect {
+  min-width: 220px;
+}
+
+/* Figure strip. */
+.figs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.figs > * {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.figs > *:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 1100px) {
+  .figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .figs > * {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.figSkel {
+  width: 112px;
+  height: 20px;
+}
+
+/* The worklist scrolls inside its frame so the kit's sticky header holds. */
+.tableWrap {
+  border: 1px solid var(--line);
+  background: var(--white);
+  max-height: calc(100vh - 380px);
+  min-height: 240px;
+  overflow: auto;
+}
+
+.tableWrap > :global(.tbl) {
+  width: 100%;
+  min-width: 1120px;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+  color: var(--ink-3);
+}
+
+.toggle > :global(.l1) {
+  min-width: 0;
+}
+
+.indent {
+  padding-left: 24px;
+}
+
+/* The expanded account: a full-width row under its customer. */
+.detailRow > td {
+  height: auto !important;
+  padding-top: 16px !important;
+  padding-bottom: 16px !important;
+  white-space: normal !important;
+  background: var(--canvas);
+  vertical-align: top;
+}
+
+.detail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .detail {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.sub {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 2px;
+  font-size: var(--t-12);
+  line-height: var(--lh-12);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.subWrap {
+  flex-wrap: wrap;
+  white-space: normal;
+  margin-top: 4px;
+}
+
+.sub :global(.conf) {
+  font-size: var(--t-12);
+}
+
+.tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.cadence {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rowActs {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+/* Panel lists */
+.list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.list > li {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.invHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.invActs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.promise {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.why > * + * {
+  margin-top: 8px;
+}
+
+/* Dialogs */
+.dialogStack > * + * {
+  margin-top: 16px;
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.message {
+  min-height: 240px;
+  line-height: var(--lh-13);
+}
+
+.draftMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.drafting {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+@media (max-width: 720px) {
+  .two {
+    grid-template-columns: 1fr;
+  }
+}

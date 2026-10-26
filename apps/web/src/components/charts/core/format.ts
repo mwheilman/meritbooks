@@ -8,6 +8,7 @@
  */
 import { compactMoney, money, pct, pts } from '@meritbooks/merit-ui';
 import type { ChartUnit, MetricDirection, Value } from './types';
+import { formatRatio, TIMES } from '@/lib/format/ratio';
 
 const MINUS = '−';
 
@@ -46,13 +47,11 @@ export function formatValue(v: Value | undefined, unit: ChartUnit, opts: FormatO
     }
     case 'percent':
       return pct(v, { decimals, sign: delta ? 'delta' : 'minus' });
-    case 'multiple': {
-      // Covenants live at two decimals (1.25x); "2.40x" reads as "2.4x".
-      const body = plainNumber(v, opts.decimals ?? 2).replace(/(\.\d)0$/, '$1');
-      return `${delta && v > 0 ? '+' : ''}${body}x`;
-    }
+    case 'multiple':
+      // Covenants live at two decimals (1.25×); "2.40×" reads as "2.4×". One ratio formatter.
+      return formatRatio(v, { decimals: opts.decimals ?? 2, delta, trimZero: true });
     case 'ratio':
-      return `${delta && v > 0 ? '+' : ''}${plainNumber(v, decimals + 1)}`;
+      return formatRatio(v, { decimals: opts.decimals ?? 2, delta });
     case 'days':
       return `${delta && v > 0 ? '+' : ''}${plainNumber(v, 0)} ${Math.abs(Math.round(v)) === 1 ? 'day' : 'days'}`;
     case 'months':
@@ -90,7 +89,7 @@ export function axisLabels(ticks: readonly number[], unit: ChartUnit): string[] 
   }
   if (unit === 'multiple') {
     const d = decimalsFor([...ticks]);
-    return ticks.map((t) => `${plainNumber(t, d)}x`);
+    return ticks.map((t) => `${plainNumber(t, d)}${TIMES}`);
   }
   const d = decimalsFor([...ticks]);
   return ticks.map((t) => plainNumber(t, d));

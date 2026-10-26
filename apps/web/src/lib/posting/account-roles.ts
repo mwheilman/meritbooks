@@ -104,7 +104,10 @@ export type AccountRoleKey =
   // DR CONTRACT_LOSS_EXPENSE / CR CONTRACT_LOSS_PROVISION for a job whose EAC exceeds its
   // contract. Registered + seeded (2450 / 5250) by migration 179.
   | 'CONTRACT_LOSS_PROVISION'
-  | 'CONTRACT_LOSS_EXPENSE';
+  | 'CONTRACT_LOSS_EXPENSE'
+  // Direct job labor (migration 194): payroll cost reclassed to jobs by hours worked
+  // (Projects time × actual payroll). Defaults to 5000 Direct Labor (COGS).
+  | 'JOB_LABOR_COST';
 
 /** Standard COA numbers per role — fallback when account_roles isn't seeded. */
 export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
@@ -191,6 +194,7 @@ export const ROLE_DEFAULT_NUMBER: Record<AccountRoleKey, string> = {
   // 5250 (COGS, next to 5240 WIP), both free in the standard COA; created by migration 179.
   CONTRACT_LOSS_PROVISION: '2450',
   CONTRACT_LOSS_EXPENSE: '5250',
+  JOB_LABOR_COST: '5000',
 };
 
 /** A resolved account, carrying the type/sub-type the direction helper needs. */

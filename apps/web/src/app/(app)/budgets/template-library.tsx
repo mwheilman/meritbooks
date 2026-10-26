@@ -16,7 +16,8 @@ import {
   type DriverMethod,
   type TemplateLine,
 } from '@/lib/budgets/types';
-import { bpsToPctText, errText } from './budget-format';
+import { describeParams, describeSelector } from '@/lib/budgets/templates/describe';
+import { errText } from './budget-format';
 import { ScopeBar, useBudgetScope } from './budget-scope';
 import s from './budgets.module.css';
 
@@ -29,19 +30,16 @@ const KIND_LABEL: Record<DepartmentKind, string> = {
   CONSTRUCTION_PM: 'Construction PM', ADMIN: 'Admin & G&A', EXECUTIVE: 'Executive', FINANCE: 'Finance', OTHER: 'Other',
 };
 
+/** How the line picks its account, in plain English (lib/budgets/templates/describe.ts). */
 export function selectorText(l: TemplateLine): string {
-  const parts = [l.selector.types.join(' / ')];
-  if (l.selector.group) parts.push(`group ~ /${l.selector.group}/`);
-  if (l.selector.name) parts.push(`name ~ /${l.selector.name}/`);
-  if (l.selector.notName) parts.push(`not /${l.selector.notName}/`);
-  return parts.join(' · ');
+  return describeSelector(l);
 }
 
 function paramText(l: TemplateLine): string {
-  return Object.entries(l.params)
-    .map(([k, v]) => (/Bps$/.test(k) ? `${k.replace(/Bps$/, '')} ${bpsToPctText(v)}` : /Cents$/.test(k) ? `${k.replace(/Cents$/, '')} $${(v / 100).toLocaleString('en-US')}` : `${k} ${v}`))
-    .join(', ');
+  return describeParams(l);
 }
+
+const TYPE_LABEL: Record<AcctType, string> = { REVENUE: 'Revenue', COGS: 'Cost of sales', OPEX: 'Operating expense', OTHER: 'Other income / expense' };
 
 export function TemplateLibrary() {
   const sc = useBudgetScope();
@@ -188,7 +186,7 @@ function TemplateEditor({ draft, setDraft, locationId, onSaved }: {
             <Field label="Line"><Input value={l.label} onChange={(e) => setLine(i, { label: e.target.value })} /></Field>
             <Field label="Type">
               <Select value={l.selector.types[0]} onChange={(e) => setSel(i, { types: [e.target.value as AcctType] })}>
-                {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                {TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
               </Select>
             </Field>
             <Field label="Group pattern"><Input maxLength={100} placeholder="e.g. marketing|ads" value={l.selector.group ?? ''} onChange={(e) => setSel(i, { group: e.target.value || undefined })} /></Field>
@@ -205,6 +203,7 @@ function TemplateEditor({ draft, setDraft, locationId, onSaved }: {
                   onChange={(e) => { const n = Number(e.target.value); if (Number.isFinite(n)) setLine(i, { params: { ...l.params, [l.method === 'PCT_OF_REVENUE' ? 'pctBps' : 'growthBps']: Math.round(n * 100) } }); }} />
               </Field>
             )}
+            <p className={s.hint} style={{ gridColumn: '1 / -1', margin: 0 }}>Picks: {describeSelector(l)}</p>
             <Field label="Note for owners"><Input value={l.note ?? ''} onChange={(e) => setLine(i, { note: e.target.value || undefined })} /></Field>
             <Field label="Required">
               <Select value={l.required ? 'yes' : 'no'} onChange={(e) => setLine(i, { required: e.target.value === 'yes' })}>

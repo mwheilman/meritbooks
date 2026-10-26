@@ -12,6 +12,8 @@ export interface PeriodContextData extends PeriodContext {
   closedThrough: MonthKey | null;
   /** Close state per month for the companies in scope (missing month = no period set up). */
   months: Record<MonthKey, MonthCloseState>;
+  /** Months before `closedThrough` still not closed (open months before the first close). */
+  openBefore?: MonthKey[];
 }
 
 interface ContextResponse {
@@ -21,6 +23,7 @@ interface ContextResponse {
     currentMonth: MonthKey;
     closedThrough: MonthKey | null;
     months: Record<MonthKey, MonthCloseState>;
+    openBefore?: MonthKey[];
   };
 }
 
@@ -62,6 +65,7 @@ function load(scope: string, locationId: string | null): Promise<PeriodContextDa
         currentMonth: currentMonthOf(d.today),
         closedThrough: d.closedThrough ?? null,
         months: d.months ?? {},
+        openBefore: d.openBefore ?? [],
       };
       cache.set(scope, v);
       try {

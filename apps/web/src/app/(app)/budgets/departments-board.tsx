@@ -24,7 +24,7 @@ import {
   toast,
   useQuery,
 } from '@meritbooks/merit-ui';
-import { PLAN_STATUS_LABEL, type BoardResponse, type BoardRow } from '@/lib/budgets/types';
+import { BOARD_STATUS_LABEL, type BoardResponse, type BoardRow } from '@/lib/budgets/types';
 import { errText, pctText, planKind } from './budget-format';
 import { ScopeBar, useBudgetScope } from './budget-scope';
 import { DepartmentView } from './department-view';
@@ -146,7 +146,11 @@ function Board({ versionId, onOpen }: { versionId: string; onOpen: (departmentId
                           </Select>
                         ) : (r.ownerName ?? <span className={s.muted}>Finance</span>)}
                       </td>
-                      <td><Status kind={planKind(r.status, r.overdue)}>{r.overdue ? `${PLAN_STATUS_LABEL[r.status]} · overdue` : PLAN_STATUS_LABEL[r.status]}</Status>{r.plan?.reviewNote && r.status === 'RETURNED' && <div className={s.hint} title={r.plan.reviewNote}>“{r.plan.reviewNote}”</div>}</td>
+                      <td>{(() => {
+                        const kind = planKind(r.status, r.overdue);
+                        const label = r.overdue ? `${BOARD_STATUS_LABEL[r.status]} · overdue` : BOARD_STATUS_LABEL[r.status];
+                        return kind ? <Status kind={kind}>{label}</Status> : <span className={s.muted}>{label}</span>;
+                      })()}{r.plan?.reviewNote && r.status === 'RETURNED' && <div className={s.hint} title={r.plan.reviewNote}>“{r.plan.reviewNote}”</div>}</td>
                       <td className={r.overdue ? s.neg : undefined}>{r.dueDate ? longDate(r.dueDate) : '—'}</td>
                       <td className={s.n}>{money(r.revenueCents)}</td>
                       <td className={s.n}>{money(r.expenseCents)}</td>

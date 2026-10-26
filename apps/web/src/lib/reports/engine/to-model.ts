@@ -4,7 +4,7 @@
  * are never rounded); percent columns carry display strings.
  */
 import type { StatementModel, StmtRow } from '@/lib/reports/export/statement-model';
-import { formatPercent, formatPoints } from './format';
+import { formatCell, isNonMoneyRow, isPercentColumn } from './format';
 import type { ReportResult } from './types';
 
 const WATERMARK_TEXT: Record<string, string> = { preview: 'PREVIEW — NOT RELEASED', preliminary: 'PRELIMINARY' };
@@ -25,7 +25,7 @@ export function toStatementModel(r: ReportResult, opts: { collapsed?: ReadonlySe
   const columns = r.columns.map((c) => ({
     key: c.id,
     label: [c.label, c.sublabel].filter(Boolean).join(' · ').slice(0, 120),
-    money: !(c.percent || c.kind === 'variance_pct' || c.kind === 'common_size'),
+    money: !isPercentColumn(c),
   }));
   const hidden = new Set<string>();
   for (const row of r.rows) if (row.parentId && (opts.collapsed?.has(row.parentId) || hidden.has(row.parentId))) hidden.add(row.id);
@@ -50,8 +50,7 @@ export function toStatementModel(r: ReportResult, opts: { collapsed?: ReadonlySe
       values: r.columns.map((c, i) => {
         const v = row.values[i];
         if (v == null) return null;
-        if (c.percent || c.kind === 'variance_pct' || c.kind === 'common_size') return formatPercent(v);
-        if (row.percent) return c.kind === 'variance_amount' ? formatPoints(v) : formatPercent(v);
+        if (isPercentColumn(c) || isNonMoneyRow(row)) return formatCell(row, c, v, r.rounding);
         return v;
       }),
     });

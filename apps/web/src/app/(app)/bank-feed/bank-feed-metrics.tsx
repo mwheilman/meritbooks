@@ -1,22 +1,37 @@
 'use client';
 
-import { BarChart3, Bot, Zap, TrendingUp } from 'lucide-react';
-import { clsx } from 'clsx';
-import { Skeleton } from '@/components/ui';
+/**
+ * Processing metrics (kit rule 8 — a number is never alone): three dense figures,
+ * each a value + its comparison + where it goes. Reviewed today X of Y (Z%),
+ * AI auto-approved (of the reviewed), and average confidence on the open lines.
+ */
+
+import Link from 'next/link';
+import { Conf, Meter, scoreStrokes } from '@meritbooks/merit-ui';
 import type { BankFeedMetrics } from '@meritbooks/shared';
+import styles from './bank-feed.module.css';
 
 interface BankFeedMetricsStripProps {
   metrics: BankFeedMetrics | null;
   isLoading: boolean;
+  /** "Show posted" — jump to the Posted status tab. */
+  onShowPosted?: () => void;
+  /** "Show under 70" — narrow to the low-confidence band. */
+  onShowLow?: () => void;
 }
 
-export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStripProps) {
+export function BankFeedMetricsStrip({ metrics, isLoading, onShowPosted, onShowLow }: BankFeedMetricsStripProps) {
   if (isLoading) {
     return (
-      <div className="mb-4 flex items-center gap-6 px-4 py-3 rounded-lg bg-surface-900 border border-slate-800">
+      <div className={styles.metrics} aria-busy="true">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Skeleton key={i} className="h-5 w-36" />
+          <div key={i} className={styles.metricSkel}>
+            <span className="mb-skel" style={{ width: 112, height: 12 }} aria-hidden="true" />
+            <span className="mb-skel" style={{ width: 96, height: 20 }} aria-hidden="true" />
+            <span className="mb-skel" style={{ width: 160, height: 12 }} aria-hidden="true" />
+          </div>
         ))}
+        <span className="sr" role="status">Loading today&apos;s numbers</span>
       </div>
     );
   }
@@ -25,66 +40,81 @@ export function BankFeedMetricsStrip({ metrics, isLoading }: BankFeedMetricsStri
 
   const { total_today, reviewed_today, auto_approved_today, avg_confidence } = metrics;
   const pctReviewed = total_today > 0 ? Math.round((reviewed_today / total_today) * 100) : 0;
-  // The route reports 0 when no open line has been scored yet — that is "no data",
-  // not "0% confident", so it reads as a neutral dash rather than a red alarm.
+  // The route reports 0 when no open line has been scored yet — that is "nothing
+  // scored", not "0% confident", so it reads as a neutral dash rather than an alarm.
   const hasScored = Number.isFinite(avg_confidence) && avg_confidence > 0;
   const avgPct = hasScored ? Math.round(avg_confidence * 100) : null;
 
   return (
-    <div className="mb-4 flex items-center gap-6 px-4 py-3 rounded-lg bg-surface-900 border border-slate-800">
+    <section className={styles.metrics} aria-label="Today's processing">
       {/* Reviewed today */}
-      <div className="flex items-center gap-2">
-        <BarChart3 size={14} className="text-slate-500" />
-        <span className="text-sm text-slate-400">Reviewed today</span>
-        <span className="text-sm font-medium text-white font-mono tabular-nums">
-          {reviewed_today}/{total_today}
+      <div className={`fig ${styles.metric}`}>
+        <span className="fig-l">Reviewed today</span>
+        <span className={styles.metricValue}>
+          <span className="fig-v fig-v--dense tnum">
+            {reviewed_today.toLocaleString()} of {total_today.toLocaleString()}
+          </span>
+          {total_today > 0 && <Meter strokes={scoreStrokes(pctReviewed)} label={`${pctReviewed}% reviewed`} />}
         </span>
-        {total_today > 0 && (
-          <div className="flex items-center gap-1.5">
-            <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-              <div
-                className={clsx(
-                  'h-full rounded-full transition-all',
-                  pctReviewed >= 80 ? 'bg-emerald-500' : pctReviewed >= 50 ? 'bg-amber-500' : 'bg-slate-600'
-                )}
-                style={{ width: `${pctReviewed}%` }}
-              />
-            </div>
-            <span className="text-2xs font-mono tabular-nums text-slate-500">{pctReviewed}%</span>
-          </div>
+        <span className="fig-vs">
+          <span className="tnum">
+            {total_today > 0 ? `${pctReviewed}% of today's lines` : 'No new lines came in today'}
+          </span>
+        </span>
+        {onShowPosted && (
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={onShowPosted}>
+            Show posted
+          </button>
         )}
       </div>
-
-      <div className="h-4 w-px bg-slate-800" />
 
       {/* AI auto-approved */}
-      <div className="flex items-center gap-2">
-        <Zap size={14} className="text-indigo-400" />
-        <span className="text-sm text-slate-400">AI auto-approved</span>
-        <span className="text-sm font-medium text-white font-mono tabular-nums">{auto_approved_today}</span>
+      <div className={`fig ${styles.metric}`}>
+        <span className="fig-l">AI auto-approved</span>
+        <span className={styles.metricValue}>
+          <span className="fig-v fig-v--dense tnum">{auto_approved_today.toLocaleString()}</span>
+        </span>
+        <span className="fig-vs">
+          <span className="tnum">
+            {reviewed_today > 0
+              ? `of ${reviewed_today.toLocaleString()} reviewed today`
+              : 'Nothing reviewed yet today'}
+          </span>
+        </span>
+        <Link className="link" href="/ai-decisions">
+          AI decision log
+        </Link>
       </div>
 
-      <div className="h-4 w-px bg-slate-800" />
-
-      {/* Avg confidence */}
-      <div className="flex items-center gap-2">
-        <Bot size={14} className="text-indigo-400" />
-        <span className="text-sm text-slate-400">Avg confidence</span>
-        {avgPct === null ? (
-          <span className="text-sm font-medium font-mono tabular-nums text-slate-500" title="No open lines have been scored yet">
-            —<span className="sr-only">no scored lines yet</span>
+      {/* Average confidence */}
+      <div className={`fig ${styles.metric}`}>
+        <span className="fig-l">Avg confidence</span>
+        <span className={styles.metricValue}>
+          {avgPct === null ? (
+            <span className="fig-v fig-v--dense tnum" title="No open lines have been scored yet">
+              —<span className="sr"> no scored lines yet</span>
+            </span>
+          ) : (
+            <Conf score={avgPct} label={`Average confidence ${avgPct} of 100`} />
+          )}
+        </span>
+        <span className="fig-vs">
+          <span>
+            {avgPct === null
+              ? 'No open lines scored yet'
+              : avgPct >= 90
+                ? 'Open lines, 90+ is ready to batch'
+                : avgPct >= 70
+                  ? 'Open lines, 70–89 needs one look each'
+                  : 'Open lines, under 70 needs a decision'}
           </span>
-        ) : (
-          <span
-            className={clsx(
-              'text-sm font-medium font-mono tabular-nums',
-              avgPct >= 85 ? 'text-emerald-400' : avgPct >= 70 ? 'text-amber-400' : 'text-red-400',
-            )}
-          >
-            {avgPct}%
-          </span>
+        </span>
+        {onShowLow && (
+          <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={onShowLow}>
+            Show under 70
+          </button>
         )}
       </div>
-    </div>
+    </section>
   );
 }

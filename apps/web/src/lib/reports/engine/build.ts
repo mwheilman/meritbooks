@@ -34,6 +34,8 @@ import {
   type LayoutRow,
 } from './layout';
 import { addDays, fiscalYearStart, monthStart, monthsIn, rangeLabel, shortDate } from './periods';
+import { isNonMoneyRow } from './format';
+import { isCashAccount, presentAccounts } from './presentation';
 import type { Plan, PlannedColumn } from './plan';
 import type {
   AccountMeta,
@@ -83,6 +85,7 @@ function syntheticAccounts(): AccountMeta[] {
 }
 
 const round1 = (x: number) => Math.round(x * 10) / 10;
+const round4 = (x: number) => Math.round(x * 10_000) / 10_000;
 
 export function basisLabel(req: Pick<ReportRequest, 'basis' | 'customBasisLabel'>): string {
   switch (req.basis) {
@@ -328,14 +331,14 @@ function buildLayoutStatement(c: Ctx, layout: Layout, maps: Map<string, AccountM
     } else if (lr.kind === 'formula') {
       const node = parseFormula(lr.expr);
       formulas.set(lr.id, node);
-      if (lr.format === 'percent') rowPercent.add(lr.id);
+      if (lr.format === 'percent' || lr.format === 'ratio') rowPercent.add(lr.id);
       rowVals.set(
         lr.id,
         cols.map((col, i) => {
           if (!col.cell || !maps.get(col.id) || col.kind === 'elimination') return null;
           const v = evalFormula(node, (ref) => (rowPercent.has(ref) ? null : (rowVals.get(ref)?.[i] ?? null)));
           if (v == null || !Number.isFinite(v)) return null;
-          return lr.format === 'percent' ? round1(v) : Math.round(v);
+          return lr.format === 'percent' ? round1(v) : lr.format === 'ratio' ? round4(v) : Math.round(v);
         }),
       );
     }
@@ -418,6 +421,7 @@ function buildLayoutStatement(c: Ctx, layout: Layout, maps: Map<string, AccountM
         depth: 0,
         values: rowVals.get(lr.id)!,
         percent: lr.format === 'percent' || undefined,
+        ratio: lr.format === 'ratio' || undefined,
         goodWhen: isPnl ? (lr.goodWhen ?? 'up') : undefined,
       });
     }
@@ -520,19 +524,19 @@ export function fillDerived(columns: ReportColumn[], rows: ReportRow[], commonSi
         if (a == null || b == null) { r.values[i] = null; return; }
         const d = a - b === 0 ? 0 : a - b;
         if (col.kind === 'variance_amount') {
-          r.values[i] = r.percent ? round1(d) : d;
+          r.values[i] = r.percent ? round1(d) : r.ratio ? round4(d) : d;
           if (r.goodWhen && d !== 0) {
             fu[i] = (d > 0) === (r.goodWhen === 'up') ? 'F' : 'U';
             anyFu = true;
           }
         } else {
-          r.values[i] = r.percent || b === 0 ? null : round1((d / Math.abs(b)) * 100);
+          r.values[i] = isNonMoneyRow(r) || b === 0 ? null : round1((d / Math.abs(b)) * 100);
         }
       } else if (col.kind === 'common_size') {
         const ci = idx.get(col.of!)!;
         const v = r.values[ci];
         const base = baseRow?.values[ci];
-        r.values[i] = r.percent || v == null || !base ? null : round1((v / base) * 100);
+        r.values[i] = isNonMoneyRow(r) || v == null || !base ? null : round1((v / base) * 100);
       }
     });
     if (anyFu) r.fu = fu;
@@ -544,7 +548,7 @@ export function tieViolations(columns: ReportColumn[], rows: ReportRow[]): strin
   const byId = new Map(rows.map((r) => [r.id, r]));
   const bad: string[] = [];
   for (const r of rows) {
-    if (!r.sumOf || r.percent) continue;
+    if (!r.sumOf || isNonMoneyRow(r)) continue;
     columns.forEach((col, i) => {
       if (col.percent || col.kind === 'variance_pct' || col.kind === 'common_size') return;
       const v = r.values[i];
@@ -559,13 +563,20 @@ export function tieViolations(columns: ReportColumn[], rows: ReportRow[]): strin
 
 // ─── cash flow (indirect) ────────────────────────────────────────────────────
 
-const CASH_ROLES = ['OPERATING_BANK', 'CASH_ON_HAND', 'UNDEPOSITED_FUNDS'];
 const FINANCING_CURRENT_ROLES = ['NOTES_PAYABLE', 'FLOOR_PLAN_PAYABLE', 'FLOOR_PLAN_NOTE', 'LEASE_LIABILITY'];
 
+/**
+ * Cash-flow class of a balance-sheet account. CASH is THE canonical cash (presentation.ts
+ * `isCashAccount` — bank-flagged or cash-role asset accounts, on effective roles), so the cash
+ * flow's ending cash and the balance sheet's "Cash & cash equivalents" line are the same accounts.
+ * A tenant override (accounts.cash_flow_category) can move a non-cash account between operating /
+ * investing / financing, but cannot make a non-cash account cash (or cash non-cash) — that would
+ * break the tie to the balance sheet.
+ */
 export function cashFlowCategory(a: AccountMeta, accumulatedDepIds: ReadonlySet<string>): CashFlowCategory | null {
   if (isPnlAccount(a)) return null;
-  if (a.cashFlowCategory) return a.cashFlowCategory;
-  if (a.isBank || a.roles.some((r) => CASH_ROLES.includes(r))) return 'CASH';
+  if (isCashAccount(a)) return 'CASH';
+  if (a.cashFlowCategory && a.cashFlowCategory !== 'CASH') return a.cashFlowCategory;
   const n = a.name.toLowerCase();
   if (a.type === 'ASSET') {
     if (accumulatedDepIds.has(a.id) || (n.includes('accumulated') && (n.includes('depreciation') || n.includes('amortization')))) return 'NONCASH';
@@ -829,7 +840,8 @@ function publicColumn(col: PlannedColumn, status: ReportColumn['status']): Repor
 }
 
 export function buildReport(req: ReportRequest, plan: Plan, data: EngineData, now: string = new Date().toISOString()): ReportResult {
-  const accounts = new Map<string, AccountMeta>([...data.accounts, ...syntheticAccounts()].map((a) => [a.id, a]));
+  // Role-based presentation: effective roles + the cash / in-transit / intercompany lines.
+  const accounts = new Map<string, AccountMeta>([...presentAccounts(data.accounts), ...syntheticAccounts()].map((a) => [a.id, a]));
   // In-group windows apply to the financial statements; the trial balance and GL summary
   // are ledger tools and show every posted line (governance annotates them instead).
   const windowed = req.statement !== 'trial_balance' && req.statement !== 'gl_summary';

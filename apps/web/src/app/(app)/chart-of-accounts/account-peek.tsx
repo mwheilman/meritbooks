@@ -1,7 +1,8 @@
 'use client';
 import { usePeekDetail } from '@/components/hover-peek';
 import { formatMoney } from '@meritbooks/shared';
-import { Loader2, Lock } from 'lucide-react';
+import { Icon, Tag } from '@meritbooks/merit-ui';
+import s from './coa.module.css';
 
 interface AcctDetail {
   accountNumber: string; name: string; accountType: string; accountSubType: string | null;
@@ -11,31 +12,43 @@ interface AcctDetail {
 
 export function AccountPeek({ accountId }: { accountId: string }) {
   const { data, loading } = usePeekDetail<AcctDetail>(`/api/accounts/${accountId}`);
-  if (loading && !data) return <div className="flex items-center justify-center py-8"><Loader2 size={18} className="animate-spin text-slate-500" /></div>;
-  if (!data) return <div className="px-3 py-6 text-center text-xs text-slate-500">Preview unavailable</div>;
-  return (
-    <div className="p-3">
-      <div className="flex items-center gap-2 mb-1">
-        <span className="font-mono text-xs text-brand-400">{data.accountNumber}</span>
-        <span className="text-sm font-semibold text-white truncate">{data.name}</span>
-        {data.isControl && <Lock size={11} className="text-amber-500/70" />}
+  if (loading && !data) {
+    return (
+      <div className={`wg-loading ${s.peekState}`} aria-busy="true">
+        <span className="bar-l" style={{ width: '60%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '85%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '40%' }} aria-hidden="true" />
+        <span className="sr" role="status">Loading the account preview</span>
       </div>
-      <div className="text-2xs text-slate-500 mb-2">{data.accountType}{data.accountSubType ? ` · ${data.accountSubType}` : ''}</div>
-      <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
-        <span className="text-2xs text-slate-500">Balance ({data.normalBalance})</span>
-        <span className="text-sm font-mono tabular-nums text-white">{formatMoney(data.naturalBalanceCents)}</span>
+    );
+  }
+  if (!data) return <div className={s.peekState}><p className="t-cap">Preview unavailable — open the account to see it.</p></div>;
+  return (
+    <div className={s.peek}>
+      <div className={s.peekHead}>
+        <span className="l1"><span className="code">{data.accountNumber}</span>{data.name}</span>
+        <span className="l2">
+          {data.accountType}{data.accountSubType ? ` · ${data.accountSubType}` : ''}
+        </span>
+        {data.isControl && <Tag tone="warn" title="Control account — no direct posting" style={{ marginTop: 4 }}><Icon name="lock" />Control</Tag>}
+      </div>
+      <div className={s.peekBal}>
+        <span className="t-cap">Balance ({data.normalBalance === 'CREDIT' ? 'credit' : 'debit'})</span>
+        <b>{formatMoney(data.naturalBalanceCents)}</b>
       </div>
       {data.recentActivity.length > 0 && (
-        <div className="mt-2">
-          <div className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-1">Recent activity</div>
-          {data.recentActivity.slice(0, 4).map((e) => (
-            <div key={e.id + e.entryNumber} className="flex items-center justify-between text-2xs py-0.5">
-              <span className="text-slate-400 font-mono">{e.entryNumber}</span>
-              <span className="text-slate-500">{e.entryDate}</span>
-              <span className="text-slate-300 font-mono tabular-nums">{formatMoney(e.debitCents || e.creditCents)}</span>
-            </div>
-          ))}
-        </div>
+        <>
+          <div className="t-cap" style={{ marginTop: 12 }}>Recent activity</div>
+          <ul className={s.peekList}>
+            {data.recentActivity.slice(0, 4).map((e) => (
+              <li key={e.id + e.entryNumber}>
+                <span className="tnum mb-trunc">{e.entryNumber}</span>
+                <span className="t-cap tnum">{e.entryDate}</span>
+                <span className="n">{formatMoney(e.debitCents || e.creditCents)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );

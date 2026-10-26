@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { addressText, exactMatchOrNull } from '@/lib/parties/match';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 
 interface CustomerInput {
+  /** "Already in Merit": the person saw the possible match and chose to create anyway. */
+  create_anyway?: boolean;
   name: string;
   display_name?: string;
   email?: string;
@@ -145,11 +148,30 @@ export async function POST(req: NextRequest) {
       return c.name.toLowerCase() === trimmedName.toLowerCase();
     });
 
-    if (duplicates.length > 0) {
+    const createAnyway = body.create_anyway === true;
+    if (duplicates.length > 0 && !createAnyway) {
       return NextResponse.json({
         error: 'Duplicate customer detected',
         duplicates: duplicates.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })),
       }, { status: 409 });
+    }
+
+    // "Already in Merit" (Projects 1111 matcher, suite-level — Books-only orgs too): an EXACT match
+    // (same tax id / email / phone, or name + address) is offered instead of a second record,
+    // unless the person chose "Create anyway". The safety net still files strong matches for review.
+    if (!createAnyway) {
+      const exact = await exactMatchOrNull(supabase, {
+        kind: 'customer', name: trimmedName, email: body.email ?? null, phone: body.phone ?? null,
+        address: addressText(body), taxId: body.tax_id ?? null,
+      });
+      if (exact) {
+        return NextResponse.json({
+          error: `Already in Merit: ${exact.name} — ${exact.usage}`,
+          code: 'ALREADY_IN_MERIT',
+          duplicates: [{ id: exact.id, name: exact.name }],
+          matches: [exact],
+        }, { status: 409 });
+      }
     }
 
     const insertData = {

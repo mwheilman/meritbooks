@@ -8,6 +8,10 @@
 Sources: `/docs/projects/MERIT-PROJECTS-V2-BLUEPRINT.md` §5/§7 and the read-only seam review (findings below are
 from `apps/web/src/lib/services/billing-consumer.ts`, `job-progress.ts`, `job-cost-events.ts`, `rev-rec.ts`, migs 152/153).
 
+> **Books status (2026-10-26):** A1–A3 + `JOB_DEPOSIT_REQUEST` built in migration 173 (part 1). A4–A8, `JOB_COMMITMENT`,
+> `JOB_TIME` → labor cost, the richer `JOB_COST` keys from bills and payroll, the job-PO block and the cron hook are built in
+> migration 194 (part 2) — testable criteria S2-1 … S2-25 in `BOOKS-PROJECTS-INTERACTION.md` § "Part 2". Not yet applied live.
+
 ## A. Correctness defects in the current consumers (fix before real Projects traffic)
 
 1. **JOB_BILLING is not exactly-once.** No atomic claim; invoice/lines/JE/ack are four requests; `invoices` has no
@@ -47,6 +51,11 @@ the Books cron (`/api/cron/tick`, every 5 min) right after the Books event worke
 `proj.drain_job_costs` stays revoked (1007) so two drains never split events.
 
 ## D. Tests to make green (seam review §4)
+
+Books part 2 (migration 194) covers G4 (labor + bill job cost = GL by construction), G5 (bill lines and payroll labor emit
+JOB_COST with the richer keys), G6, G7, G8 (as-of inputs + pinned snapshots), G9, G10, G11, G12, G13 (labor has one origin:
+the payroll post), G14 — see `apps/web/src/test/projects-seam-part2.test.ts`.
+
 
 G1 exactly-once billing · G2 one invoice path · G3 retainage ties both sides · G4 job cost = GL by construction ·
 G5 every job-tagged cost line emits JOB_COST · G6 one resolver · G7 as-of actuals from GL · G8 closed-period WIP

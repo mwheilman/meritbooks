@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Inbox, AlertCircle, Search, ChevronRight } from 'lucide-react';
-import { clsx } from 'clsx';
+import { useState, useEffect, useMemo } from 'react';
+import { Button, Icon, Keyhints, Search, Tabs, Tag, cx, useListKeynav } from '@meritbooks/merit-ui';
 import { StatusBadge, EmptyState, TableSkeleton } from '@/components/ui';
+import { ListPager } from '@/components/ui/list-pager';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useDebounce } from '@/hooks';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
@@ -12,6 +12,8 @@ import { JournalEntryDrawer } from './je-drawer';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
 import { JournalEntryPeek } from './je-peek';
 import { jeDeepLinkId, withCanonicalJeId } from '@/lib/je-deep-link';
+import { JE_SOURCE_LABELS, JE_TYPE_LABELS } from './je-labels';
+import s from './je.module.css';
 
 interface JERow {
   id: string;
@@ -41,27 +43,8 @@ const TABS = [
   { key: 'VOIDED', label: 'Voided' },
 ] as const;
 
-const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
-  BANK_FEED: { label: 'Bank Feed', className: 'text-blue-400 bg-blue-500/10' },
-  BILL: { label: 'AP Bill', className: 'text-amber-400 bg-amber-500/10' },
-  RECEIPT: { label: 'Receipt', className: 'text-purple-400 bg-purple-500/10' },
-  PAYROLL: { label: 'Payroll', className: 'text-emerald-400 bg-emerald-500/10' },
-  MANUAL: { label: 'Manual', className: 'text-slate-400 bg-slate-500/10' },
-  REV_REC: { label: 'Rev Rec', className: 'text-indigo-400 bg-indigo-500/10' },
-  DEPRECIATION: { label: 'Depreciation', className: 'text-slate-400 bg-slate-500/10' },
-  INTERCOMPANY: { label: 'Interco', className: 'text-cyan-400 bg-cyan-500/10' },
-  CASH_MGMT: { label: 'Cash Mgmt', className: 'text-blue-400 bg-blue-500/10' },
-  SYSTEM: { label: 'System', className: 'text-slate-400 bg-slate-500/10' },
-};
-
-const TYPE_LABELS: Record<string, string> = {
-  STANDARD: 'Standard',
-  ADJUSTING: 'Adjusting',
-  CLOSING: 'Closing',
-  REVERSING: 'Reversing',
-  RECURRING: 'Recurring',
-  SYSTEM: 'System',
-};
+type SortKey = 'entryDate' | 'entryNumber' | 'totalDebitCents';
+type SortDir = 'asc' | 'desc';
 
 export function JournalEntryList() {
   const [activeTab, setActiveTab] = useState('all');
@@ -94,17 +77,46 @@ export function JournalEntryList() {
     window.history.replaceState(null, '', withCanonicalJeId(window.location.href, selectedId));
   }, [selectedId]);
 
+  // Server-side paging (the API returns 50 per page, newest first). A filter
+  // change goes back to page 1.
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [activeTab, debouncedSearch, locationId]);
+
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
   if (debouncedSearch) params.search = debouncedSearch;
   if (locationId) params.location_id = locationId;
+  if (page > 1) params.page = String(page);
 
-  const { data, isLoading, error } = useQuery<JEResponse>(
+  const { data, isLoading, error, refetch } = useQuery<JEResponse>(
     '/api/journal-entries',
     Object.keys(params).length > 0 ? params : undefined,
   );
 
-  const entries = data?.data ?? [];
+  const pagination = data?.pagination ?? null;
+  useEffect(() => {
+    if (pagination && pagination.total > 0 && page > pagination.total_pages) setPage(pagination.total_pages);
+  }, [pagination, page]);
+
+  // Column sort re-orders the loaded page; the default is the server's order
+  // (newest entry date first).
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
+  const entries = useMemo(() => {
+    const rows = data?.data ?? [];
+    if (!sort) return rows;
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = a[sort.key];
+      const bv = b[sort.key];
+      if (typeof av === 'number' && typeof bv === 'number') return (av - bv) * dir;
+      return String(av).localeCompare(String(bv), undefined, { numeric: true }) * dir;
+    });
+  }, [data, sort]);
+  const toggleSort = (key: SortKey) =>
+    setSort((cur) => (cur?.key === key ? (cur.dir === 'desc' ? { key, dir: 'asc' } : null) : { key, dir: 'desc' }));
+  const ariaSort = (key: SortKey): 'ascending' | 'descending' | 'none' =>
+    sort?.key === key ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none';
+  const sortMark = (key: SortKey) => (sort?.key === key ? <Icon name={sort.dir === 'asc' ? 'up' : 'down'} /> : null);
 
   useEffect(() => {
     if (!highlightId || entries.length === 0) return;
@@ -113,124 +125,160 @@ export function JournalEntryList() {
   }, [highlightId, entries.length]);
   const counts = data?.counts ?? null;
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={clsx(
-              'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-              activeTab === tab.key
-                ? 'bg-slate-800 text-white font-medium'
-                : 'text-slate-400 hover:text-slate-300'
-            )}
-          >
-            <span>{tab.label}</span>
-            <span className={clsx(
-              'text-2xs font-mono tabular-nums',
-              activeTab === tab.key ? 'text-brand-400' : 'text-slate-600'
-            )}>
-              {counts ? counts[tab.key] ?? 0 : '--'}
-            </span>
-          </button>
-        ))}
-      </div>
+  // J/K move the cursor, Enter opens the entry (paused while the drawer is open).
+  const showTable = !isLoading && !error && entries.length > 0;
+  const { setActiveIndex, rowProps } = useListKeynav({
+    count: showTable ? entries.length : 0,
+    onOpen: (i) => {
+      const je = entries[i];
+      if (je) { close(); setSelectedId(je.id); }
+    },
+    enabled: !selectedId,
+    owner: 'Journal entries list',
+  });
 
-      <div className="relative max-w-md">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input
-          type="text"
+  const filtered = activeTab !== 'all' || !!debouncedSearch;
+
+  return (
+    <div className={s.stack}>
+      <Tabs<string>
+        aria-label="Journal entry status"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={TABS.map((tab) => ({
+          value: tab.key,
+          label: tab.label,
+          count: counts ? counts[tab.key] ?? 0 : '—',
+        }))}
+      />
+
+      <div className={s.toolbar}>
+        <Search
+          aria-label="Search journal entries by entry number or memo"
+          className={s.searchBox}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by entry # or memo..."
-          aria-label="Search journal entries by entry number or memo"
-          className="input pl-9"
+          placeholder="Search by entry # or memo"
+          slashToFocus
         />
+        <div className={s.grow} />
+        {pagination && pagination.total > 0 && (
+          <span className="t-cap tnum">
+            {pagination.total} entr{pagination.total === 1 ? 'y' : 'ies'} · {sort ? 'sorted on this page' : 'newest first'}
+          </span>
+        )}
       </div>
 
       {isLoading ? (
-        <TableSkeleton rows={8} cols={8} />
+        <TableSkeleton rows={8} cols={9} />
       ) : error ? (
-        <div className="card p-8 text-center">
-          <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
-          <p className="text-sm text-red-400 font-medium">{error}</p>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Couldn&apos;t load journal entries.</p>
+          <p className="ink-2">{error}</p>
+          <Button onClick={() => void refetch()}>Try again</Button>
         </div>
       ) : entries.length === 0 ? (
-        debouncedSearch || activeTab !== 'all' ? (
-          <EmptyState icon={Inbox} title="No matching entries" description="No journal entries match your search or filter. Try clearing them." />
+        filtered ? (
+          <EmptyState
+            title="No entries match"
+            description="No journal entries match this status or search. Try another tab or clear the search."
+            action={{ label: 'Show all entries', onClick: () => { setActiveTab('all'); setSearch(''); } }}
+          />
         ) : (
-          <EmptyState icon={Inbox} title="No journal entries yet" description="Post your first manual entry, or let the AI composer draft one from a plain-English description." />
+          <EmptyState
+            title="No journal entries yet"
+            description="Post your first manual entry with New entry, or describe a transaction and let Compose with AI draft it."
+          />
         )
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Entry #</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Date</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Source</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Memo</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Company</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Type</th>
-                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Debits</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Lines</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500 font-mono">Status</th>
-                <th className="px-2 w-8"></th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {entries.map((je) => {
-                const source = SOURCE_LABELS[je.sourceModule ?? ''] ?? SOURCE_LABELS.SYSTEM;
-                return (
-                  <tr
-                    key={je.id}
-                    {...rowHandlers(je)}
-                    data-je-id={je.id}
-                    aria-current={highlightId === je.id ? 'true' : undefined}
-                    onClick={() => setSelectedId(je.id)}
-                    className={clsx('row-clickable', highlightId === je.id && 'bg-brand-500/10 ring-1 ring-inset ring-brand-500/40')}
-                  >
-                    <td className="px-4 py-3 text-sm font-mono text-slate-300 whitespace-nowrap">
-                      {je.entryNumber}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums whitespace-nowrap">
-                      {je.entryDate}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={clsx('inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium', source.className)}>
-                        {source.label}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-slate-200 truncate block max-w-[250px]">{je.memo ?? '--'}</span>
-                    </td>
-                    <td className="px-4 py-3">
-                      {je.location ? (
-                        <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
-                          {je.location.short_code}
-                        </span>
-                      ) : '--'}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
-                      {TYPE_LABELS[je.entryType] ?? je.entryType}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-200">
-                      {formatMoney(je.totalDebitCents)}
-                    </td>
-                    <td className="px-4 py-3 text-center text-xs text-slate-500 font-mono">
-                      {je.lineCount}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <StatusBadge status={je.status} />
-                    </td>
-                    <td className="px-2 text-right"><ChevronRight size={15} className="row-chevron inline" /></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div>
+          <div className={s.tableWrap}>
+            <table className="tbl tbl-q" aria-label="Journal entries">
+              <colgroup>
+                <col style={{ width: 132 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 128 }} />
+                <col />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 144 }} />
+                <col style={{ width: 72 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 48 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col" aria-sort={ariaSort('entryNumber')}>
+                    <button type="button" className="mb-th-btn" onClick={() => toggleSort('entryNumber')}>Entry #{sortMark('entryNumber')}</button>
+                  </th>
+                  <th scope="col" aria-sort={ariaSort('entryDate')}>
+                    <button type="button" className="mb-th-btn" onClick={() => toggleSort('entryDate')}>Date{sortMark('entryDate')}</button>
+                  </th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Memo</th>
+                  <th scope="col">Company</th>
+                  <th scope="col">Type</th>
+                  <th scope="col" className="n" aria-sort={ariaSort('totalDebitCents')}>
+                    <button type="button" className="mb-th-btn" onClick={() => toggleSort('totalDebitCents')}>{sortMark('totalDebitCents')}Debits</button>
+                  </th>
+                  <th scope="col" className="n">Lines</th>
+                  <th scope="col">Status</th>
+                  <th scope="col"><span className="sr">Open</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {entries.map((je, i) => {
+                  const source = JE_SOURCE_LABELS[je.sourceModule ?? ''] ?? JE_SOURCE_LABELS.SYSTEM;
+                  const { ref, 'data-active': active } = rowProps(i);
+                  const linked = highlightId === je.id;
+                  return (
+                    <tr
+                      key={je.id}
+                      ref={ref}
+                      {...rowHandlers(je)}
+                      data-je-id={je.id}
+                      aria-current={active || linked ? 'true' : undefined}
+                      onClick={() => { setActiveIndex(i); setSelectedId(je.id); }}
+                      className={cx('q-row', active && 'is-cursor', linked && 'is-selected')}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td className="tnum">{je.entryNumber}</td>
+                      <td className="tnum">{je.entryDate}</td>
+                      <td><Tag tone={je.sourceModule === 'MANUAL' ? 'default' : 'ai'}>{source}</Tag></td>
+                      <td title={je.memo ?? undefined}>{je.memo ?? <span className="ink-3">—</span>}</td>
+                      <td>
+                        {je.location ? <Tag title={je.location.name}>{je.location.short_code}</Tag> : <span className="ink-3">—</span>}
+                      </td>
+                      <td className="ink-2">{JE_TYPE_LABELS[je.entryType] ?? je.entryType}</td>
+                      <td className="n">{formatMoney(je.totalDebitCents)}</td>
+                      <td className="n ink-2">{je.lineCount}</td>
+                      <td><StatusBadge status={je.status} /></td>
+                      <td className="n ink-3" aria-hidden="true"><Icon name="right" /></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {pagination && (
+            <ListPager
+              page={pagination.page}
+              perPage={pagination.per_page}
+              total={pagination.total}
+              noun="entries"
+              onPageChange={setPage}
+              isLoading={isLoading}
+            />
+          )}
+          <Keyhints
+            className={s.hints}
+            hints={[
+              { chord: 'j k', label: 'Move' },
+              { chord: 'enter', label: 'Open entry' },
+              { chord: '/', label: 'Search' },
+            ]}
+          />
         </div>
       )}
 

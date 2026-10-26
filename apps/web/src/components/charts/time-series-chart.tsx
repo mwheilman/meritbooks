@@ -85,7 +85,7 @@ export function TimeSeriesChart({
     const left = Math.max(...t.ticks.map((v) => textWidth(formatValue(v, unit, { compact: true })))) + 12;
     const x = pointScale(n, [left, width - M.right], 1);
     const y = linearScale([t.min, t.max], [height - M.bottom, M.top]);
-    return { t, x, y, left, every: labelEvery(n, width - left - M.right, narrow ? 44 : 34), narrow };
+    return { t, x, y, left, every: labelEvery(n, width - left - M.right, narrow ? 44 : 34, data.periods.map((p) => p.label)), narrow };
   }, [data, isHidden, unit, height, zero, variant, width, n]);
 
   const { t, x, y, left, every } = geo;

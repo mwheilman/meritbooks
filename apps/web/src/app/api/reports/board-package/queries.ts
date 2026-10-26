@@ -16,6 +16,7 @@ import { resolveRole, PostingError, type AccountRoleKey } from '@/lib/posting/ac
 import { fetchAll, fetchAllIn } from '@/lib/supabase/fetch-all';
 import { fetchBookCashSeries, resolveCashAccountIds } from '@/lib/cash/book-cash';
 import { applyEarningsToBalanceSheet, fetchUnclosedEarnings } from '@/lib/reports/bs-earnings';
+import { regroupForPresentation } from '@/lib/reports/engine/presentation';
 import { fetchDebtRegister } from '@/lib/debt/register';
 import { agingBucketFor, AGING_BUCKETS } from '@/lib/ar/overdue';
 import { addDaysIso } from '@/lib/dates/org-date';
@@ -260,6 +261,25 @@ export async function fetchBalanceSheet(
       });
     }
   }
+
+  // Role-based presentation lines — the same cash / in-transit / intercompany lines the report
+  // engine's balance sheet shows (lib/reports/engine/presentation.ts), so "Cash & cash
+  // equivalents" here is the canonical book cash the KPI and the cash flow use, and intercompany
+  // balances never sit inside trade receivables / payables.
+  const orgId = scope.orgId ?? null;
+  const [cashIds, transitIds, icArIds, icApIds] = await Promise.all([
+    resolveCashAccountIds(supabase, orgId),
+    orgId ? resolveRoleIds(supabase, orgId, ['SETTLEMENT_CLEARING', 'PAYMENTS_IN_TRANSIT']) : Promise.resolve(new Set<string>()),
+    orgId ? resolveRoleIds(supabase, orgId, ['INTERCOMPANY_AR']) : Promise.resolve(new Set<string>()),
+    orgId ? resolveRoleIds(supabase, orgId, ['INTERCOMPANY_AP']) : Promise.resolve(new Set<string>()),
+  ]);
+  regroupForPresentation([...accountMap.values()], (a) => {
+    if (a.accountType === 'ASSET' && cashIds.has(a.accountId)) return 'cash';
+    if (a.accountType === 'ASSET' && transitIds.has(a.accountId)) return 'inTransit';
+    if (a.accountType === 'ASSET' && icArIds.has(a.accountId)) return 'icAr';
+    if (a.accountType === 'LIABILITY' && icApIds.has(a.accountId)) return 'icAp';
+    return null;
+  });
 
   const sectionConfig = [
     { type: 'ASSET', label: 'Assets' },

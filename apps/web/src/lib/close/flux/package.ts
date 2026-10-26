@@ -10,6 +10,7 @@
 import { formatMoney } from '@meritbooks/shared';
 import { BASIS_LABEL, CATEGORY_LABEL, type FluxBoard, type FluxBoardLine } from './types';
 import { describeThreshold } from './materiality';
+import { fluxChangeLabel } from './change-label';
 
 export interface FluxPackageRow {
   account: string;
@@ -45,8 +46,8 @@ const STATUS_WORD: Record<FluxBoardLine['status'], string> = {
   STALE: 'Numbers moved — re-explain',
 };
 
-export function pctText(bps: number | null): string {
-  return bps === null ? 'new' : `${(bps / 100).toFixed(1)}%`;
+export function pctText(l: { changePctBps: number | null; currentCents: number; comparisonCents: number }): string {
+  return fluxChangeLabel(l.changePctBps, l.currentCents, l.comparisonCents, { signed: false });
 }
 
 export function buildFluxPackageSection(board: FluxBoard): FluxPackageSection {
@@ -60,7 +61,7 @@ export function buildFluxPackageSection(board: FluxBoard): FluxPackageSection {
       currentCents: l.currentCents,
       comparisonCents: l.comparisonCents,
       changeCents: l.changeCents,
-      changePct: pctText(l.changePctBps),
+      changePct: pctText(l),
       basis: BASIS_LABEL[l.basisUsed],
       threshold: describeThreshold(l.threshold, formatMoney),
       status: STATUS_WORD[l.status],
@@ -101,7 +102,7 @@ export function fluxCsv(board: FluxBoard): string {
     dollars(l.currentCents),
     dollars(l.comparisonCents),
     dollars(l.changeCents),
-    pctText(l.changePctBps),
+    pctText(l),
     BASIS_LABEL[l.basisUsed],
     describeThreshold(l.threshold, formatMoney),
     l.material ? 'Yes' : 'No',

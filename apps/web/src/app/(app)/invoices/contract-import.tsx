@@ -14,15 +14,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
+import { Button, Dialog, Field, Icon, InlineNotice, Input, MoneyInput, Select, Tag, cx } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks/use-query';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
 import { acceptDocumentProposal, openDocument, type ProposalWithDoc } from '@/components/documents/intelligence-client';
-import {
-  UploadCloud, FileText, Loader2, X, Trash2, Sparkles, AlertTriangle, Info, Plus, Check,
-} from 'lucide-react';
+import s from './invoices.module.css';
 
 // ─── Types (mirror /api/invoices/parse-contract) ──────────────────────────────
 
@@ -89,9 +87,6 @@ const CADENCE_OPTIONS: RecurringFrequency[] = ['WEEKLY', 'BIWEEKLY', 'MONTHLY', 
 
 const NEW_CUSTOMER = '__NEW__';
 
-const inputCls =
-  'w-full px-2 py-1.5 bg-slate-900 border border-slate-700 rounded-md text-xs text-white focus:border-emerald-500 focus:outline-none';
-
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -117,12 +112,7 @@ export function ContractImport({
   const [meta, setMeta] = useState<ParseResponse['meta'] | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  // Close on Escape (modal a11y).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Esc closes through the kit Dialog (focus-trapped, modal).
 
   // Editable review state (populated from the parse response).
   const [contract, setContract] = useState<Contract | null>(null);
@@ -236,7 +226,8 @@ export function ContractImport({
     if (file) void parse(file);
   }
 
-  const flag = (field: string) => (lowFields.includes(field) ? 'border-amber-500/60 ring-1 ring-amber-500/30' : '');
+  /** Low-confidence fields get an ochre ring so the reviewer checks them first. */
+  const flag = (field: string) => (lowFields.includes(field) ? s.lowConf : undefined);
 
   // Derived totals for the review summary.
   const oneTimeTotal = lines.reduce((s, l) => s + Math.round(l.quantity * l.unit_price_cents), 0);
@@ -372,249 +363,256 @@ export function ContractImport({
     return customers.find((c) => c.id === id)?.name ?? 'Customer';
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Import from contract or SOW" className="card w-full max-w-4xl max-h-[92vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Sparkles size={18} className="text-indigo-400" />
-            <div>
-              <h2 className="text-lg font-semibold text-white">Import from contract or SOW</h2>
-              <p className="text-[11px] text-slate-500">
-                Drop a signed customer contract — AI proposes the invoice(s) and rev-rec method; you review and confirm. Nothing is saved until you confirm.
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-1 rounded hover:bg-slate-800 text-slate-500 hover:text-white" aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
+  const busy = phase === 'confirming';
+  const reviewing = (phase === 'review' || phase === 'confirming') && !!contract;
+  const confirmLabel = billingKind === 'RECURRING'
+    ? 'Create recurring schedule'
+    : billingKind === 'MILESTONE'
+      ? `Create ${milestones.length} milestone invoice${milestones.length === 1 ? '' : 's'}`
+      : 'Create invoice';
+  const aiMethod = contract ? REV_REC_OPTIONS.find((m) => m.value === contract.rev_rec.method)?.label.split(' (')[0] : null;
 
-        {error && (
-          <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-            <AlertTriangle size={14} className="mt-0.5 shrink-0" /> {error}
-          </div>
-        )}
+  return (
+    <Dialog
+      open
+      onClose={() => { if (!busy) onClose(); }}
+      title="Import from contract or SOW"
+      width={900}
+      className={s.tallDialog}
+      dismissOnScrim={!busy}
+      footNote={reviewing ? 'Created as drafts through the standard invoice and recurring paths — same numbering, rev-rec and validation as manual entry.' : 'Nothing is saved until you confirm.'}
+      actions={
+        <>
+          <Button onClick={onClose} disabled={busy}>Cancel</Button>
+          {reviewing && (
+            <Button variant="primary" onClick={() => void confirm()} disabled={busy} aria-busy={busy || undefined}>
+              {busy ? 'Creating…' : confirmLabel}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <div className={s.form}>
+        <p className="ink-2">
+          Drop a signed customer contract. AI proposes the invoices and the rev-rec method; you review and confirm.
+        </p>
+
+        {error && <InlineNotice tone="neg" title="Couldn't continue.">{error}</InlineNotice>}
 
         {/* Upload / parsing */}
         {(phase === 'upload' || phase === 'parsing') && (
           <div
+            role="button"
+            tabIndex={phase === 'upload' ? 0 : -1}
+            aria-label="Upload a contract or SOW"
+            aria-busy={phase === 'parsing' || undefined}
+            data-over={dragOver}
+            data-busy={phase === 'parsing'}
             onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
             onDrop={onDrop}
             onClick={() => phase === 'upload' && fileInput.current?.click()}
-            className={clsx(
-              'flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-6 py-16 text-center transition-colors',
-              phase === 'parsing'
-                ? 'border-indigo-500/40 bg-indigo-500/5 cursor-default'
-                : dragOver
-                  ? 'border-emerald-500 bg-emerald-500/5 cursor-pointer'
-                  : 'border-slate-700 hover:border-slate-600 cursor-pointer',
-            )}
+            onKeyDown={(e) => {
+              if (phase === 'upload' && (e.key === 'Enter' || e.key === ' ')) {
+                e.preventDefault();
+                fileInput.current?.click();
+              }
+            }}
+            className={s.drop}
           >
             <input
               ref={fileInput}
               type="file"
               accept=".pdf,image/*"
-              className="hidden"
+              className={s.hiddenInput}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void parse(f); e.target.value = ''; }}
             />
             {phase === 'parsing' ? (
               <>
-                <Loader2 className="w-9 h-9 text-indigo-400 animate-spin mb-3" />
-                <p className="text-sm text-slate-300">Reading the contract and extracting billing terms…</p>
-                <p className="text-[11px] text-slate-500 mt-1">This can take 15-30 seconds for a long agreement.</p>
+                <span className={cx('wg-loading', s.dropBar)} aria-hidden="true"><span className="bar-l" style={{ width: '100%' }} /></span>
+                <span className="t-head" role="status">Reading the contract and pulling out the billing terms…</span>
+                <span className="t-cap">This can take 15–30 seconds for a long agreement.</span>
               </>
             ) : (
               <>
-                <UploadCloud className="w-10 h-10 text-slate-500 mb-3" />
-                <p className="text-sm text-slate-200 font-medium">Drop a signed contract or SOW here</p>
-                <p className="text-[11px] text-slate-500 mt-1">or click to browse · PDF, PNG, JPEG · up to 10MB</p>
+                <span className="wg-empty-mark" aria-hidden="true">
+                  <Icon name="upload" />
+                </span>
+                <span className="t-head">Drop a signed contract or SOW here</span>
+                <span className="t-cap">or click to browse · PDF, PNG, JPEG · up to 10MB</span>
               </>
             )}
           </div>
         )}
 
-        {/* Review */}
         {fromProposal && (
-          <p className="mb-3 text-[11px] text-slate-400" data-testid="from-document">
-            From document: <span className="text-slate-200">{fromProposal.document?.file_name ?? 'stored document'}</span>
+          <p className="t-cap" data-testid="from-document">
+            From document: <b className="ink">{fromProposal.document?.file_name ?? 'stored document'}</b>
             {' · '}
-            <button type="button" className="underline" onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>Open the document</button>
+            <button type="button" className={s.linkBtn} onClick={() => { void openDocument(fromProposal.document_id).then((e) => { if (e) addToast('error', e); }); }}>
+              Open the document
+            </button>
           </p>
         )}
-        {(phase === 'review' || phase === 'confirming') && contract && (
-          <div className="space-y-4">
-            {/* File + doc note */}
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
-              <FileText size={13} className="text-indigo-400" />
-              <span className="truncate max-w-[240px]">{meta?.fileName}</span>
-              <span className="text-slate-600">·</span>
-              <span className="uppercase tracking-wide">{billingKind.replace('_', ' ')}</span>
+
+        {/* Review */}
+        {reviewing && contract && (
+          <>
+            <div className={s.metaLine}>
+              <span className="ink-2">{meta?.fileName}</span>
+              <Tag>{billingKind.replace('_', ' ').toLowerCase()}</Tag>
             </div>
-            {meta?.documentNote && (
-              <div className="flex items-start gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-[11px] text-slate-400">
-                <Info size={13} className="mt-0.5 shrink-0 text-slate-500" /> {meta.documentNote}
-              </div>
-            )}
+            {meta?.documentNote && <InlineNotice tone="info">{meta.documentNote}</InlineNotice>}
 
             {/* Customer + company */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1">Customer</label>
-                <select className={clsx(inputCls, flag('customer'))} value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
-                  <option value={NEW_CUSTOMER}>+ Create new{contract.customer.name ? ` — "${contract.customer.name}"` : ''}</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
+            <div className={s.grid2}>
+              <div className={s.form}>
+                <Field label="Customer" className={flag('customer')}>
+                  <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)}>
+                    <option value={NEW_CUSTOMER}>+ Create new{contract.customer.name ? ` — "${contract.customer.name}"` : ''}</option>
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </Select>
+                </Field>
                 {customerId === NEW_CUSTOMER && (
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <input className={inputCls} placeholder="Customer name" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
-                    <input className={inputCls} placeholder="Billing email (optional)" value={newCustomerEmail} onChange={(e) => setNewCustomerEmail(e.target.value)} />
+                  <div className={s.grid2}>
+                    {/* match-before-create */}
+                    <Field label="New customer name">
+                      <Input placeholder="Customer name" value={newCustomerName} onChange={(e) => setNewCustomerName(e.target.value)} />
+                    </Field>
+                    <Field label="Billing email">
+                      <Input type="email" placeholder="Optional" value={newCustomerEmail} onChange={(e) => setNewCustomerEmail(e.target.value)} />
+                    </Field>
                   </div>
                 )}
               </div>
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1">Company *</label>
-                <select className={inputCls} value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+              <Field label="Company *">
+                <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
                   <option value="">Select company</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>{l.name}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
 
             {/* Revenue account + rev-rec method */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1">Revenue GL account *</label>
-                <select className={inputCls} value={revenueAccountId} onChange={(e) => setRevenueAccountId(e.target.value)}>
+            <div className={s.grid2}>
+              <Field label="Revenue GL account *">
+                <Select value={revenueAccountId} onChange={(e) => setRevenueAccountId(e.target.value)}>
                   <option value="">Select revenue account</option>
                   {revenueAccounts.map((a) => (
                     <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>
                   ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-[10px] text-slate-500 mb-1 flex items-center gap-1">
-                  Rev-rec method
-                  <span className="text-indigo-400/80">· AI suggested {REV_REC_OPTIONS.find((m) => m.value === contract.rev_rec.method)?.label.split(' (')[0]}</span>
-                </label>
-                <select className={clsx(inputCls, flag('rev_rec'))} value={revRecMethod} onChange={(e) => setRevRecMethod(e.target.value as RevRecMethod)}>
+                </Select>
+              </Field>
+              <Field label="Rev-rec method" help={aiMethod ? `AI suggested: ${aiMethod}` : undefined} className={flag('rev_rec')}>
+                <Select value={revRecMethod} onChange={(e) => setRevRecMethod(e.target.value as RevRecMethod)}>
                   {REV_REC_OPTIONS.map((m) => (
                     <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
-                </select>
-              </div>
+                </Select>
+              </Field>
             </div>
             {contract.rev_rec.reasoning && (
-              <p className="text-[11px] text-slate-400 italic bg-slate-900/60 rounded-md px-2 py-1.5 border-l-2 border-indigo-500/40">
-                &ldquo;{contract.rev_rec.reasoning}&rdquo;
-              </p>
+              <InlineNotice tone="info" title="Why AI suggested this method">&ldquo;{contract.rev_rec.reasoning}&rdquo;</InlineNotice>
             )}
 
             {/* Schedule editor */}
             {billingKind === 'ONE_TIME' && (
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider">Line items</label>
-                  <button onClick={addLine} className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><Plus size={11} /> Add line</button>
+                <div className={s.linesHead}>
+                  <span className="eyebrow">Lines</span>
+                  <Button variant="quiet" icon="plus" onClick={addLine}>Add line</Button>
                 </div>
-                <div className="space-y-2">
+                <div className={s.lineRows}>
+                  <div className={cx(s.lineGrid, s.lineGridContract)} aria-hidden="true">
+                    <span className="field-label">Description</span>
+                    <span className={cx('field-label', s.num)}>Qty</span>
+                    <span className={cx('field-label', s.num)}>Unit price</span>
+                    <span />
+                  </div>
                   {lines.map((l, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                      <input className={clsx(inputCls, 'col-span-6')} placeholder="Description" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} />
-                      <input className={clsx(inputCls, 'col-span-2 text-right font-mono')} type="number" min={0} step={0.01} value={l.quantity} onChange={(e) => setLine(i, { quantity: parseFloat(e.target.value) || 0 })} />
-                      <input className={clsx(inputCls, 'col-span-3 text-right font-mono')} type="number" min={0} step={0.01} value={(l.unit_price_cents / 100).toFixed(2)} onChange={(e) => setLine(i, { unit_price_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} />
-                      <button onClick={() => removeLine(i)} className="col-span-1 p-1 text-slate-500 hover:text-red-400" aria-label="Remove line"><Trash2 size={13} /></button>
+                    <div key={i} className={cx(s.lineGrid, s.lineGridContract)}>
+                      <Input placeholder="Description" value={l.description} onChange={(e) => setLine(i, { description: e.target.value })} aria-label={`Line ${i + 1} description`} />
+                      <Input className={s.num} type="number" min={0} step={0.01} value={l.quantity} onChange={(e) => setLine(i, { quantity: parseFloat(e.target.value) || 0 })} aria-label={`Line ${i + 1} quantity`} />
+                      <MoneyInput valueCents={l.unit_price_cents} onChangeCents={(c) => setLine(i, { unit_price_cents: c ?? 0 })} aria-label={`Line ${i + 1} unit price`} />
+                      <Button variant="quiet" iconOnly icon="x" onClick={() => removeLine(i)} aria-label={`Remove line ${i + 1}`} />
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 flex justify-end text-xs text-slate-300">Total <span className="font-mono text-emerald-400 ml-2">{formatMoney(oneTimeTotal)}</span></div>
+                <div className={s.totals}>
+                  <div className={cx(s.totRow, s.totGrand)}><span>Total</span><span>{formatMoney(oneTimeTotal)}</span></div>
+                </div>
               </div>
             )}
 
             {billingKind === 'MILESTONE' && (
-              <div className={clsx(flag('milestones') && 'rounded-lg p-2', flag('milestones'))}>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="text-[10px] text-slate-500 uppercase tracking-wider">Milestones (one invoice each)</label>
-                  <button onClick={addMs} className="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1"><Plus size={11} /> Add milestone</button>
+              <div className={cx(flag('milestones') && s.lowConfBlock)}>
+                <div className={s.linesHead}>
+                  <span className="eyebrow">Milestones — one invoice each</span>
+                  <Button variant="quiet" icon="plus" onClick={addMs}>Add milestone</Button>
                 </div>
-                <div className="space-y-2">
+                <div className={s.lineRows}>
+                  <div className={cx(s.lineGrid, s.lineGridMilestone)} aria-hidden="true">
+                    <span className="field-label">Milestone</span>
+                    <span className="field-label">Invoice date</span>
+                    <span className={cx('field-label', s.num)}>Amount</span>
+                    <span />
+                  </div>
                   {milestones.map((m, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                      <input className={clsx(inputCls, 'col-span-4')} placeholder="Milestone name" value={m.name} onChange={(e) => setMs(i, { name: e.target.value })} />
-                      <input className={clsx(inputCls, 'col-span-4')} type="date" value={m.due_date ?? ''} onChange={(e) => setMs(i, { due_date: e.target.value || null })} />
-                      <input className={clsx(inputCls, 'col-span-3 text-right font-mono')} type="number" min={0} step={0.01} value={(m.amount_cents / 100).toFixed(2)} onChange={(e) => setMs(i, { amount_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} />
-                      <button onClick={() => removeMs(i)} className="col-span-1 p-1 text-slate-500 hover:text-red-400" aria-label="Remove milestone"><Trash2 size={13} /></button>
+                    <div key={i} className={cx(s.lineGrid, s.lineGridMilestone)}>
+                      <Input placeholder="Milestone name" value={m.name} onChange={(e) => setMs(i, { name: e.target.value })} aria-label={`Milestone ${i + 1} name`} />
+                      <Input type="date" value={m.due_date ?? ''} onChange={(e) => setMs(i, { due_date: e.target.value || null })} aria-label={`Milestone ${i + 1} date`} />
+                      <MoneyInput valueCents={m.amount_cents} onChangeCents={(c) => setMs(i, { amount_cents: c ?? 0 })} aria-label={`Milestone ${i + 1} amount`} />
+                      <Button variant="quiet" iconOnly icon="x" onClick={() => removeMs(i)} aria-label={`Remove milestone ${i + 1}`} />
                     </div>
                   ))}
                 </div>
-                <div className="mt-2 flex justify-end text-xs text-slate-300">Total <span className="font-mono text-emerald-400 ml-2">{formatMoney(milestoneTotal)}</span></div>
+                <div className={s.totals}>
+                  <div className={cx(s.totRow, s.totGrand)}><span>Total</span><span>{formatMoney(milestoneTotal)}</span></div>
+                </div>
               </div>
             )}
 
             {billingKind === 'RECURRING' && recurring && (
-              <div className="grid grid-cols-12 gap-2">
-                <div className="col-span-3">
-                  <label className="block text-[10px] text-slate-500 mb-1">Cadence</label>
-                  <select className={inputCls} value={recurring.cadence} onChange={(e) => setRecurring({ ...recurring, cadence: e.target.value as RecurringFrequency })}>
-                    {CADENCE_OPTIONS.map((c) => <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>)}
-                  </select>
+              <>
+                <div className={s.grid4}>
+                  <Field label="Cadence">
+                    <Select value={recurring.cadence} onChange={(e) => setRecurring({ ...recurring, cadence: e.target.value as RecurringFrequency })}>
+                      {CADENCE_OPTIONS.map((c) => <option key={c} value={c}>{c.charAt(0) + c.slice(1).toLowerCase()}</option>)}
+                    </Select>
+                  </Field>
+                  <Field label="Every">
+                    <Input className={s.num} type="number" min={1} value={recurring.interval_count} onChange={(e) => setRecurring({ ...recurring, interval_count: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+                  </Field>
+                  <Field label="Amount per period" className={flag('recurring_amount')}>
+                    <MoneyInput valueCents={recurring.amount_cents} onChangeCents={(c) => setRecurring({ ...recurring, amount_cents: c ?? 0 })} />
+                  </Field>
+                  <Field label="Periods" help="Blank = no limit">
+                    <Input className={s.num} type="number" min={1} placeholder="∞" value={recurring.occurrences ?? ''} onChange={(e) => setRecurring({ ...recurring, occurrences: e.target.value === '' ? null : Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+                  </Field>
                 </div>
-                <div className="col-span-2">
-                  <label className="block text-[10px] text-slate-500 mb-1">Every</label>
-                  <input className={clsx(inputCls, 'text-right font-mono')} type="number" min={1} value={recurring.interval_count} onChange={(e) => setRecurring({ ...recurring, interval_count: Math.max(1, parseInt(e.target.value, 10) || 1) })} />
+                <div className={s.grid4}>
+                  <Field label="Start" className={flag('start_date')}>
+                    <Input type="date" value={recurring.start_date ?? ''} onChange={(e) => setRecurring({ ...recurring, start_date: e.target.value || null })} />
+                  </Field>
+                  <Field label="End" help="Optional">
+                    <Input type="date" value={recurring.end_date ?? ''} onChange={(e) => setRecurring({ ...recurring, end_date: e.target.value || null })} />
+                  </Field>
                 </div>
-                <div className="col-span-3">
-                  <label className="block text-[10px] text-slate-500 mb-1">Amount / period</label>
-                  <input className={clsx(inputCls, 'text-right font-mono', flag('recurring_amount'))} type="number" min={0} step={0.01} value={(recurring.amount_cents / 100).toFixed(2)} onChange={(e) => setRecurring({ ...recurring, amount_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} />
-                </div>
-                <div className="col-span-2">
-                  <label className="block text-[10px] text-slate-500 mb-1"># periods</label>
-                  <input className={clsx(inputCls, 'text-right font-mono')} type="number" min={1} placeholder="∞" value={recurring.occurrences ?? ''} onChange={(e) => setRecurring({ ...recurring, occurrences: e.target.value === '' ? null : Math.max(1, parseInt(e.target.value, 10) || 1) })} />
-                </div>
-                <div className="col-span-2" />
-                <div className="col-span-3">
-                  <label className="block text-[10px] text-slate-500 mb-1">Start</label>
-                  <input className={clsx(inputCls, flag('start_date'))} type="date" value={recurring.start_date ?? ''} onChange={(e) => setRecurring({ ...recurring, start_date: e.target.value || null })} />
-                </div>
-                <div className="col-span-3">
-                  <label className="block text-[10px] text-slate-500 mb-1">End (optional)</label>
-                  <input className={inputCls} type="date" value={recurring.end_date ?? ''} onChange={(e) => setRecurring({ ...recurring, end_date: e.target.value || null })} />
-                </div>
-              </div>
+              </>
             )}
 
             {lowFields.length > 0 && (
-              <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
-                <AlertTriangle size={11} /> Review the highlighted field{lowFields.length === 1 ? '' : 's'} — the AI was unsure or the value was not stated.
-              </div>
+              <InlineNotice tone="warn" title={`Check the highlighted field${lowFields.length === 1 ? '' : 's'}.`}>
+                The AI was unsure, or the contract didn&apos;t state the value.
+              </InlineNotice>
             )}
-
-            {/* Actions */}
-            <div className="mt-2 flex items-center justify-between border-t border-slate-800 pt-4">
-              <p className="text-[11px] text-slate-600 max-w-md">
-                Confirmed invoices are created as drafts through the standard invoice / recurring-invoice paths — same numbering, rev-rec treatment, and validation as manual entry.
-              </p>
-              <div className="flex items-center gap-2">
-                <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-                <button
-                  onClick={confirm}
-                  disabled={phase === 'confirming'}
-                  className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg disabled:opacity-50 flex items-center gap-2"
-                >
-                  {phase === 'confirming' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                  {billingKind === 'RECURRING' ? 'Create recurring schedule' : billingKind === 'MILESTONE' ? `Create ${milestones.length} milestone invoice${milestones.length === 1 ? '' : 's'}` : 'Create invoice'}
-                </button>
-              </div>
-            </div>
-          </div>
+          </>
         )}
       </div>
-    </div>
+    </Dialog>
   );
 }

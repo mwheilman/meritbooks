@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { formatMoney } from '@meritbooks/shared';
-import { StatusBadge } from '@/components/ui';
+import { ConfidenceBar, StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField } from '@/components/detail-drawer';
 import { Button } from '@meritbooks/merit-ui';
 import type { SplitSummary } from '@/lib/bank/splits/types';
@@ -19,6 +19,15 @@ export interface CCLike {
   /** Saved / posted split (FPB-bank-feed-splits). */
   split?: SplitSummary | null;
 }
+
+/** Receipt-chase state in plain words (the raw enum never reaches the screen). */
+const RECEIPT_WORD: Record<string, string> = {
+  MATCHED: 'Matched',
+  MISSING: 'No receipt yet',
+  PENDING: 'Cardholder asked',
+  NOT_REQUIRED: 'Not needed',
+  NOT_APPLICABLE: 'Not needed (payment or credit)',
+};
 
 /**
  * Card-line drawer. "Split this charge" opens the same split grid as the bank feed
@@ -46,9 +55,12 @@ export function CreditCardDrawer({ txn, onClose, onChanged }: { txn: CCLike | nu
             <DetailField label="Amount" value={formatMoney(Math.abs(txn.amount_cents))} mono />
             <DetailField label="Date" value={txn.transaction_date} mono />
             {vendor && <DetailField label="Vendor" value={vendor} />}
-            <DetailField label="Card" value={txn.bank_account ? `${txn.bank_account.account_name} ·${txn.bank_account.account_mask}` : '--'} />
-            <DetailField label="Company" value={txn.location?.name ?? '--'} />
-            <DetailField label="Receipt" value={txn.receiptStatus} />
+            <DetailField label="Card" value={txn.bank_account ? `${txn.bank_account.account_name} ••${txn.bank_account.account_mask}` : '—'} />
+            <DetailField label="Company" value={txn.location?.name ?? '—'} />
+            <DetailField
+              label="Receipt"
+              value={`${RECEIPT_WORD[txn.receiptStatus] ?? txn.receiptStatus}${txn.receiptStatus === 'PENDING' && txn.chaseCount > 0 ? ` · ${txn.chaseCount}×` : ''}`}
+            />
           </DetailSection>
           <DetailSection title="Categorization">
             {txn.split ? (
@@ -56,7 +68,7 @@ export function CreditCardDrawer({ txn, onClose, onChanged }: { txn: CCLike | nu
             ) : (
               <DetailField label="GL account" value={account ? `${account.account_number} · ${account.name}` : 'Uncategorized'} />
             )}
-            <DetailField label="AI confidence" value={txn.ai_confidence != null ? `${Math.round(txn.ai_confidence * 100)}%` : '--'} />
+            <DetailField label="AI confidence" value={txn.ai_confidence != null ? <ConfidenceBar value={txn.ai_confidence} /> : '—'} />
             {txn.ai_reasoning && <DetailField label="AI reasoning" value={txn.ai_reasoning} />}
           </DetailSection>
           <DetailSection title="Split">

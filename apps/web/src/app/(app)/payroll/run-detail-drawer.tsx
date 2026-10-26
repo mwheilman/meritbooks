@@ -1,23 +1,14 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import {
-  Loader2,
-  ShieldCheck,
-  ShieldAlert,
-  Banknote,
-  CheckCircle2,
-  BookOpen,
-  AlertTriangle,
-  Info,
-  FlaskConical,
-} from 'lucide-react';
+import { Button, ButtonLink, Check, Icon, InlineNotice, Tag } from '@meritbooks/merit-ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { useQuery, addToast } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
 import { formatMoney } from '@meritbooks/shared';
-import { fmtDate, type RunDetailResponse, type RunStatus } from './types';
-import { RunStatusBadge } from './run-status';
+import { fmtDate, type RunDetail, type RunDetailResponse, type RunStatus } from './types';
+import { RUN_STEPS, RunPipeline, RunStatusBadge, runStage, type PipeStep } from './run-status';
+import s from './payroll.module.css';
 
 type Action = 'approve' | 'release' | 'post' | 'remit';
 
@@ -88,105 +79,145 @@ export function RunDetailDrawer({
 
   const funding =
     run?.fundingCents ?? (run ? run.netCents + (run.employeeTaxCents ?? 0) + (run.employerTaxCents ?? 0) : 0);
+  const masked = (cents: number) => (grouped ? '••••' : formatMoney(cents));
+  const est = estimated ? ' (est.)' : '';
 
   return (
     <DetailDrawer
       open
       onClose={onClose}
       width="lg"
-      title={run ? `Payroll · ${fmtDate(run.payDate)}` : 'Payroll run'}
+      title={run ? `Payroll · pays ${fmtDate(run.payDate)}` : 'Payroll run'}
       subtitle={run ? `${fmtDate(run.periodStart)} → ${fmtDate(run.periodEnd)}` : null}
       isLoading={isLoading}
       error={error}
       headerRight={run ? <RunStatusBadge status={run.status} size="md" /> : undefined}
     >
+      {!isLoading && !error && !run && (
+        <div className="wg-state">
+          <span className="wg-empty-mark" aria-hidden="true"><Icon name="none" /></span>
+          <span className="t-head">This run isn&apos;t available.</span>
+          <p>It may have been removed, or it belongs to another company. Close this and pick a run from the list.</p>
+        </div>
+      )}
       {run && (
         <>
+          {/* Five steps, one owner each (S20 run pipeline). */}
+          <RunPipeline
+            className={s.drawerPipe}
+            label="Payroll run steps"
+            steps={pipelineSteps(run, preparedByMe, estimated)}
+          />
+
           {/* Summary */}
           <DetailSection title="Run">
             <DetailField label="Pay date" value={fmtDate(run.payDate)} mono />
             <DetailField label="Pay period" value={`${fmtDate(run.periodStart)} → ${fmtDate(run.periodEnd)}`} />
             <DetailField label="Employees" value={String(run.employeeCount ?? employees.length)} mono />
-            {run.provider && <DetailField label="Provider" value={run.provider} />}
+            {run.provider && <DetailField label="Provider" value={run.provider === 'mock' ? 'Estimate (no provider)' : run.provider} />}
             {run.memo && <DetailField label="Memo" value={run.memo} />}
           </DetailSection>
 
           {/* Totals */}
           {estimated && (
-            <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2">
-              <FlaskConical size={13} className="mt-0.5 shrink-0 text-amber-400" />
-              <p className="text-2xs text-amber-100/90">
-                Estimated run — no payroll provider was used. Withholding and net pay are flat-rate estimates, not a tax
-                calculation. Nothing here is withheld, filed, or paid to any agency.
-              </p>
+            <div style={{ marginTop: 16 }}>
+              <InlineNotice tone="warn" title="Estimated run — no payroll provider was used.">
+                Withholding and net pay are flat-rate estimates, not a tax calculation. Nothing here is withheld, filed or
+                paid to any agency.
+              </InlineNotice>
             </div>
           )}
           <DetailSection title={estimated ? 'Totals (estimated)' : 'Totals'}>
-            <DetailField label="Gross wages" value={grouped ? '••••' : formatMoney(run.grossCents)} mono />
-            <DetailField label={estimated ? 'Employee withholding (est.)' : 'Employee withholding'} value={grouped ? '••••' : formatMoney(run.employeeTaxCents ?? 0)} mono />
-            <DetailField label={estimated ? 'Employer tax & benefits (est.)' : 'Employer tax & benefits'} value={grouped ? '••••' : formatMoney(run.employerTaxCents ?? 0)} mono />
-            <DetailField label={estimated ? 'Net pay (est.)' : 'Net pay'} value={grouped ? '••••' : formatMoney(run.netCents)} mono />
-            <DetailField label={estimated ? 'Bank funding total (est.)' : 'Bank funding total'} value={grouped ? '••••' : formatMoney(funding)} mono />
+            <DetailField label="Gross wages" value={masked(run.grossCents)} mono />
+            <DetailField label={`Employee withholding${est}`} value={masked(run.employeeTaxCents ?? 0)} mono />
+            <DetailField label={`Employer tax & benefits${est}`} value={masked(run.employerTaxCents ?? 0)} mono />
+            <DetailField label={`Net pay${est}`} value={masked(run.netCents)} mono />
+            <DetailField label={`Bank funding total${est}`} value={<b>{masked(funding)}</b>} mono />
+          </DetailSection>
+
+          {/* Liabilities the run creates (what Record remittance later clears). */}
+          <DetailSection title="Payroll liabilities">
+            <DetailField label={`Employee tax withheld${est}`} value={masked(run.employeeTaxCents ?? 0)} mono />
+            <DetailField label={`Employer payroll tax${est}`} value={masked(run.employerTaxCents ?? 0)} mono />
+            <DetailField label="Benefit deductions" value={masked(run.benefitsCents ?? 0)} mono />
+            <DetailField label="Other deductions & garnishments" value={masked(run.deductionsCents ?? 0)} mono />
+            <DetailField label="Total to remit" value={<b>{masked(payablesOf(run))}</b>} mono />
           </DetailSection>
 
           {/* Per-employee breakdown */}
           {!grouped && employees.length > 0 && (
-            <>
-              <h3 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-slate-500">
-                Employee breakdown ({employees.length})
-              </h3>
+            <section className="panel-sec">
+              <div className="panel-sec-h">
+                <h3>By employee</h3>
+                <span className="t-cap tnum">{employees.length}</span>
+              </div>
               <DetailTable
                 columns={[
                   { key: 'name', label: 'Employee' },
                   { key: 'gross', label: 'Gross', align: 'right' },
-                  { key: 'tax', label: 'EE tax', align: 'right' },
+                  { key: 'tax', label: 'Emp. tax', align: 'right' },
+                  { key: 'ded', label: 'Deductions', align: 'right' },
                   { key: 'net', label: 'Net', align: 'right' },
                 ]}
               >
                 {employees.map((e) => (
-                  <tr key={e.employeeId}>
-                    <td className="px-3 py-2 text-sm text-slate-200">{e.name}</td>
-                    <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-slate-300">{formatMoney(e.grossCents)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-slate-400">{formatMoney(e.employeeTaxCents)}</td>
-                    <td className="px-3 py-2 text-right font-mono text-sm tabular-nums text-emerald-400">{formatMoney(e.netCents)}</td>
+                  <tr key={e.employeeId} className="q-row">
+                    <td><span className="l1">{e.name}</span></td>
+                    <td className="n">{formatMoney(e.grossCents)}</td>
+                    <td className="n">{formatMoney(e.employeeTaxCents)}</td>
+                    <td className="n">{formatMoney(e.deductionsCents + e.benefitsCents)}</td>
+                    <td className="n">{formatMoney(e.netCents)}</td>
                   </tr>
                 ))}
+                <tr className="q-row">
+                  <td><span className="b">Total</span></td>
+                  <td className="n b">{formatMoney(employees.reduce((t, e) => t + e.grossCents, 0))}</td>
+                  <td className="n b">{formatMoney(employees.reduce((t, e) => t + e.employeeTaxCents, 0))}</td>
+                  <td className="n b">{formatMoney(employees.reduce((t, e) => t + e.deductionsCents + e.benefitsCents, 0))}</td>
+                  <td className="n b">{formatMoney(employees.reduce((t, e) => t + e.netCents, 0))}</td>
+                </tr>
               </DetailTable>
-            </>
+            </section>
+          )}
+          {grouped && (
+            <p className="t-cap" style={{ marginTop: 16 }}>
+              Individual pay amounts are hidden for your role (grouped payroll visibility).
+            </p>
           )}
 
-          {/* Audit trail */}
-          <div className="mt-6">
-            <DetailSection title="Approval audit (separation of duties)">
-              <DetailField label="Prepared by" value={run.preparedBy ?? '—'} />
-              <DetailField label="Approved by" value={run.approvedBy ?? 'Not yet approved'} />
-              <DetailField label="Released by" value={run.releasedBy ?? 'Not yet released'} />
-            </DetailSection>
-          </div>
-
-          {/* Posted GL entry */}
-          {run.glEntryId && (
-            <a
-              href={`/journal-entries?entry=${run.glEntryId}`}
-              className="mb-4 flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-3 text-sm text-emerald-300 hover:bg-emerald-500/10"
-            >
-              <BookOpen size={15} /> Posted to the ledger — view journal entry
-            </a>
+          {/* Ledger impact: the posted entry, or a by-role preview of it. */}
+          {run.glEntryId ? (
+            <div className={s.glLink}>
+              <span>
+                <span className="t-head">Posted to the ledger</span>
+                <span className="t-cap" style={{ display: 'block' }}>The balanced payroll entry is on the books.</span>
+              </span>
+              <ButtonLink href={`/journal-entries?entry=${run.glEntryId}`} variant="quiet" iconAfter="right">
+                View journal entry
+              </ButtonLink>
+            </div>
+          ) : (
+            !grouped && run.grossCents > 0 && <LedgerPreview run={run} estimated={estimated} />
           )}
 
           {/* Remittance — clear the run's tax/benefit payables against cash. Available
               once the run is posted (its payables exist on the ledger). */}
           {run.glEntryId && (
             <RemitAffordance
-              payablesCents={
-                (run.employeeTaxCents ?? 0) + (run.employerTaxCents ?? 0) + (run.benefitsCents ?? 0) + (run.deductionsCents ?? 0)
-              }
+              payablesCents={payablesOf(run)}
               grouped={grouped}
               canApprove={canApprove}
               pending={pending === 'remit'}
               onRemit={() => runAction('remit')}
             />
           )}
+
+          {/* Approval audit */}
+          <DetailSection title="Approval audit (separation of duties)">
+            <DetailField label="Prepared by" value={run.preparedBy ?? '—'} />
+            <DetailField label="Approved by" value={run.approvedBy ?? 'Not yet approved'} />
+            <DetailField label="Released by" value={run.releasedBy ?? 'Not yet released'} />
+          </DetailSection>
 
           {/* Action rail */}
           <ActionRail
@@ -211,6 +242,93 @@ export function RunDetailDrawer({
         </>
       )}
     </DetailDrawer>
+  );
+}
+
+/** Tax & benefit payables the run books (the same sum Record remittance clears). */
+function payablesOf(run: RunDetail): number {
+  return (run.employeeTaxCents ?? 0) + (run.employerTaxCents ?? 0) + (run.benefitsCents ?? 0) + (run.deductionsCents ?? 0);
+}
+
+function pipelineSteps(run: RunDetail, preparedByMe: boolean, estimated: boolean): PipeStep[] {
+  const stage = runStage(run.status, !!run.glEntryId);
+  const who = [
+    run.preparedBy ? (preparedByMe ? 'You' : run.preparedBy) : 'Preparer',
+    run.approvedBy ?? 'A different person',
+    run.releasedBy ?? 'An approver',
+    estimated ? 'No money moves' : run.provider ?? 'Provider',
+    run.glEntryId ? 'Posted' : 'Ledger',
+  ];
+  return RUN_STEPS.map((label, i) => ({
+    label,
+    who: who[i] ?? '',
+    state: stage.done
+      ? 'done'
+      : stage.current === null
+      ? 'todo'
+      : i < stage.current
+      ? 'done'
+      : i === stage.current
+      ? stage.failed
+        ? 'attn'
+        : 'cur'
+      : 'todo',
+  }));
+}
+
+/**
+ * The entry Post will book, by account role — the same shape the posting engine
+ * builds from the run totals (DR wages + DR employer tax = CR net pay + CR each
+ * withholding / deduction + CR employer-tax payable). The company's mapped account
+ * for each role is used when it posts.
+ */
+function LedgerPreview({ run, estimated }: { run: RunDetail; estimated: boolean }) {
+  const ee = run.employeeTaxCents ?? 0;
+  const er = run.employerTaxCents ?? 0;
+  const ben = run.benefitsCents ?? 0;
+  const ded = run.deductionsCents ?? 0;
+  const net = run.grossCents - ee - ben - ded;
+  const rows: Array<{ label: string; dr: number; cr: number }> = [
+    { label: 'Wages expense', dr: run.grossCents, cr: 0 },
+    { label: 'Payroll tax expense', dr: er, cr: 0 },
+    { label: 'Net pay · payments in transit', dr: 0, cr: net },
+    { label: 'Employee tax withholding payable', dr: 0, cr: ee },
+    { label: 'Benefits payable', dr: 0, cr: ben },
+    { label: 'Deductions & garnishments payable', dr: 0, cr: ded },
+    { label: 'Employer payroll tax payable', dr: 0, cr: er },
+  ].filter((r) => r.dr > 0 || r.cr > 0);
+  const dr = rows.reduce((t, r) => t + r.dr, 0);
+  const cr = rows.reduce((t, r) => t + r.cr, 0);
+  return (
+    <section className="panel-sec">
+      <div className="panel-sec-h">
+        <h3>Ledger entry preview{estimated ? ' (estimated)' : ''}</h3>
+        <Tag>Not posted</Tag>
+      </div>
+      <DetailTable
+        columns={[
+          { key: 'role', label: 'Account role' },
+          { key: 'dr', label: 'Debit', align: 'right' },
+          { key: 'cr', label: 'Credit', align: 'right' },
+        ]}
+      >
+        {rows.map((r) => (
+          <tr key={r.label} className="q-row">
+            <td><span className="l1">{r.label}</span></td>
+            <td className="n">{r.dr > 0 ? formatMoney(r.dr) : <span className="ink-3">—</span>}</td>
+            <td className="n">{r.cr > 0 ? formatMoney(r.cr) : <span className="ink-3">—</span>}</td>
+          </tr>
+        ))}
+        <tr className="q-row">
+          <td><span className="b">Totals</span></td>
+          <td className="n b">{formatMoney(dr)}</td>
+          <td className="n b">{formatMoney(cr)}</td>
+        </tr>
+      </DetailTable>
+      <p className="t-cap" style={{ marginTop: 8 }}>
+        Posts after release, to this company&apos;s mapped account for each role.
+      </p>
+    </section>
   );
 }
 
@@ -253,29 +371,31 @@ function ActionRail({
 
   if (terminalOk) {
     return (
-      <div className="mt-5 flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-800/30 px-4 py-3 text-sm text-slate-300">
-        <CheckCircle2 size={15} className="text-emerald-400" /> This run is complete. Posted runs are immutable — a
-        correction is a new reversing run.
+      <div className={s.actions}>
+        <InlineNotice icon={<Icon name="check" />} title="This run is complete.">
+          Posted runs can&apos;t be changed. A correction is a new reversing run.
+        </InlineNotice>
       </div>
     );
   }
   if (failed) {
     return (
-      <div className="mt-5 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.06] px-4 py-3 text-sm text-red-300">
-        <AlertTriangle size={15} className="mt-0.5 shrink-0" /> This run {status === 'RETURNED' ? 'was returned by the bank (NSF)' : status === 'REJECTED' ? 'was rejected in approval' : 'failed'}. Resolve and start a new run.
+      <div className={s.actions}>
+        <InlineNotice tone="neg" title={`This run ${status === 'RETURNED' ? 'was returned by the bank (NSF)' : status === 'REJECTED' ? 'was rejected in approval' : 'failed'}.`}>
+          Resolve the cause and start a new run.
+        </InlineNotice>
       </div>
     );
   }
 
   return (
-    <div className="mt-5 border-t border-slate-800 pt-4">
+    <div className={s.actions}>
       {awaitingApproval && (
-        <div>
-          <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
-            <Info size={13} className="text-blue-400" />
-            Approval is a separation-of-duties control: a different person than the preparer must approve the dollar
-            amount before any money can move.
-          </div>
+        <>
+          <p className="ink-2">
+            Approval is a separation-of-duties control: someone other than the preparer must approve the amount before
+            any money can move.
+          </p>
           <div
             title={
               preparedByMe
@@ -284,109 +404,104 @@ function ActionRail({
                 ? 'Your role cannot approve payroll runs.'
                 : undefined
             }
-            className="inline-block"
+            style={{ display: 'inline-block' }}
           >
-            <button
+            <Button
+              variant="primary"
+              icon="check"
               onClick={onApprove}
               disabled={preparedByMe || !canApprove || pending === 'approve'}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-busy={pending === 'approve' || undefined}
             >
-              {pending === 'approve' ? <Loader2 size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
-              Approve run
-            </button>
+              {pending === 'approve' ? 'Approving…' : 'Approve run'}
+            </Button>
           </div>
-          {preparedByMe && (
-            <p className="mt-1.5 text-2xs text-amber-400">You prepared this run — it must be approved by someone else.</p>
-          )}
-        </div>
+          {preparedByMe && <p className="t-cap warn">You prepared this run, so someone else must approve it.</p>}
+          {!preparedByMe && !canApprove && <p className="t-cap">Your role can&apos;t approve payroll runs.</p>}
+        </>
       )}
 
       {approved && !confirmingRelease && (
-        <div>
+        <>
           {estimated ? (
-            <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-3 py-2 text-xs text-amber-100/90">
-              <FlaskConical size={14} className="mt-0.5 shrink-0 text-amber-400" />
-              <span>
-                <span className="font-medium text-amber-200">Estimate run — no money moves.</span> No payroll provider is
-                connected, so release only advances this workflow for preview. Nothing is debited from the bank and no
-                employee, agency, or garnishment recipient is paid.
-              </span>
-            </div>
+            <InlineNotice tone="warn" title="Estimate run — no money moves.">
+              No payroll provider is connected, so release only advances this workflow for preview. Nothing is debited
+              from the bank and no employee, agency or garnishment recipient is paid.
+            </InlineNotice>
           ) : (
-            <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] px-3 py-2 text-xs text-slate-300">
-              <ShieldAlert size={14} className="mt-0.5 shrink-0 text-indigo-400" />
-              <span>
-                <span className="font-medium text-indigo-300">Release moves money.</span> It authorizes the provider to
-                debit the bank{funding !== null ? ` for ${formatMoney(funding)}` : ''} and pay employees, tax agencies, and
-                garnishment recipients. This step is irreversible.
-              </span>
-            </div>
+            <InlineNotice tone="info" title="Release moves money.">
+              It authorizes the provider to debit the bank{funding !== null ? <> for <b className="tnum">{formatMoney(funding)}</b></> : ''} and
+              pay employees, tax agencies and garnishment recipients. This step can&apos;t be undone.
+            </InlineNotice>
           )}
-          <button
+          <Button
+            variant="primary"
+            icon="dollar"
             onClick={onStartRelease}
             disabled={!canApprove}
             title={!canApprove ? 'Your role cannot release payroll funding.' : undefined}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            <Banknote size={14} /> Release to provider…
-          </button>
-        </div>
+            Release to provider…
+          </Button>
+          {!canApprove && <p className="t-cap">Your role can&apos;t release payroll funding.</p>}
+        </>
       )}
 
       {approved && confirmingRelease && (
-        <div className="rounded-lg border border-indigo-500/30 bg-indigo-500/[0.08] p-4">
-          <div className="mb-2 flex items-center gap-2 text-sm font-medium text-indigo-200">
-            <ShieldAlert size={16} /> {estimated ? 'Confirm release — estimate (no money movement)' : 'Confirm release — money movement'}
-          </div>
+        <div className={s.confirm} role="group" aria-label="Confirm release">
+          <p className="t-head">{estimated ? 'Confirm release — estimate, no money moves' : 'Confirm release — money moves'}</p>
           {estimated ? (
-            <p className="mb-3 text-xs text-slate-300">
-              This is an estimate run with no provider connected. Release only advances the workflow for preview —{' '}
-              <span className="font-medium text-amber-200">no bank debit occurs</span> and no one is paid.
+            <p className="ink-2">
+              This is an estimate run with no provider connected. Release only advances the workflow for preview. No bank
+              debit occurs and no one is paid.
             </p>
           ) : (
-            <p className="mb-3 text-xs text-slate-300">
-              The provider will debit the bank{funding !== null ? <span className="font-mono font-semibold text-white"> {formatMoney(funding)}</span> : ''} and pay
-              employees, agencies, and garnishment recipients. This cannot be undone.
+            <p className="ink-2">
+              The provider will debit the bank{funding !== null ? <> <b className="ink tnum">{formatMoney(funding)}</b></> : ''} and
+              pay employees, agencies and garnishment recipients. This can&apos;t be undone.
             </p>
           )}
-          <label className="mb-3 flex items-start gap-2 text-xs text-slate-300">
-            <input type="checkbox" checked={ackRelease} onChange={onToggleAck} className="mt-0.5" />
-            {estimated
-              ? 'I understand this is an estimate preview and no money will move.'
-              : 'I authorize this bank debit and release of payroll funding.'}
-          </label>
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={onCancelRelease} className="px-3 py-1.5 text-sm text-slate-400 hover:text-slate-200">
-              Cancel
-            </button>
-            <button
+          <Check
+            checked={ackRelease}
+            onChange={onToggleAck}
+            label={
+              estimated
+                ? 'I understand this is an estimate preview and no money will move.'
+                : 'I authorize this bank debit and release of payroll funding.'
+            }
+          />
+          <div className={s.right}>
+            <Button onClick={onCancelRelease}>Cancel</Button>
+            <Button
+              variant="primary"
+              icon="dollar"
               onClick={onConfirmRelease}
               disabled={!ackRelease || pending === 'release'}
-              className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              aria-busy={pending === 'release' || undefined}
             >
-              {pending === 'release' ? <Loader2 size={14} className="animate-spin" /> : <Banknote size={14} />}
-              Release funding
-            </button>
+              {pending === 'release' ? 'Releasing…' : 'Release funding'}
+            </Button>
           </div>
         </div>
       )}
 
       {releasedProcessing && (
-        <div>
-          <div className="mb-2 flex items-center gap-1.5 text-xs text-slate-400">
-            <Info size={13} className="text-blue-400" />
+        <>
+          <p className="ink-2">
             Funding released. The provider is processing the debit. Post the run to record the balanced, job-costed
             journal entry in the ledger.
-          </div>
-          <button
-            onClick={onPost}
-            disabled={pending === 'post'}
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40"
-          >
-            {pending === 'post' ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
-            Post to GL
-          </button>
-        </div>
+          </p>
+          <Button variant="primary" icon="book" onClick={onPost} disabled={pending === 'post'} aria-busy={pending === 'post' || undefined}>
+            {pending === 'post' ? 'Posting…' : 'Post to the ledger'}
+          </Button>
+        </>
+      )}
+
+      {status === 'DRAFT' && (
+        <p className="ink-2">
+          This run is a draft. Its preview didn&apos;t finish, so it can&apos;t be approved yet. Start a new run to compute
+          the preview again.
+        </p>
       )}
     </div>
   );
@@ -412,24 +527,22 @@ function RemitAffordance({
 }) {
   if (payablesCents <= 0) return null;
   return (
-    <div className="mb-4 rounded-lg border border-slate-800 bg-slate-800/30 px-4 py-3">
-      <div className="mb-2 flex items-start gap-1.5 text-xs text-slate-400">
-        <Banknote size={13} className="mt-0.5 shrink-0 text-indigo-400" />
-        <span>
-          Record a remittance of this run’s tax &amp; benefit payables{grouped ? '' : ` (${formatMoney(payablesCents)})`}. This
-          debits the payroll liabilities and credits the operating bank — clearing them to zero. Idempotent: a run can be
-          remitted once.
-        </span>
-      </div>
-      <button
+    <div className={s.remit}>
+      <p className="t-head">Remit the payroll liabilities</p>
+      <p className="ink-2">
+        Record a remittance of this run&apos;s tax and benefit payables
+        {grouped ? '' : <> (<b className="ink tnum">{formatMoney(payablesCents)}</b>)</>}. This debits the payroll
+        liabilities and credits the operating bank, clearing them to zero. A run can be remitted once.
+      </p>
+      <Button
+        icon="dollar"
         onClick={onRemit}
         disabled={pending || !canApprove}
         title={!canApprove ? 'Your role cannot remit payroll payables.' : undefined}
-        className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+        aria-busy={pending || undefined}
       >
-        {pending ? <Loader2 size={14} className="animate-spin" /> : <Banknote size={14} />}
-        Record remittance
-      </button>
+        {pending ? 'Recording…' : 'Record remittance'}
+      </Button>
     </div>
   );
 }

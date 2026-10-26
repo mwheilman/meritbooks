@@ -1,0 +1,89 @@
+/* ExplainPanel — layout only, on kit tokens (the .note--panel ground comes from system.css). */
+
+.root {
+  min-width: 0;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.title {
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+.body > * + * {
+  margin-top: 12px;
+}
+.sub {
+  margin-bottom: 4px;
+  font: 600 var(--t-12) / var(--lh-12) var(--f-text);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.lines {
+  list-style: none;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.line:last-child {
+  border-bottom: 0;
+}
+.lineMain {
+  min-width: 0;
+}
+.lineMain :global(.l2) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dir {
+  flex: none;
+  color: var(--ink-3);
+}
+.amt {
+  font-weight: 500;
+  color: var(--ink);
+  text-align: right;
+  white-space: nowrap;
+}
+.facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+}
+.fact {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.fact dt {
+  flex: none;
+}
+.fact dd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  color: var(--ink);
+}

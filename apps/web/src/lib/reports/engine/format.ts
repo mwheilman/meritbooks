@@ -5,7 +5,8 @@
  * from the sum of its displayed (rounded) rows by at most half a unit per row, which the
  * viewer footnotes ("Rounded; totals computed before rounding"). Exports carry full cents.
  */
-import type { Rounding } from './types';
+import { formatRatio } from '@/lib/format/ratio';
+import type { ReportColumn, ReportRow, Rounding } from './types';
 
 export const ROUNDING_UNIT_LABEL: Record<Rounding, string> = {
   cents: 'In US dollars',
@@ -47,4 +48,23 @@ export function formatPoints(p: number | null | undefined): string {
   if (p == null || !Number.isFinite(p)) return '';
   const s = Math.abs(p).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return p < 0 ? `(${s} pts)` : `${s} pts`;
+}
+
+/** A row whose values are not cents (percent or ratio formula rows). */
+export function isNonMoneyRow(r: Pick<ReportRow, 'percent' | 'ratio'>): boolean {
+  return !!(r.percent || r.ratio);
+}
+
+/** A column whose values are percents (not cents). */
+export function isPercentColumn(c: Pick<ReportColumn, 'percent' | 'kind'>): boolean {
+  return !!(c.percent || c.kind === 'variance_pct' || c.kind === 'common_size');
+}
+
+/** THE cell text for a statement cell — the on-screen grid and the PDF / export model share it. */
+export function formatCell(r: Pick<ReportRow, 'percent' | 'ratio'>, c: Pick<ReportColumn, 'percent' | 'kind'>, v: number | null | undefined, rounding: Rounding): string {
+  if (v == null) return '';
+  if (isPercentColumn(c)) return formatPercent(v);
+  if (r.ratio) return formatRatio(v, { delta: c.kind === 'variance_amount', empty: '' });
+  if (r.percent) return c.kind === 'variance_amount' ? formatPoints(v) : formatPercent(v);
+  return formatAmount(v, rounding);
 }

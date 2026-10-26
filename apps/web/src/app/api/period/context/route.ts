@@ -12,14 +12,14 @@ import { currentMonthOf, normalizeFyStart } from '@/lib/period/resolve';
  * GET /api/period/context — what every period picker needs to be fiscal-year and close aware,
  * in one small read:
  *
- *   { fyStartMonth, today, currentMonth, closedThrough, months: { 'YYYY-MM': closed|soft|open } }
+ *   { fyStartMonth, today, currentMonth, closedThrough, openBefore, months: { 'YYYY-MM': closed|soft|open } }
  *
  * - fyStartMonth: core.organizations.fiscal_year_start_month (the same value the report engine
  *   meta and the metrics adapter use, so the picker's quarters match the reports').
  * - today/currentMonth: the ORG's calendar date (core.organizations.timezone), never UTC.
  * - closedThrough / months: fiscal_periods (004) over the last 4 fiscal years for the companies
  *   in scope (`location_id` / `location_ids`, else every company RLS returns). HARD_CLOSE =
- *   closed, SOFT_CLOSE = soft — the same rule number governance uses.
+ *   closed, SOFT_CLOSE = soft — the ONE resolver (lib/period/closed.ts) number governance uses too.
  *
  * Read-only, RLS-scoped (runs as the user); no permission beyond sign-in — it exposes no
  * figures, only the calendar. Degrades: a failed close read returns closedThrough null.
@@ -62,6 +62,7 @@ export const GET = apiQueryHandler(query, async (q, ctx) => {
   let closedThrough: string | null = null;
   let months: Record<string, string> = {};
   let companies = 0;
+  let openBefore: string[] = [];
   const { data, error } = await fetchAll<FiscalPeriodRow>(
     () => {
       let fq = supabase
@@ -86,9 +87,10 @@ export const GET = apiQueryHandler(query, async (q, ctx) => {
     closedThrough = summary.closedThrough;
     months = summary.months;
     companies = summary.companies;
+    openBefore = summary.openBefore;
   }
 
   return NextResponse.json({
-    data: { fyStartMonth, today, currentMonth, closedThrough, months, companies, closeReadFailed: Boolean(error) },
+    data: { fyStartMonth, today, currentMonth, closedThrough, openBefore, months, companies, closeReadFailed: Boolean(error) },
   });
 });

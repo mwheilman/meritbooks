@@ -1,0 +1,410 @@
+/* Bank feed — edit panel, confidence explainer, flag dialog, statement import.
+   Layout only; every colour, size and line is a kit token (system.css). Square, hairlines, 8-pt. */
+
+/* ---------------------------------------------------------------- side panel (edit) */
+.drawer {
+  display: flex;
+  max-width: 100%;
+  height: 100%;
+  box-shadow: var(--float);
+  outline: none;
+}
+.drawer > :global(.panel) {
+  flex: 1;
+  min-width: 0;
+}
+.headTitle {
+  min-width: 0;
+}
+.headAmt {
+  font: 600 var(--t-20) / var(--lh-20) var(--f-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.headRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+.headRow :global(.t-head) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.headMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  margin-top: 4px;
+}
+.desc {
+  margin-top: 4px;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.foot :global(.sp) {
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------- insight blocks */
+.checks,
+.scores {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+.check {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  color: var(--ink-2);
+}
+.score {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+}
+.metaFig {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.metaFig b {
+  font-weight: 600;
+  color: var(--ink);
+}
+.para {
+  margin-top: 8px;
+  white-space: normal;
+}
+
+/* ---------------------------------------------------------------- pickers (account / job) */
+.pickTrigger {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 32px;
+  padding-right: 4px;
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  transition: border-color var(--fast);
+}
+.pickTrigger:hover {
+  border-color: var(--electric);
+}
+.pickMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  min-height: 30px;
+  padding: 0 6px 0 10px;
+  text-align: left;
+  color: var(--ink);
+}
+.pickMain > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickMain :global(.ico) {
+  flex: none;
+  color: var(--ink-3);
+}
+.pickList {
+  margin-top: 4px;
+  max-height: 288px;
+  overflow-y: auto;
+  border: 1px solid var(--midnight);
+  background: var(--white);
+  box-shadow: var(--float);
+}
+.pickListShort {
+  max-height: 192px;
+}
+.pickGroup {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 12px;
+  background: var(--canvas);
+  border-bottom: 1px solid var(--line);
+  font: 600 var(--t-12) / var(--lh-12) var(--f-text);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.pickGroupAi {
+  color: var(--electric);
+}
+.pickItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  padding: 4px 12px;
+  text-align: left;
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  transition: background-color var(--fast);
+}
+.pickItem:last-child {
+  border-bottom: 0;
+}
+.pickItem:hover,
+.pickItem:focus-visible {
+  background: var(--grey-100);
+}
+.pickItem[aria-pressed='true'] {
+  background: var(--sky);
+}
+.pickItem > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickItem :global(.ico) {
+  flex: none;
+  color: var(--electric);
+}
+.pickEmpty {
+  padding: 16px 12px;
+  text-align: center;
+  color: var(--ink-3);
+}
+
+/* Most-used accounts for this vendor (S3 .recent). */
+.recents {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+}
+.recent {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  text-align: left;
+  color: var(--ink);
+  transition: border-color var(--fast);
+}
+.recent:hover {
+  border-color: var(--electric);
+}
+.recent[aria-pressed='true'] {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+.recent > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.recentCt {
+  color: var(--ink-3);
+  font-size: var(--t-12);
+  white-space: nowrap;
+}
+.memory {
+  margin-bottom: 8px;
+}
+.memoryActs {
+  margin-top: 8px;
+}
+.splitRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.fields {
+  display: grid;
+  gap: 12px;
+}
+.req {
+  color: var(--neg);
+  margin-left: 4px;
+}
+.opt {
+  color: var(--ink-3);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+/* ---------------------------------------------------------------- confidence explainer */
+.overall {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+}
+.explainBody > :global(.panel-sec):first-of-type {
+  padding-top: 16px;
+}
+.stateLine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 0 4px;
+}
+
+/* ---------------------------------------------------------------- statement import */
+.importDialog {
+  width: 1040px;
+  max-width: calc(100% - 48px);
+  max-height: calc(100vh - 128px);
+  display: flex;
+  flex-direction: column;
+}
+.importDialog > :global(.dialog-body) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.lede {
+  color: var(--ink-2);
+  max-width: 72ch;
+  margin-bottom: 16px;
+}
+.stack > * + * {
+  margin-top: 12px;
+}
+.acctField {
+  max-width: 480px;
+}
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 224px;
+  padding: 32px 24px;
+  border: 1.5px dashed var(--grey-400);
+  background: var(--white);
+  text-align: center;
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: border-color var(--fast), background-color var(--fast);
+}
+.drop:hover,
+.drop:focus-visible {
+  border-color: var(--electric);
+}
+.drop[data-state='over'] {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+.drop[data-state='busy'] {
+  cursor: default;
+  border-color: var(--electric);
+  background: var(--sky);
+}
+.drop[data-state='off'] {
+  cursor: not-allowed;
+  background: var(--grey-100);
+  border-color: var(--line-2);
+}
+.dropMark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1.5px dashed var(--grey-400);
+  color: var(--ink-3);
+}
+.busyBar {
+  display: block;
+  width: 240px;
+  height: 12px;
+}
+.hiddenInput {
+  display: none;
+}
+.reviewHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.tie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 16px;
+  width: 100%;
+}
+.tieFigs {
+  display: inline-flex;
+  gap: 16px;
+  white-space: nowrap;
+}
+.tableWrap {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+.tableWrap :global(.tbl-q) td {
+  overflow: visible;
+}
+.tableWrap :global(.input) {
+  width: 100%;
+}
+.descCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.excluded > td {
+  opacity: 0.45;
+}
+.lowConf > td:first-child {
+  box-shadow: inset 3px 0 var(--warn);
+}
+.footNote {
+  max-width: 56ch;
+  white-space: normal;
+}
+
+/* ---------------------------------------------------------------- flag dialog */
+.flagDesc {
+  margin-bottom: 16px;
+  color: var(--ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

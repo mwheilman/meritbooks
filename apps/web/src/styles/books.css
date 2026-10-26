@@ -25,11 +25,13 @@
 @media (max-width:1180px){.bar .mb-bar-search span:not(.kbd){display:none}.bar .cmdk{width:240px}}
 
 /* ---------------------------------------------------------------- page head */
-.mb-page-head{align-items:flex-end}
-.mb-page-head-main{min-width:0;max-width:72ch}
+.mb-page-head{align-items:flex-end;flex-wrap:wrap;row-gap:12px}
+/* The title block keeps a readable width; when the verbs don't fit beside it they wrap below
+   (a squeezed block set the subtitle one word per line under a long action row). */
+.mb-page-head-main{flex:1 1 36ch;min-width:min(36ch,100%);max-width:72ch}
 .mb-page-desc{margin-top:4px;color:var(--ink-2)}
-.mb-page-actions{justify-content:flex-end;flex-wrap:wrap}
-.mb-posts-to{max-width:280px;overflow:hidden;text-overflow:ellipsis}
+.mb-page-actions{justify-content:flex-end;flex-wrap:wrap;flex:0 1 auto;min-width:0;margin-left:auto}
+.mb-posts-to{display:inline-block;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto;min-width:0}
 .mb-tag--md{height:24px;font-size:var(--t-13)}
 .tabs a.tab[aria-current=page]{color:var(--ink);font-weight:600}
 .tabs a.tab[aria-current=page]::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--electric)}

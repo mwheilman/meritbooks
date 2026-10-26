@@ -1,20 +1,23 @@
 import { Suspense } from 'react';
-import { CompanyScopeGuard } from '@/components/company-scope-guard';
-import { FeedHealthBanner } from '@/components/bank/feed-health-banner';
-import { CashTabs } from './cash-tabs';
+import { requirePagePermission } from '@/lib/rbac/page-guard';
+import { CashWorkspace } from './cash-workspace';
 
-export const metadata = { title: 'Cash position' };
+export const metadata = { title: 'Cash' };
 
-export default function CashPage() {
-  // COMPANY-SCOPE CONTROL: cash position/forecast is per company.
-  // Suspense wraps the client tab shell because it reads the initial tab from `?tab=`
-  // via useSearchParams (Next 14 requirement).
+/**
+ * CASH (Wave 4C, docs/FPB-reports-fpna.md §4.12) — position now, the direct 13-week forecast
+ * (scenarios, daily drill, band, minimum cash, recommendations), scenarios & manual items,
+ * forecast accuracy, and per-company cash settings. Built on merit-ui.
+ *
+ * Page-level RBAC: cash_position:view (fails closed before any client JS). The forecast, scenario
+ * and settings routes check cash.forecast view / edit themselves. Viewing supports "All companies"
+ * (a read-only consolidated analysis — intercompany excluded); every write names one company.
+ */
+export default async function CashPage() {
+  await requirePagePermission('cash_position', 'view');
   return (
-    <CompanyScopeGuard>
-      <FeedHealthBanner />
-      <Suspense fallback={null}>
-        <CashTabs />
-      </Suspense>
-    </CompanyScopeGuard>
+    <Suspense fallback={<p className="t-cap">Loading cash…</p>}>
+      <CashWorkspace />
+    </Suspense>
   );
 }

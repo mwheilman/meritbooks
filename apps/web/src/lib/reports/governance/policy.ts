@@ -37,6 +37,7 @@ import type {
   PeriodVisibility,
   WatermarkMode,
 } from './types';
+import { CLOSE_STATE_LABEL, closedThroughText, companyCloseRun } from '@/lib/period/closed';
 
 function periodFor(company: CompanyFacts, key: PeriodKey): FiscalPeriodFact | null {
   const { year, month } = parsePeriodKey(key);
@@ -181,25 +182,18 @@ export function manualReleaseBlock(company: CompanyFacts, key: PeriodKey, today:
   return null;
 }
 
-/** Last month of the contiguous run of HARD_CLOSE periods from the company's first period. */
+/**
+ * Books closed through — delegates to THE close resolver (lib/period/closed.ts) so governance,
+ * the period picker and the calendar can never disagree: the contiguous HARD_CLOSE run from the
+ * company's first closed month (open months before the first close are reported, not blocking).
+ */
 export function closedThrough(company: CompanyFacts): PeriodKey | null {
-  const sorted = [...company.periods].sort((a, b) => a.year - b.year || a.month - b.month);
-  let out: PeriodKey | null = null;
-  let prev: PeriodKey | null = null;
-  for (const p of sorted) {
-    const k = periodKey(p.year, p.month);
-    // A gap in the calendar (a missing month) ends the run like an open month would.
-    if (prev !== null && k !== nextKey(prev)) break;
-    if (p.status !== 'HARD_CLOSE') break;
-    out = k;
-    prev = k;
-  }
-  return out;
+  return companyCloseRun(company.periods.map((p) => ({ key: periodKey(p.year, p.month), status: p.status }))).closedThrough;
 }
 
-function nextKey(k: PeriodKey): PeriodKey {
-  const { year, month } = parsePeriodKey(k);
-  return month === 12 ? periodKey(year + 1, 1) : periodKey(year, month + 1);
+/** Months before `closedThrough` that are still not closed (pre-close open months). */
+export function openBeforeClosed(company: CompanyFacts): PeriodKey[] {
+  return companyCloseRun(company.periods.map((p) => ({ key: periodKey(p.year, p.month), status: p.status }))).openBefore;
 }
 
 /** Latest released month (explicit or auto) among the company's periods and release rows. */
@@ -233,9 +227,9 @@ function latestRestatement(company: CompanyFacts, key: PeriodKey): { on: string 
 }
 
 const STATUS_WORDS: Record<CloseStatus, string> = {
-  HARD_CLOSE: 'closed',
-  SOFT_CLOSE: 'soft close',
-  OPEN: 'open',
+  HARD_CLOSE: CLOSE_STATE_LABEL.closed.toLowerCase(),
+  SOFT_CLOSE: CLOSE_STATE_LABEL.soft.toLowerCase(),
+  OPEN: CLOSE_STATE_LABEL.open.toLowerCase(),
   NO_PERIOD: 'no period',
 };
 
@@ -365,7 +359,7 @@ export function evaluateGovernance(input: GovernanceInput): GovernanceDecision {
   // ── annotations, banner, watermark, footnote ────────────────────────────────
   annotations.push({
     kind: 'closed_through',
-    text: closedScope ? `Books closed through ${monthLabel(closedScope)}.` : 'No month is closed yet.',
+    text: `${closedThroughText(closedScope, closedScope ? openEarlierCount(scopeMembers, closedScope) : 0)}.`,
   });
   if (finance) {
     annotations.push({
@@ -432,6 +426,13 @@ export function evaluateGovernance(input: GovernanceInput): GovernanceDecision {
     annotations,
     footnote: foot.join(' '),
   };
+}
+
+/** Distinct months on/before `through` that some scope company has not closed. */
+function openEarlierCount(companies: CompanyFacts[], through: PeriodKey): number {
+  const keys = new Set<PeriodKey>();
+  for (const c of companies) for (const k of openBeforeClosed(c)) if (k < through) keys.add(k);
+  return keys.size;
 }
 
 /** True when the period's status meets the auto-release minimum. */

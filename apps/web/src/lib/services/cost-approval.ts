@@ -87,6 +87,16 @@ export interface CreateAttributionInput {
   glEntryId?: string | null;
   /** Link the attribution back to its originating bill (AP lifecycle). */
   billId?: string | null;
+  /** Seam v2 JOB_COST enrichment (migration 194): the Projects commitment line / cost code / vendor. */
+  commitmentLineRef?: string | null;
+  costCodeRef?: string | null;
+  vendorId?: string | null;
+}
+
+/** UUID-shaped cost code refs travel as cost_code_id, anything else as cost_code (Projects resolves both). */
+function costCodeKeys(ref: string | null | undefined): { costCodeId?: string; costCode?: string } {
+  if (!ref) return {};
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref) ? { costCodeId: ref } : { costCode: ref };
 }
 
 /**
@@ -131,6 +141,9 @@ export async function createAttribution(db: DB, input: CreateAttributionInput) {
       source_type: input.sourceType,
       source_ref: input.sourceRef ?? null,
       bill_id: input.billId ?? null,
+      commitment_line_ref: input.commitmentLineRef ?? null,
+      cost_code_ref: input.costCodeRef ?? null,
+      vendor_id: input.vendorId ?? null,
       gl_entry_id: input.glEntryId ?? null,
       approver_type: approver.approver_type,
       approver_ref: approver.approver_ref,
@@ -155,6 +168,9 @@ export async function createAttribution(db: DB, input: CreateAttributionInput) {
     sourceRef: input.sourceRef ?? (data as { id: string }).id,
     glEntryId: input.glEntryId ?? null,
     memo: input.memo ?? null,
+    commitmentLineId: input.commitmentLineRef ?? null,
+    vendorId: input.vendorId ?? null,
+    ...costCodeKeys(input.costCodeRef),
   });
 
   return { id: (data as { id: string }).id, lifecycle };
@@ -192,6 +208,8 @@ export async function approveAttribution(db: DB, orgId: string, id: string, appr
     amountCents: Number(a.amount_cents), occurredOn: String(a.occurred_on), lifecycle: 'CLEARED',
     gate: a.gate as Gate, sourceRef: (a.source_ref as string) ?? id, glEntryId: (a.gl_entry_id as string) ?? null,
     memo: (a.memo as string) ?? null,
+    commitmentLineId: (a.commitment_line_ref as string | null) ?? null, vendorId: (a.vendor_id as string | null) ?? null,
+    ...costCodeKeys(a.cost_code_ref as string | null),
   });
   return { id, lifecycle: 'CLEARED' as const };
 }
@@ -214,6 +232,8 @@ export async function voidAttribution(db: DB, orgId: string, id: string, reason:
     amountCents: Number(a.amount_cents), occurredOn: String(a.occurred_on), lifecycle: 'VOIDED',
     gate: a.gate as Gate, sourceRef: (a.source_ref as string) ?? id, glEntryId: (a.gl_entry_id as string) ?? null,
     memo: reason,
+    commitmentLineId: (a.commitment_line_ref as string | null) ?? null, vendorId: (a.vendor_id as string | null) ?? null,
+    ...costCodeKeys(a.cost_code_ref as string | null),
   });
   return { id, lifecycle: 'VOIDED' as const };
 }

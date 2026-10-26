@@ -121,6 +121,8 @@ export interface AccountMeta {
   groupId: string;
   groupName: string;
   groupOrder: number;
+  /** The account's own group when a role-based presentation line regrouped it (layouts select on this). */
+  sourceGroupId?: string;
   order: number;
   normalBalance: 'DEBIT' | 'CREDIT';
   isBank: boolean;
@@ -272,7 +274,8 @@ export type LayoutRowDef =
       label: string;
       /** arithmetic over row ids in braces: "{gp} / {revenue} * 100", "{ebitda} + {addbacks}" */
       expr: string;
-      format: 'amount' | 'percent';
+      /** amount = cents · percent = % (one decimal) · ratio = a multiple shown as "0.62×" */
+      format: 'amount' | 'percent' | 'ratio';
       goodWhen?: 'up' | 'down';
     }
   | { id: string; kind: 'spacer' };
@@ -368,6 +371,8 @@ export interface ReportRow {
   sumOf?: Array<{ id: string; sign: 1 | -1 }>;
   /** formula rows: percent format */
   percent?: boolean;
+  /** formula rows: a ratio ("0.62×") — values are plain multiples, not cents */
+  ratio?: boolean;
   /** value = drillSign × Σ(debit − credit) of the drilled GL lines (presentation sign) */
   drillSign?: 1 | -1;
   /** per-cell drill overrides (one per column; null = not drillable) — e.g. trial balance P&L rows */

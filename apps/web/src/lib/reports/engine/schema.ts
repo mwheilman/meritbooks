@@ -101,7 +101,7 @@ export const layoutRowSchema = z.discriminatedUnion('kind', [
     of: z.array(z.object({ id: rowId, sign: z.union([z.literal(1), z.literal(-1)]) })).min(1).max(100), goodWhen,
     emphasis: z.enum(['sub', 'grand']).optional(),
   }),
-  z.object({ id: rowId, kind: z.literal('formula'), label: z.string().min(1).max(120), expr: z.string().min(1).max(500), format: z.enum(['amount', 'percent']), goodWhen }),
+  z.object({ id: rowId, kind: z.literal('formula'), label: z.string().min(1).max(120), expr: z.string().min(1).max(500), format: z.enum(['amount', 'percent', 'ratio']), goodWhen }),
   z.object({ id: rowId, kind: z.literal('spacer') }),
 ]);
 

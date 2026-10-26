@@ -507,14 +507,18 @@ describe('vendor-portal AI budget (security review M11)', () => {
   const TOK_1 = '18000000-0000-0000-0000-0000000000f1';
   const TOK_2 = '18000000-0000-0000-0000-0000000000f2';
   it(`allows ${PORTAL_AI_READS_PER_DAY} AI reads per link per UTC day, then refuses (DB counter, per link)`, async () => {
-    const day1 = new Date('2026-10-23T09:00:00Z');
+    // Anchored to the real UTC day: core.bump_send_quota GCs rows older than now() − 2 days
+    // by the WALL clock, so a hard-coded past date silently resets the counter.
+    const DAY = new Date().toISOString().slice(0, 10);
+    const NEXT_DAY = new Date(Date.parse(`${DAY}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+    const day1 = new Date(`${DAY}T09:00:00Z`);
     for (let i = 1; i <= PORTAL_AI_READS_PER_DAY; i++) {
       expect(await consumePortalAiRead(ORG_A, TOK_1, { writer: svc, now: day1 })).toEqual({ ok: true, used: i });
     }
-    expect(await consumePortalAiRead(ORG_A, TOK_1, { writer: svc, now: new Date('2026-10-23T23:59:00Z') })).toMatchObject({ ok: false, reason: 'over_cap' });
+    expect(await consumePortalAiRead(ORG_A, TOK_1, { writer: svc, now: new Date(`${DAY}T23:59:00Z`) })).toMatchObject({ ok: false, reason: 'over_cap' });
     // another link has its own budget; the next UTC day resets
     expect(await consumePortalAiRead(ORG_A, TOK_2, { writer: svc, now: day1 })).toEqual({ ok: true, used: 1 });
-    expect(await consumePortalAiRead(ORG_A, TOK_1, { writer: svc, now: new Date('2026-10-24T00:00:01Z') })).toEqual({ ok: true, used: 1 });
+    expect(await consumePortalAiRead(ORG_A, TOK_1, { writer: svc, now: new Date(`${NEXT_DAY}T00:00:01Z`) })).toEqual({ ok: true, used: 1 });
     const rows = await db.query<{ n: number }>(`select count(*)::int as n from core.outbound_send_counters where scope = 'portal_ai_day'`);
     expect(rows.rows[0].n).toBeGreaterThanOrEqual(3);
   });

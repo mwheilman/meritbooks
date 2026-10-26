@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
+import { Button, InlineNotice, ListPager } from '@meritbooks/merit-ui';
 import { formatMoney, type BankFeedResponse, type BankFeedRow } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput, FlagTransactionInput } from '@/lib/validations/transactions';
 import type { SplitSummary } from '@/lib/bank/splits/types';
@@ -25,7 +26,7 @@ import {
   idsInBand,
 } from './bank-feed-refine';
 import type { SavedView } from './bank-feed-views';
-import { FileUp, RefreshCw, Copy, X } from 'lucide-react';
+import styles from './bank-feed.module.css';
 
 interface ApproveResult {
   success: boolean;
@@ -144,12 +145,18 @@ export function BankFeedContent() {
   const [showStatementImport, setShowStatementImport] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dupBannerDismissed, setDupBannerDismissed] = useState(false);
+  // Server page (the route returns 50 lines a page); the list must never silently stop.
+  const [page, setPage] = useState(1);
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, debouncedSearch, selectedLocationId]);
 
   // Build query params
   const params: Record<string, string> = {};
   if (activeTab !== 'all') params.status = activeTab;
   if (debouncedSearch) params.search = debouncedSearch;
   if (selectedLocationId) params.location_id = selectedLocationId;
+  if (page > 1) params.page = String(page);
 
   const { data, isLoading, error, refetch } = useQuery<BankFeedResponse>(
     '/api/bank-feed',
@@ -182,6 +189,16 @@ export function BankFeedContent() {
     const counts = { all: vendorScoped.length, high: 0, medium: 0, low: 0, uncoded: 0 };
     for (const t of vendorScoped) counts[confidenceBandOf(t.ai_confidence)] += 1;
     return counts;
+  }, [vendorScoped]);
+  // Signed cents per band (integer sums) for the band captions.
+  const bandTotals = useMemo(() => {
+    const totals = { all: 0, high: 0, medium: 0, low: 0, uncoded: 0 };
+    for (const t of vendorScoped) {
+      const c = Number(t.amount_cents) || 0;
+      totals.all += c;
+      totals[confidenceBandOf(t.ai_confidence)] += c;
+    }
+    return totals;
   }, [vendorScoped]);
 
   // Plaid connection status (drives the Refresh button's enabled/last-synced state).
@@ -547,6 +564,15 @@ export function BankFeedContent() {
     setActiveViewId((cur) => (cur === id ? null : cur));
   }, [deleteView]);
 
+  // Empty-state "Show everything": back to the unfiltered lens.
+  const handleClearFilters = useCallback(() => {
+    setActiveTab('all');
+    setConfidenceBand('all');
+    setVendorFilter(null);
+    setSearch('');
+    setActiveViewId(null);
+  }, []);
+
   // Manual filter changes detach from the applied saved view.
   const handleTabChange = useCallback((t: string) => {
     setActiveTab(t);
@@ -573,9 +599,12 @@ export function BankFeedContent() {
   // Keyboard shortcuts
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      const tag = (e.target as HTMLElement).tagName;
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (editingTxn || flaggingTxn || explainingTxn) return;
+      // Keys inside a kit popover / dialog belong to that surface (the inline pickers).
+      if (target.closest?.('[data-hotkeys="off"], [aria-modal="true"]')) return;
 
       const len = visibleTransactions.length;
       if (len === 0) return;
@@ -636,42 +665,59 @@ export function BankFeedContent() {
     setFocusedIndex(-1);
   }, [selectedLocationId, confidenceBand, vendorFilter]);
 
+  const syncTitle =
+    plaidStatus?.connected === false
+      ? 'No bank connected yet — link an account under Integrations'
+      : lastSyncedLabel
+        ? `Pull the latest transactions from your bank (last synced ${lastSyncedLabel})`
+        : 'Pull the latest transactions from your bank';
+
+  const pagination = data?.pagination;
+
   return (
     <>
-      <div className="mb-4 flex items-center justify-end gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSync}
-            disabled={isSyncing}
-            className="btn-secondary btn-sm whitespace-nowrap flex items-center gap-1.5"
-            title={
-              plaidStatus?.connected === false
-                ? 'No bank connected yet — link an account under Integrations'
+      <BankFeedMetricsStrip
+        metrics={data?.metrics ?? null}
+        isLoading={isLoading}
+        onShowPosted={() => handleTabChange('POSTED')}
+        onShowLow={() => handleBandChange('low')}
+      />
+      <BankFeedFilters
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        search={search}
+        onSearchChange={handleSearchChange}
+        counts={data?.counts ?? null}
+        actions={
+          <>
+            <span className={`t-cap ${styles.synced}`}>
+              {plaidStatus?.connected === false
+                ? 'No bank connected'
                 : lastSyncedLabel
-                  ? `Pull the latest transactions from your bank (last synced ${lastSyncedLabel})`
-                  : 'Pull the latest transactions from your bank'
-            }
-          >
-            <RefreshCw size={14} className={isSyncing ? 'animate-spin' : undefined} />
-            {isSyncing ? 'Syncing…' : 'Refresh'}
-          </button>
-          <button
-            onClick={() => setShowStatementImport(true)}
-            className="btn-secondary btn-sm whitespace-nowrap flex items-center gap-1.5"
-            title="Import a bank/credit-card statement PDF for a manual (non-Plaid) account"
-          >
-            <FileUp size={14} /> Import statement (PDF)
-          </button>
-          <button
-            onClick={handleCategorizeAll}
-            disabled={isCategorizing}
-            className="btn-secondary btn-sm whitespace-nowrap"
-            title="Run AI categorization on uncoded pending transactions"
-          >
-            {isCategorizing ? 'Categorizing…' : 'AI Categorize'}
-          </button>
-        </div>
-      </div>
+                  ? `Synced ${lastSyncedLabel}`
+                  : null}
+            </span>
+            <Button onClick={handleSync} disabled={isSyncing} aria-busy={isSyncing || undefined} title={syncTitle}>
+              {isSyncing ? 'Syncing…' : 'Refresh'}
+            </Button>
+            <Button
+              icon="upload"
+              onClick={() => setShowStatementImport(true)}
+              title="Import a bank or credit-card statement PDF for a manual (non-Plaid) account"
+            >
+              Import statement
+            </Button>
+            <Button
+              onClick={handleCategorizeAll}
+              disabled={isCategorizing}
+              aria-busy={isCategorizing || undefined}
+              title="Run AI categorization on uncoded pending transactions"
+            >
+              {isCategorizing ? 'Categorizing…' : 'AI categorize'}
+            </Button>
+          </>
+        }
+      />
       {showStatementImport && (
         <StatementImport
           onClose={() => setShowStatementImport(false)}
@@ -681,17 +727,11 @@ export function BankFeedContent() {
           }}
         />
       )}
-      <BankFeedFilters
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        search={search}
-        onSearchChange={handleSearchChange}
-        counts={data?.counts ?? null}
-      />
       <BankFeedRefineBar
         band={confidenceBand}
         onBandChange={handleBandChange}
         bandCounts={bandCounts}
+        bandTotals={bandTotals}
         vendor={vendorFilter}
         onVendorChange={handleVendorFilterChange}
         vendors={vendorOptions}
@@ -702,34 +742,26 @@ export function BankFeedContent() {
         onDeleteView={handleDeleteView}
       />
       {duplicates && duplicates.group_count > 0 && !dupBannerDismissed && (
-        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3">
-          <Copy size={16} className="text-amber-400 mt-0.5 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm text-amber-200 font-medium">
-              {duplicates.total_flagged} possible duplicate transaction{duplicates.total_flagged === 1 ? '' : 's'} across{' '}
-              {duplicates.group_count} group{duplicates.group_count === 1 ? '' : 's'}
-            </p>
-            <p className="text-xs text-amber-200/70 mt-0.5">
-              Same description and amount within a few days. Flagged for review — nothing is deleted. Look for the
-              {' '}
-              <span className="font-medium">Possible duplicate</span> badge below and flag or skip before approving.
-            </p>
-            {duplicates.groups.slice(0, 3).map((g) => (
-              <p key={g.key} className="text-2xs text-amber-200/60 mt-1 font-mono truncate">
-                {formatMoney(g.amountCents)} · {g.sampleDescription} · ×{g.count} ({g.dates.join(', ')})
-              </p>
-            ))}
-          </div>
-          <button
-            onClick={() => setDupBannerDismissed(true)}
-            className="p-1 rounded-md text-amber-300/70 hover:text-amber-200 hover:bg-amber-500/10 transition-colors shrink-0"
-            aria-label="Dismiss duplicate warning"
+        <div className={styles.notice}>
+          <InlineNotice
+            tone="warn"
+            title={`${duplicates.total_flagged} possible duplicate transaction${duplicates.total_flagged === 1 ? '' : 's'} in ${duplicates.group_count} group${duplicates.group_count === 1 ? '' : 's'}.`}
           >
-            <X size={14} />
-          </button>
+            Same description and amount within a few days. Flagged for review — nothing is deleted. Look for
+            {' '}<b>Possible duplicate</b> in the list, then flag or skip it before approving.{' '}
+            <button type="button" className="link" onClick={() => setDupBannerDismissed(true)} aria-label="Dismiss duplicate warning">
+              Dismiss
+            </button>
+            <ul className={styles.dupList}>
+              {duplicates.groups.slice(0, 3).map((g) => (
+                <li key={g.key} className="t-cap tnum">
+                  {formatMoney(g.amountCents)} · {g.sampleDescription} · ×{g.count} ({g.dates.join(', ')})
+                </li>
+              ))}
+            </ul>
+          </InlineNotice>
         </div>
       )}
-      <BankFeedMetricsStrip metrics={data?.metrics ?? null} isLoading={isLoading} />
       <BankFeedList
         transactions={visibleTransactions}
         isLoading={isLoading}
@@ -754,6 +786,23 @@ export function BankFeedContent() {
         onSort={handleSort}
         selectedLocationId={selectedLocationId}
         duplicateIds={duplicateIds}
+        onFocusRow={setFocusedIndex}
+        onRetry={() => void refetch()}
+        onClearFilters={handleClearFilters}
+        footer={
+          pagination && pagination.total_pages > 1 ? (
+            <ListPager
+              page={pagination.page}
+              perPage={pagination.per_page}
+              total={pagination.total}
+              noun="lines"
+              onPage={(p) => {
+                setPage(p);
+                setSelected(new Set());
+              }}
+            />
+          ) : undefined
+        }
       />
       {editingTxn && (
         <EditPanel

@@ -123,8 +123,8 @@ export function BudgetVsActual({ locationId, fiscalYear, departmentId }: {
                   <td className="px-4 py-3 text-sm font-semibold text-white">Net Income</td>
                   <td className="px-4 py-3 text-right font-mono font-semibold text-slate-200">{formatMoney(net.budget)}</td>
                   <td className={clsx('px-4 py-3 text-right font-mono font-semibold', net.actual >= 0 ? 'text-white' : 'text-red-400')}>{formatMoney(net.actual)}</td>
-                  <td className={clsx('px-4 py-3 text-right font-mono font-semibold flex items-center justify-end gap-1', net.favorable ? 'text-emerald-400' : 'text-red-400')}>
-                    {net.favorable ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{formatMoney(Math.abs(net.variance))}
+                  <td className={clsx('px-4 py-3 text-right font-mono font-semibold flex items-center justify-end gap-1', net.budget === 0 ? 'text-slate-400' : net.favorable ? 'text-emerald-400' : 'text-red-400')}>
+                    {net.budget === 0 ? '—' : <>{net.favorable ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{formatMoney(Math.abs(net.variance))}</>}
                   </td>
                   <td className="px-3 py-3 text-right font-mono text-2xs text-slate-500">
                     {net.budget !== 0 ? `${Math.round((net.variance / Math.abs(net.budget)) * 1000) / 10}%` : '—'}
@@ -157,10 +157,11 @@ function Section({ label, rows, totals }: {
           <td className="px-4 py-1.5 text-slate-300">{r.accountName}</td>
           <td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.budgetCents)}</td>
           <td className="px-4 py-1.5 text-right font-mono text-slate-300">{formatMoney(r.actualCents)}</td>
-          <td className={clsx('px-4 py-1.5 text-right font-mono font-medium', r.varianceCents === 0 ? 'text-slate-500' : r.isFavorable ? 'text-emerald-400' : 'text-red-400')}>
-            {formatMoney(r.varianceCents)}
+          <td className={clsx('px-4 py-1.5 text-right font-mono font-medium', r.varianceCents === 0 || r.budgetCents === 0 ? 'text-slate-500' : r.isFavorable ? 'text-emerald-400' : 'text-red-400')}>
+            {/* Nothing budgeted: the amount shows, but no favourable / unfavourable colour. */}
+            <span title={r.budgetCents === 0 ? 'Nothing budgeted for this period' : undefined}>{formatMoney(r.varianceCents)}</span>
           </td>
-          <td className={clsx('px-3 py-1.5 text-right font-mono text-2xs', r.varianceCents === 0 ? 'text-slate-600' : r.isFavorable ? 'text-emerald-400/80' : 'text-red-400/80')}>
+          <td className={clsx('px-3 py-1.5 text-right font-mono text-2xs', r.varianceCents === 0 || r.budgetCents === 0 ? 'text-slate-600' : r.isFavorable ? 'text-emerald-400/80' : 'text-red-400/80')}>
             {r.budgetCents !== 0 ? `${r.variancePct}%` : '—'}
           </td>
         </tr>

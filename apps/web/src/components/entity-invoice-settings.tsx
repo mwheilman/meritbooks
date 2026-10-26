@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Check } from 'lucide-react';
-import { clsx } from 'clsx';
+import { useState, useEffect, useCallback, type ChangeEvent } from 'react';
+import { Button, Check, Field, Input, InlineNotice, Radio } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks';
 
 /**
@@ -14,11 +13,15 @@ import { addToast } from '@/hooks';
  * The selection is stored on this record and overrides less-specific levels
  * (invoice overrides job overrides customer overrides entity). When nothing has
  * been saved yet, the company defaults (Check + ACH) are shown pre-checked.
+ *
+ * Presentation: kit classes + inline layout only (renders inside bridged and ported pages).
  */
 const SURCHARGE_PCT = 3;
 
 export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB' | 'LOCATION'; id: string }) {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [saving, setSaving] = useState(false);
   const [check, setCheck] = useState(true);
   const [ach, setAch] = useState(true);
@@ -29,7 +32,7 @@ export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB'
   const [retPct, setRetPct] = useState('');
 
   useEffect(() => {
-    let alive = true; setLoading(true);
+    let alive = true; setLoading(true); setLoadError(null);
     fetch(`/api/entity-invoice-settings?scope=${scope}&id=${id}`).then((r) => r.json()).then((b) => {
       if (!alive) return;
       if (Array.isArray(b.paymentMethods)) {
@@ -43,9 +46,9 @@ export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB'
       if (typeof b.cardSurcharge === 'boolean') setFeePassed(b.cardSurcharge);
       setRetainage(b.retainageEnabled === true);
       setRetPct(b.retainagePct != null ? String(b.retainagePct) : '');
-    }).catch(() => {}).finally(() => { if (alive) setLoading(false); });
+    }).catch(() => { if (alive) setLoadError('Could not load the saved settings.'); }).finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [scope, id]);
+  }, [scope, id, reloadKey]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -65,61 +68,82 @@ export function EntityInvoiceSettings({ scope, id }: { scope: 'CUSTOMER' | 'JOB'
       if (!res.ok) { addToast('error', b.error ?? 'Save failed'); return; }
       setUsingDefaults(false);
       addToast('success', 'Invoice settings saved');
+    } catch {
+      addToast('error', 'Could not reach the server. Try again.');
     } finally { setSaving(false); }
   }, [scope, id, check, ach, card, feePassed, retainage, retPct]);
 
-  if (loading) return <div className="flex items-center gap-2 text-slate-400 text-sm py-2"><Loader2 size={14} className="animate-spin" /> Loading…</div>;
+  if (loading) {
+    return (
+      <div className="wg-loading" aria-busy="true" style={{ display: 'grid', gap: 10, padding: '8px 0' }}>
+        <span className="bar-l" style={{ width: '50%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '35%' }} aria-hidden="true" />
+        <span className="t-cap" role="status">Loading invoice settings…</span>
+      </div>
+    );
+  }
 
-  const Box = ({ on, set, label }: { on: boolean; set: (v: boolean) => void; label: string }) => (
-    <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-      <input type="checkbox" checked={on} onChange={(e) => { set(e.target.checked); setUsingDefaults(false); }} /> {label}
-    </label>
-  );
+  if (loadError) {
+    return (
+      <InlineNotice tone="neg" title="Invoice settings didn’t load.">
+        <span>{loadError}</span>{' '}
+        <Button variant="quiet" onClick={() => setReloadKey((k) => k + 1)}>Try again</Button>
+      </InlineNotice>
+    );
+  }
+
+  const pick = (set: (v: boolean) => void) => (e: ChangeEvent<HTMLInputElement>) => { set(e.target.checked); setUsingDefaults(false); };
+  const whose = scope === 'LOCATION' ? 'company’s' : scope.toLowerCase() + '’s';
 
   return (
-    <div className="space-y-4 text-sm">
-      <div>
-        <div className="text-slate-400 mb-2">Allowed payment methods{usingDefaults && <span className="text-2xs text-slate-500"> · showing company defaults</span>}</div>
-        <div className="flex flex-col gap-2 pl-0.5">
-          <Box on={check} set={setCheck} label="Check (mail to remit-to address)" />
-          <Box on={ach} set={setAch} label="Bank transfer (ACH)" />
-          <Box on={card} set={setCard} label="Credit / debit card" />
-        </div>
-      </div>
+    <div style={{ display: 'grid', gap: 16 }}>
+      <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'grid', gap: 4 }}>
+        <legend className="field-label" style={{ marginBottom: 4 }}>
+          Allowed payment methods{usingDefaults && <span className="t-cap"> · showing company defaults</span>}
+        </legend>
+        <Check checked={check} onChange={pick(setCheck)} label="Check (mail to remit-to address)" />
+        <Check checked={ach} onChange={pick(setAch)} label="Bank transfer (ACH)" />
+        <Check checked={card} onChange={pick(setCard)} label="Credit / debit card" />
+      </fieldset>
 
       {card && (
-        <div className="pl-1 border-l-2 border-slate-700 ml-1 py-1">
-          <div className="text-slate-400 mb-1.5 text-xs">Card processing fee (~{SURCHARGE_PCT}%)</div>
-          <div className="flex flex-col gap-1.5 pl-2">
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="radio" checked={feePassed} onChange={() => setFeePassed(true)} />
-              Pass {SURCHARGE_PCT}% to the customer <span className="text-2xs text-slate-500">(added at card payment, not to the invoice)</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm cursor-pointer">
-              <input type="radio" checked={!feePassed} onChange={() => setFeePassed(false)} />
-              We absorb it <span className="text-2xs text-slate-500">(customer pays the invoice amount)</span>
-            </label>
-          </div>
-        </div>
+        <fieldset style={{ border: 0, margin: 0, padding: '0 0 0 16px', boxShadow: 'inset 2px 0 var(--line-2)', display: 'grid', gap: 4 }}>
+          <legend className="field-label" style={{ marginBottom: 4 }}>Card processing fee (~{SURCHARGE_PCT}%)</legend>
+          <Radio
+            name={`fee-${scope}-${id}`}
+            checked={feePassed}
+            onChange={() => setFeePassed(true)}
+            label={<>Pass {SURCHARGE_PCT}% to the customer <span className="t-cap">(added when they pay, not to the invoice)</span></>}
+          />
+          <Radio
+            name={`fee-${scope}-${id}`}
+            checked={!feePassed}
+            onChange={() => setFeePassed(false)}
+            label={<>We absorb it <span className="t-cap">(customer pays the invoice amount)</span></>}
+          />
+        </fieldset>
       )}
 
-      <div className="pt-1">
-        <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-          <input type="checkbox" checked={retainage} onChange={(e) => setRetainage(e.target.checked)} /> Withhold retainage on this {scope === 'LOCATION' ? 'entity’s' : scope.toLowerCase() + '’s'} invoices
-        </label>
+      <div style={{ display: 'grid', gap: 8 }}>
+        <Check
+          checked={retainage}
+          onChange={(e) => setRetainage(e.target.checked)}
+          label={`Withhold retainage on this ${whose} invoices`}
+        />
         {retainage && (
-          <div className="flex items-center gap-2 mt-2 pl-6">
-            <span className="text-xs text-slate-400">Default %</span>
-            <input value={retPct} onChange={(e) => setRetPct(e.target.value)} inputMode="decimal" placeholder="10"
-              className="w-20 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-sm text-white font-mono" />
+          <div style={{ paddingLeft: 24, width: 160 }}>
+            <Field label="Default %">
+              <Input value={retPct} onChange={(e) => setRetPct(e.target.value)} inputMode="decimal" placeholder="10" className="tnum" />
+            </Field>
           </div>
         )}
       </div>
 
-      <button onClick={save} disabled={saving}
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50">
-        {saving ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Save settings
-      </button>
+      <div>
+        <Button onClick={save} disabled={saving} icon="check" aria-busy={saving || undefined}>
+          {saving ? 'Saving…' : 'Save settings'}
+        </Button>
+      </div>
     </div>
   );
 }

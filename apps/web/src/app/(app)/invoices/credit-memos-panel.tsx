@@ -3,11 +3,27 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
-import { EmptyState } from '@/components/ui';
 import {
-  Plus, X, Loader2, Receipt, AlertCircle, Check, Ban, Send, Link2, ChevronRight,
-} from 'lucide-react';
+  Button,
+  ConfirmDialog,
+  Dialog,
+  Field,
+  InlineNotice,
+  Input,
+  Keyhints,
+  MoneyInput,
+  Seg,
+  Select,
+  Status,
+  Tag,
+  cx,
+  useListKeynav,
+  type PipKind,
+  type StatusKind,
+} from '@meritbooks/merit-ui';
+import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
+import { EmptyState, TableSkeleton } from '@/components/ui';
+import s from './invoices.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────
 interface MemoRow {
@@ -28,17 +44,20 @@ interface LocationOption { id: string; name: string; short_code: string }
 interface CustomerOption { id: string; name: string }
 interface AccountOption { id: string; account_number: string; name: string }
 
-// ─── Local status badge (covers APPLIED, which the shared one does not) ──
+// ─── Memo status: pip shape + word (covers APPLIED) ──────────────────
+const MEMO_LOOK: Record<string, { kind: StatusKind; pip?: PipKind; label: string }> = {
+  DRAFT: { kind: 'track', pip: 'closed', label: 'Draft' },
+  POSTED: { kind: 'track', pip: 'open', label: 'Posted' },
+  APPLIED: { kind: 'ready', label: 'Applied' },
+  VOIDED: { kind: 'track', pip: 'closed', label: 'Voided' },
+};
+
 function MemoStatusBadge({ status }: { status: string }) {
-  const cfg: Record<string, { bg: string; text: string; label: string }> = {
-    DRAFT: { bg: 'bg-gray-500/20', text: 'text-gray-300', label: 'Draft' },
-    POSTED: { bg: 'bg-blue-500/20', text: 'text-blue-300', label: 'Posted' },
-    APPLIED: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', label: 'Applied' },
-    VOIDED: { bg: 'bg-gray-500/20', text: 'text-gray-500', label: 'Voided' },
-  };
-  const c = cfg[status] ?? cfg.DRAFT;
-  return <span className={`px-2 py-0.5 text-xs rounded-full ${c.bg} ${c.text}`}>{c.label}</span>;
+  const c = MEMO_LOOK[status] ?? MEMO_LOOK.DRAFT;
+  return <Status kind={c.kind} pip={c.pip}>{c.label}</Status>;
 }
+
+type MemoFilter = 'ALL' | 'DRAFT' | 'POSTED' | 'APPLIED' | 'VOIDED';
 
 export interface CreditMemoPrefill {
   invoiceId?: string;
@@ -54,100 +73,145 @@ export function CreditMemosPanel({ prefill, onConsumePrefill }: {
   const [showCreate, setShowCreate] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [filter, setFilter] = useState<MemoFilter>('ALL');
 
   // Open the create modal pre-filled when the parent hands us an invoice context.
   useEffect(() => {
     if (prefill) setShowCreate(true);
   }, [prefill]);
 
-  const { data, isLoading, error } = useQuery<{
+  const { data, isLoading, error, refetch } = useQuery<{
     data: MemoRow[];
     counts: Record<string, number>;
     openCreditCents: number;
   }>(`/api/credit-memos?_k=${refreshKey}`);
 
-  const memos = data?.data ?? [];
+  const memos = useMemo(() => {
+    const all = data?.data ?? [];
+    return filter === 'ALL' ? all : all.filter((m) => m.status === filter);
+  }, [data, filter]);
+  const counts = data?.counts ?? {};
   const refresh = () => { setRefreshKey((k) => k + 1); setShowCreate(false); setDetailId(null); };
+
+  const { activeIndex, setActiveIndex, rowProps } = useListKeynav({
+    count: memos.length,
+    onOpen: (i) => { const m = memos[i]; if (m) setDetailId(m.id); },
+    enabled: !showCreate && !detailId,
+    owner: 'Credit memos',
+  });
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className={s.sectionHead}>
         <div>
-          <h2 className="text-lg font-semibold text-white">Credit Memos</h2>
-          <p className="text-sm text-gray-400 mt-1">Issue customer credits, post to the GL, and apply against open invoices</p>
+          <h2 className="t-section">Credit memos</h2>
+          <p>Issue customer credits, post them to the GL, and apply them against open invoices.</p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" /> New Credit Memo
-        </button>
+        <Button variant="primary" icon="plus" onClick={() => setShowCreate(true)}>New credit memo</Button>
       </div>
 
-      {/* Summary tiles */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Open credit', value: formatMoney(data?.openCreditCents ?? 0), sub: `${data?.counts?.POSTED ?? 0} posted` },
-          { label: 'Draft', value: String(data?.counts?.DRAFT ?? 0), sub: 'awaiting post' },
-          { label: 'Applied', value: String(data?.counts?.APPLIED ?? 0), sub: 'fully used' },
-          { label: 'Total', value: String(data?.counts?.ALL ?? 0), sub: 'all memos' },
-        ].map((c) => (
-          <div key={c.label} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <span className="text-sm text-gray-400">{c.label}</span>
-            <p className="text-xl font-mono font-semibold text-white mt-2">{c.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{c.sub}</p>
-          </div>
-        ))}
+      <div className={s.toolbar}>
+        <Seg<MemoFilter>
+          aria-label="Credit memo status"
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { value: 'ALL', label: 'All', count: counts.ALL ?? 0 },
+            { value: 'DRAFT', label: 'Draft', count: counts.DRAFT ?? 0 },
+            { value: 'POSTED', label: 'Posted', count: counts.POSTED ?? 0 },
+            { value: 'APPLIED', label: 'Applied', count: counts.APPLIED ?? 0 },
+            { value: 'VOIDED', label: 'Voided', count: counts.VOIDED ?? 0 },
+          ]}
+        />
+        <span className={s.toolbarSp} />
+        <span className="fig" style={{ alignItems: 'flex-end' }}>
+          <span className="fig-l">Open credit</span>
+          {isLoading && !data
+            ? <span className={cx('mb-skel', s.figSkel)} aria-hidden="true" />
+            : <span className="fig-v fig-v--dense tnum">{formatMoney(data?.openCreditCents ?? 0)}</span>}
+          <span className="fig-vs tnum">{counts.POSTED ?? 0} posted, not yet fully applied</span>
+        </span>
       </div>
 
       {error ? (
-        <div className="p-8 text-center">
-          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
-          <p className="text-red-400">Failed to load credit memos</p>
-          <p className="text-sm text-gray-500 mt-1">{error}</p>
+        <div className={cx('surface', s.state)}>
+          <div className="wg-state" role="alert">
+            <Tag tone="neg">Not loaded</Tag>
+            <span className="t-head">Credit memos didn&apos;t load</span>
+            <p>{error}</p>
+            <Button onClick={() => void refetch()}>Try again</Button>
+          </div>
         </div>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+      ) : isLoading && !data ? (
+        <TableSkeleton rows={5} cols={7} />
       ) : memos.length === 0 ? (
-        <EmptyState
-          icon={Receipt}
-          title="No credit memos"
-          description="Create a credit memo to reverse revenue and reduce a customer's balance."
-          action={{ label: 'New Credit Memo', onClick: () => setShowCreate(true) }}
-        />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
-                <th className="pb-3 pr-4">Credit #</th>
-                <th className="pb-3 pr-4">Customer</th>
-                <th className="pb-3 pr-4">Company</th>
-                <th className="pb-3 pr-4">Date</th>
-                <th className="pb-3 pr-4 text-right">Total</th>
-                <th className="pb-3 pr-4 text-right">Applied</th>
-                <th className="pb-3 pr-4 text-right">Open</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {memos.map((m) => (
-                <tr key={m.id} onClick={() => setDetailId(m.id)} className="border-b border-gray-800/50 cursor-pointer hover:bg-gray-800/30">
-                  <td className="py-3 pr-4 font-mono text-white">{m.creditNumber ?? '—'}</td>
-                  <td className="py-3 pr-4 text-gray-300">{m.customer?.name ?? '—'}</td>
-                  <td className="py-3 pr-4 text-gray-400 text-xs">{m.location?.name ?? '—'}</td>
-                  <td className="py-3 pr-4 font-mono text-gray-400 text-xs">{m.creditDate}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-white">{formatMoney(m.totalCents)}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-gray-400">{formatMoney(m.appliedCents)}</td>
-                  <td className="py-3 pr-4 text-right font-mono text-emerald-400">{formatMoney(m.unappliedCents)}</td>
-                  <td className="py-3 pr-4"><MemoStatusBadge status={m.status} /></td>
-                  <td className="py-3"><ChevronRight size={15} className="text-gray-600 inline" /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="surface">
+          {filter !== 'ALL' && (counts.ALL ?? 0) > 0 ? (
+            <EmptyState
+              title="No credit memos in this view"
+              description="Nothing has this status. Show every credit memo to see the rest."
+              action={{ label: 'Show all', onClick: () => setFilter('ALL') }}
+            />
+          ) : (
+            <EmptyState
+              title="No credit memos"
+              description="Create a credit memo to reverse revenue and reduce a customer's balance."
+              action={{ label: 'New credit memo', onClick: () => setShowCreate(true) }}
+            />
+          )}
         </div>
+      ) : (
+        <>
+          <div className={s.tableWrap}>
+            <table className={cx('tbl', 'tbl-q', s.tableNarrow)} aria-label="Credit memos">
+              <colgroup>
+                <col style={{ width: 140 }} />
+                <col />
+                <col style={{ width: 200 }} />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 120 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Credit</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Company</th>
+                  <th scope="col">Date</th>
+                  <th scope="col" className="n">Total</th>
+                  <th scope="col" className="n">Applied</th>
+                  <th scope="col" className="n">Open</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {memos.map((m, i) => (
+                  <tr
+                    key={m.id}
+                    {...rowProps(i)}
+                    onClick={() => { setActiveIndex(i); setDetailId(m.id); }}
+                    className={cx('q-row', s.row, i === activeIndex && 'is-cursor')}
+                    aria-current={i === activeIndex || undefined}
+                  >
+                    <td className="tnum" style={{ fontWeight: 600 }}>{m.creditNumber ?? '—'}</td>
+                    <td>{m.customer?.name ?? '—'}</td>
+                    <td className="ink-2">{m.location?.name ?? '—'}</td>
+                    <td className="tnum ink-2">{m.creditDate}</td>
+                    <td className="n">{formatMoney(m.totalCents)}</td>
+                    <td className="n ink-2">{formatMoney(m.appliedCents)}</td>
+                    <td className="n" style={{ fontWeight: 600 }}>{formatMoney(m.unappliedCents)}</td>
+                    <td><MemoStatusBadge status={m.status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.tableFoot}>
+            <Keyhints hints={[{ chord: 'j k', label: 'move' }, { chord: 'enter', label: 'open' }]} />
+          </div>
+        </>
       )}
 
       {showCreate && (
@@ -223,6 +287,8 @@ function CreditMemoDrawer({ memoId, onClose, onChanged }: {
 
   const applyTarget = data?.linkedInvoice?.id || applyInvoiceId;
 
+  const [confirmVoid, setConfirmVoid] = useState(false);
+
   return (
     <DetailDrawer
       open={!!memoId}
@@ -247,79 +313,93 @@ function CreditMemoDrawer({ memoId, onClose, onChanged }: {
             )}
           </DetailSection>
 
-          <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Lines ({data.lines.length})</h3>
-          <DetailTable columns={[{ key: 'd', label: 'Description' }, { key: 'a', label: 'Amount', align: 'right' }]}>
-            {data.lines.map((l) => (
-              <tr key={l.id}>
-                <td className="px-3 py-2">
-                  <div className="text-sm text-slate-200">{l.description || 'Credit'}</div>
-                  <div className="text-2xs text-slate-500 mt-0.5 font-mono">{l.accountNumber} · {l.accountName}</div>
-                </td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(l.amountCents)}</td>
-              </tr>
-            ))}
-          </DetailTable>
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Lines ({data.lines.length})</h3></div>
+            <DetailTable columns={[{ key: 'd', label: 'Description' }, { key: 'a', label: 'Amount', align: 'right' }]}>
+              {data.lines.map((l) => (
+                <tr key={l.id}>
+                  <td className={s.lineCell}>
+                    <div>{l.description || 'Credit'}</div>
+                    <div className="t-cap tnum">{l.accountNumber} · {l.accountName}</div>
+                  </td>
+                  <td className="n">{formatMoney(l.amountCents)}</td>
+                </tr>
+              ))}
+            </DetailTable>
+          </section>
 
-          <DetailSection title="">
+          <DetailSection title="Totals">
             <DetailField label="Subtotal" value={formatMoney(data.subtotalCents)} mono />
             <DetailField label="Tax" value={formatMoney(data.taxCents)} mono />
             <DetailField label="Total credit" value={formatMoney(data.totalCents)} mono />
             <DetailField label="Applied" value={formatMoney(data.appliedCents)} mono />
-            <DetailField label="Open credit" value={formatMoney(data.unappliedCents)} mono />
+            <DetailField label="Open credit" value={<b>{formatMoney(data.unappliedCents)}</b>} mono />
           </DetailSection>
 
           {/* Actions by lifecycle state */}
-          <div className="mt-5 pt-4 border-t border-slate-800 space-y-3">
+          <section className="panel-sec">
             {data.status === 'DRAFT' && (
-              <div className="flex items-center gap-2">
-                <button onClick={() => act('post', undefined, 'Credit memo posted to GL')} disabled={busy === 'post'}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
-                  {busy === 'post' ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Post to GL
-                </button>
-                <button onClick={() => { if (confirm('Void this draft credit memo? The number is retained for audit.')) act('void', undefined, 'Credit memo voided'); }} disabled={busy === 'void'}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-slate-800 text-slate-300 hover:bg-slate-700 disabled:opacity-50">
-                  {busy === 'void' ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />} Void
-                </button>
+              <div className="btn-row">
+                <Button variant="primary" onClick={() => act('post', undefined, 'Credit memo posted to GL')} disabled={busy === 'post'} aria-busy={busy === 'post' || undefined}>
+                  {busy === 'post' ? 'Posting…' : 'Post to GL'}
+                </Button>
+                <Button onClick={() => setConfirmVoid(true)} disabled={busy === 'void'} aria-busy={busy === 'void' || undefined}>
+                  {busy === 'void' ? 'Voiding…' : 'Void'}
+                </Button>
               </div>
             )}
 
             {data.status === 'POSTED' && data.unappliedCents > 0 && (
-              <div className="rounded-lg border border-slate-700 bg-slate-800/30 p-3 space-y-2">
-                <div className="flex items-center gap-2 text-sm text-slate-200 font-medium">
-                  <Link2 size={14} className="text-emerald-400" /> Apply {formatMoney(data.unappliedCents)} credit
-                </div>
+              <div className={s.payment}>
+                <span className="t-head">Apply <span className="tnum">{formatMoney(data.unappliedCents)}</span> credit</span>
                 {data.linkedInvoice ? (
-                  <p className="text-2xs text-slate-400">
-                    To invoice {data.linkedInvoice.invoiceNumber} (open {formatMoney(data.linkedInvoice.balanceCents)}).
+                  <p className="ink-2">
+                    To invoice <b className="tnum">{data.linkedInvoice.invoiceNumber}</b> (open {formatMoney(data.linkedInvoice.balanceCents)}).
                   </p>
                 ) : (
-                  <select value={applyInvoiceId} onChange={(e) => setApplyInvoiceId(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200">
-                    <option value="">Select an open invoice…</option>
-                    {openInvoices.map((i) => (
-                      <option key={i.id} value={i.id}>{i.invoiceNumber} · open {formatMoney(i.balanceCents)}</option>
-                    ))}
-                  </select>
+                  <Field label="Open invoice">
+                    <Select value={applyInvoiceId} onChange={(e) => setApplyInvoiceId(e.target.value)}>
+                      <option value="">Select an open invoice…</option>
+                      {openInvoices.map((i) => (
+                        <option key={i.id} value={i.id}>{i.invoiceNumber} · open {formatMoney(i.balanceCents)}</option>
+                      ))}
+                    </Select>
+                  </Field>
                 )}
-                <button
-                  onClick={() => act('apply', applyTarget ? { invoice_id: applyTarget } : {}, 'Credit applied to invoice')}
-                  disabled={busy === 'apply' || !applyTarget}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
-                  {busy === 'apply' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Apply credit
-                </button>
+                <div className="btn-row">
+                  <Button
+                    variant="primary"
+                    onClick={() => act('apply', applyTarget ? { invoice_id: applyTarget } : {}, 'Credit applied to invoice')}
+                    disabled={busy === 'apply' || !applyTarget}
+                    aria-busy={busy === 'apply' || undefined}
+                  >
+                    {busy === 'apply' ? 'Applying…' : 'Apply credit'}
+                  </Button>
+                </div>
               </div>
             )}
 
             {data.status === 'POSTED' && data.glEntryId && (
-              <p className="text-2xs text-slate-500 font-mono">GL entry {data.glEntryId}</p>
+              <p className="t-cap tnum" style={{ marginTop: 12 }}>GL entry {data.glEntryId}</p>
             )}
             {data.status === 'APPLIED' && (
-              <p className="text-xs text-emerald-400">Fully applied — this credit has been consumed against invoice balances.</p>
+              <InlineNotice title="Fully applied.">This credit has been used against invoice balances.</InlineNotice>
             )}
             {data.status === 'VOIDED' && (
-              <p className="text-xs text-slate-500">Voided before posting. No GL impact.</p>
+              <InlineNotice title="Voided before posting.">No GL impact.</InlineNotice>
             )}
-          </div>
+          </section>
+
+          <ConfirmDialog
+            open={confirmVoid}
+            onClose={() => setConfirmVoid(false)}
+            onConfirm={() => act('void', undefined, 'Credit memo voided')}
+            title="Void this draft credit memo?"
+            confirmLabel="Void credit memo"
+            tone="danger"
+          >
+            The number is kept for audit. Nothing posts to the GL.
+          </ConfirmDialog>
         </>
       )}
     </DetailDrawer>
@@ -358,14 +438,9 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
   const accounts = acctData?.data ?? [];
   const linkableInvoices = (invData?.data ?? []).filter((i) => i.balanceCents > 0 && i.status !== 'DRAFT' && i.status !== 'VOIDED');
 
-  // Close on Escape (modal a11y).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Esc closes through the kit Dialog (focus-trapped, modal).
 
-  const subtotal = lines.reduce((s, l) => s + Math.max(0, l.amount_cents), 0);
+  const subtotal = lines.reduce((sum, l) => sum + Math.max(0, l.amount_cents), 0);
   const total = subtotal + taxCents;
 
   const updateLine = (i: number, patch: Partial<CMLine>) => setLines((p) => p.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -402,97 +477,101 @@ function CreateCreditMemoModal({ prefill, onClose, onCreated }: {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div role="dialog" aria-modal="true" aria-label="Create credit memo" className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-2xl mb-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-white">Create Credit Memo</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+    <Dialog
+      open
+      onClose={() => { if (!submitting) onClose(); }}
+      title="New credit memo"
+      width={760}
+      className={s.tallDialog}
+      dismissOnScrim={!submitting}
+      footNote={<span className="tnum">Total credit {formatMoney(total)}</span>}
+      actions={
+        <>
+          <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={submitting} aria-busy={submitting || undefined}>
+            {submitting ? 'Creating…' : 'Create credit memo'}
+          </Button>
+        </>
+      }
+    >
+      <div className={s.form}>
+        {formError && <InlineNotice tone="neg" title="Not created.">{formError}</InlineNotice>}
+
+        <div className={s.grid2}>
+          <Field label="Company *">
+            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} data-autofocus>
+              <option value="">Select company</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="Customer *">
+            <Select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setInvoiceId(''); }}>
+              <option value="">Select customer</option>
+              {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </Select>
+          </Field>
         </div>
 
-        <div className="p-6 space-y-5">
-          {formError && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{formError}</div>}
+        <div className={s.grid2}>
+          <Field label="Credit date *">
+            <Input type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} />
+          </Field>
+          <Field label="Apply to invoice" help={customerId ? 'Optional.' : 'Pick a customer to see their open invoices.'}>
+            <Select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} disabled={!customerId}>
+              <option value="">No linked invoice</option>
+              {linkableInvoices.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} · open {formatMoney(i.balanceCents)}</option>)}
+            </Select>
+          </Field>
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Company *</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
-                <option value="">Select company</option>
-                {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Customer *</label>
-              <select value={customerId} onChange={(e) => { setCustomerId(e.target.value); setInvoiceId(''); }} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
-                <option value="">Select customer</option>
-                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
+        <div className={s.grid2}>
+          <Field label="Reason">
+            <Input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Overbilled, returned goods" />
+          </Field>
+          <Field label="Memo">
+            <Input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Internal note" />
+          </Field>
+        </div>
+
+        {/* Lines */}
+        <div>
+          <div className={s.linesHead}>
+            <span className="eyebrow">Credit lines — revenue account to reverse</span>
+            <Button variant="quiet" icon="plus" onClick={() => setLines((p) => [...p, { account_id: '', description: '', amount_cents: 0 }])}>Add line</Button>
           </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Credit date *</label>
-              <input type="date" value={creditDate} onChange={(e) => setCreditDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
+          <div className={s.lineRows}>
+            <div className={cx(s.lineGrid, s.lineGridCredit)} aria-hidden="true">
+              <span className="field-label">GL account</span>
+              <span className="field-label">Description</span>
+              <span className={cx('field-label', s.num)}>Amount</span>
+              <span />
             </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Apply to invoice (optional)</label>
-              <select value={invoiceId} onChange={(e) => setInvoiceId(e.target.value)} disabled={!customerId} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white disabled:opacity-50">
-                <option value="">No linked invoice</option>
-                {linkableInvoices.map((i) => <option key={i.id} value={i.id}>{i.invoiceNumber} · open {formatMoney(i.balanceCents)}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Reason</label>
-              <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Overbilled, returned goods" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Memo</label>
-              <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Internal note" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
-            </div>
-          </div>
-
-          {/* Lines */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-400 uppercase tracking-wider">Credit lines (revenue account to reverse)</label>
-              <button onClick={() => setLines((p) => [...p, { account_id: '', description: '', amount_cents: 0 }])} className="text-xs text-emerald-400 hover:text-emerald-300">+ Add line</button>
-            </div>
-            <div className="space-y-2">
-              {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                  <select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} className="col-span-5 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white">
-                    <option value="">GL account…</option>
-                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
-                  </select>
-                  <input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" className="col-span-4 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600" />
-                  <input type="number" min={0} step={0.01} value={(l.amount_cents / 100).toFixed(2)} onChange={(e) => updateLine(i, { amount_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} className="col-span-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
-                  <button onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p))} className="col-span-1 p-1 text-gray-500 hover:text-red-400"><X className="w-4 h-4" /></button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Totals */}
-          <div className="border-t border-gray-700/50 pt-4 space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-gray-400">Subtotal</span><span className="font-mono text-white">{formatMoney(subtotal)}</span></div>
-            <div className="flex justify-between text-sm items-center">
-              <span className="text-gray-400">Tax to reverse</span>
-              <input type="number" min={0} step={0.01} value={(taxCents / 100).toFixed(2)} onChange={(e) => setTaxCents(Math.round((parseFloat(e.target.value) || 0) * 100))} className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
-            </div>
-            <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2"><span className="text-white">Total credit</span><span className="font-mono text-emerald-400">{formatMoney(total)}</span></div>
+            {lines.map((l, i) => (
+              <div key={i} className={cx(s.lineGrid, s.lineGridCredit)}>
+                <Select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} aria-label={`Line ${i + 1} GL account`}>
+                  <option value="">{locationId ? 'GL account…' : 'Pick a company first'}</option>
+                  {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
+                </Select>
+                <Input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" aria-label={`Line ${i + 1} description`} />
+                <MoneyInput valueCents={l.amount_cents} onChangeCents={(c) => updateLine(i, { amount_cents: c ?? 0 })} aria-label={`Line ${i + 1} amount`} />
+                {lines.length > 1 ? (
+                  <Button variant="quiet" iconOnly icon="x" onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p))} aria-label={`Remove line ${i + 1}`} />
+                ) : <span />}
+              </div>
+            ))}
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-          <button onClick={submit} disabled={submitting} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Create Credit Memo
-          </button>
+        {/* Totals */}
+        <div className={s.totals}>
+          <div className={s.totRow}><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+          <div className={s.totRow}>
+            <span>Tax to reverse</span>
+            <MoneyInput className={s.taxInput} valueCents={taxCents} onChangeCents={(c) => setTaxCents(c ?? 0)} aria-label="Tax to reverse" />
+          </div>
+          <div className={cx(s.totRow, s.totGrand)}><span>Total credit</span><span>{formatMoney(total)}</span></div>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

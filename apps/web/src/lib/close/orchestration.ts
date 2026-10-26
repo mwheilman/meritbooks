@@ -38,6 +38,7 @@
 
 import { formatMoney } from '@meritbooks/shared';
 import type { FluxCloseSignal } from './flux/types';
+import type { SeamCloseSignal } from './seam-close-signal';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task graph
@@ -59,6 +60,7 @@ export type CloseTaskKey =
   | 'depreciation_posted'
   | 'wip_accrual_reviewed'
   | 'flux_reviewed'
+  | 'projects_seam_settled'
   | 'reviewed';
 
 export type CloseTaskKind = 'AUTO' | 'MANUAL';
@@ -300,6 +302,20 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
     deepLinkHref: '/close?tab=flux',
   },
   {
+    key: 'projects_seam_settled',
+    label: 'Merit Projects messages processed',
+    description:
+      'Every billing, deposit, commitment, time and progress message Merit Projects sent for this company, dated on or before the period end, is processed — none waiting and none rejected without a later fix. Applies only to companies that use Merit Projects.',
+    kind: 'AUTO',
+    blocking: true,
+    dependsOn: [],
+    phase: 'FINAL',
+    unit: 'count',
+    order: 16,
+    dueDay: 5,
+    deepLinkHref: '/jobs/projects-seam',
+  },
+  {
     key: 'reviewed',
     label: 'Reviewed & approved to close',
     description:
@@ -318,10 +334,11 @@ export const CLOSE_TASK_GRAPH: readonly CloseTaskDef[] = [
       'depreciation_posted',
       'wip_accrual_reviewed',
       'flux_reviewed',
+      'projects_seam_settled',
     ],
     phase: 'FINAL',
     unit: 'none',
-    order: 16,
+    order: 17,
     dueDay: 10,
   },
 ] as const;
@@ -385,6 +402,11 @@ export interface CloseSignals {
    * passes (callers that load it fail CLOSED with status UNKNOWN on a read error).
    */
   flux?: FluxCloseSignal | null;
+  /**
+   * The Merit Projects backlog for the company + period (lib/close/seam-close-signal.ts, A8).
+   * Absent / not applicable (no Projects) ⇒ the task passes; UNKNOWN blocks (fail closed).
+   */
+  projectsSeam?: SeamCloseSignal | null;
 }
 
 /** The month's WIP run as the close sees it. */
@@ -632,6 +654,22 @@ function evaluateAuto(key: CloseTaskKey, s: CloseSignals): AutoCheck {
           };
         }
       }
+    }
+    case 'projects_seam_settled': {
+      const p = s.projectsSeam;
+      if (!p || !p.applicable) return { satisfied: true, driverValue: 0, driverLabel: 'Not using Merit Projects', reason: null };
+      if (p.status === 'UNKNOWN') {
+        return { satisfied: false, driverValue: null, driverLabel: 'Status unknown', reason: 'The Merit Projects message backlog could not be confirmed' };
+      }
+      const v = p.pending + p.rejected;
+      if (v === 0) return { satisfied: true, driverValue: 0, driverLabel: 'All processed', reason: null };
+      const parts = [p.pending ? `${p.pending} waiting` : null, p.rejected ? `${p.rejected} rejected` : null].filter(Boolean).join(', ');
+      return {
+        satisfied: false,
+        driverValue: v,
+        driverLabel: parts,
+        reason: `Merit Projects: ${parts} message(s) dated in or before this period${p.oldestPendingOn ? ` (oldest waiting from ${p.oldestPendingOn})` : ''} — process or resolve them before the hard close`,
+      };
     }
     default:
       // Exhaustiveness: MANUAL keys never reach here.

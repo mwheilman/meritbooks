@@ -6,9 +6,9 @@
  * Transitions: the owner submits; finance returns (with a note) or approves (never the submitter;
  * a non-zero gap to target needs a gap note); an approved / submitted department can be reopened.
  */
-import { checkPlanAction, BudgetError, type PlanAction } from '../lifecycle';
+import { boardStatus, checkPlanAction, BudgetError, type PlanAction } from '../lifecycle';
 import { canEditDepartment, canSeeDepartment } from '../scope';
-import type { BoardResponse, BoardRow, DepartmentPlan, PlanStatus } from '../types';
+import type { BoardResponse, BoardRow, DepartmentPlan } from '../types';
 import { loadActualCells, naturalOf } from './actuals';
 import { loadAccounts, loadDepartments, loadLines, loadOwners, loadPlans, loadVersion, logEvent, must, toPlan, type BudgetCtx } from './data';
 import { assertBudgetRefs } from './refs';
@@ -57,6 +57,7 @@ export async function getBoard(ctx: BudgetCtx, versionId: string, today = new Da
   for (const c of commentRows) if (c.status === 'OPEN' && c.department_id) openComments.set(c.department_id, (openComments.get(c.department_id) ?? 0) + 1);
 
   const ids = new Set<string>([...depts.map((d) => d.id), ...plans.map((p) => p.departmentId)]);
+  const lineDepts = new Set(lines.map((l) => l.departmentId).filter((d): d is string => !!d));
   const todayIso = today.toISOString().slice(0, 10);
   const rows: BoardRow[] = [];
   for (const id of ids) {
@@ -64,7 +65,7 @@ export async function getBoard(ctx: BudgetCtx, versionId: string, today = new Da
     const p = planOf.get(id) ?? null;
     const o = ownerOf.get(id);
     const x = tot.get(id) ?? { rev: 0, exp: 0, pyRev: 0, pyExp: 0 };
-    const status: PlanStatus = p?.status ?? 'NOT_STARTED';
+    const status = boardStatus(p?.status ?? null, version.status, lineDepts.has(id));
     const due = p?.dueDate ?? version.dueDate;
     rows.push({
       departmentId: id,
@@ -74,7 +75,7 @@ export async function getBoard(ctx: BudgetCtx, versionId: string, today = new Da
       ownerName: p?.ownerName ?? o?.ownerName ?? null,
       status,
       dueDate: due,
-      overdue: !!due && due < todayIso && status !== 'SUBMITTED' && status !== 'APPROVED',
+      overdue: !!due && due < todayIso && (status === 'NOT_STARTED' || status === 'DRAFT' || status === 'RETURNED'),
       revenueCents: x.rev,
       expenseCents: x.exp,
       pyRevenueCents: x.pyRev,
@@ -92,7 +93,8 @@ export async function getBoard(ctx: BudgetCtx, versionId: string, today = new Da
     rows,
     companyLevel: ctx.access.scope === 'ALL' && company ? { revenueCents: company.rev, expenseCents: company.exp } : ctx.access.scope === 'ALL' ? { revenueCents: 0, expenseCents: 0 } : null,
     progress: {
-      total: rows.length,
+      // Departments outside the version (no plan, no lines, version past draft) aren't part of its review.
+      total: rows.filter((r) => r.status !== 'NOT_IN_VERSION').length,
       approved: rows.filter((r) => r.status === 'APPROVED').length,
       submitted: rows.filter((r) => r.status === 'SUBMITTED').length,
       overdue: rows.filter((r) => r.overdue).length,

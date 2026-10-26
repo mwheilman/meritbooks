@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { apiHandler } from '@/lib/api-handler';
 import { analyzeBody, type AnalyzeBody } from '@/lib/validations/document-intelligence';
 import { intelDeps } from '@/lib/documents/intelligence/server';
-import { analyzeDocument, backfillOrg } from '@/lib/documents/intelligence/service';
+import { analyzeDocument, backfillMessage, backfillOrg } from '@/lib/documents/intelligence/service';
 import { draftAuthorizer, errorResponse, guardCenter, maskForeignDuplicates, noOrg } from '@/lib/documents/intelligence/route-auth';
 import { presentIntel, presentProposalSummary } from '@/lib/documents/intelligence/present';
 import { loadClientScope } from '@/lib/rbac/client-scope';
@@ -55,12 +55,7 @@ export const POST = apiHandler(analyzeBody, async (body: AnalyzeBody, { userId, 
       );
     }
     const r = await backfillOrg(deps, { orgId, userId, limit: body.limit ?? 25, canDraft });
-    const message =
-      r.analyzed === 0
-        ? r.linksCreated > 0
-          ? `Everything was already analyzed. ${r.linksCreated} existing link(s) recorded.`
-          : 'Everything here has already been analyzed.'
-        : `Analyzed ${r.analyzed} document(s): ${r.proposals} proposal(s) ready for review, ${r.needsReview} need a type${r.duplicates ? `, ${r.duplicates} duplicate(s)` : ''}.${r.remaining ? ` ${r.remaining} more to go — run it again.` : ''}`;
+    const message = backfillMessage(r);
     // Per-document error text can carry service detail: counts only to the browser.
     return NextResponse.json({ result: { ...r, errors: r.errors.length }, message });
   } catch (e) {

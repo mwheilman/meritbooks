@@ -216,7 +216,7 @@ export function FluxPanel({ board, line, userId, canReview, onChanged }: FluxPan
         <div className={s.figs}>
           <div className={s.fig}><span className={s.figL}>This month</span><span className={s.figV}>{money(line.currentCents)}</span></div>
           <div className={s.fig}><span className={s.figL}>{basis}</span><span className={s.figV}>{money(line.comparisonCents)}</span></div>
-          <div className={s.fig}><span className={s.figL}>Change</span><span className={s.figV}>{pctText(line.changePctBps)}</span></div>
+          <div className={s.fig}><span className={s.figL}>Change</span><span className={s.figV}>{pctText(line)}</span></div>
         </div>
         <p className="t-cap" style={{ marginTop: 8 }}>
           {line.threshold.excluded

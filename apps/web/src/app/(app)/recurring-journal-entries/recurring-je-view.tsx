@@ -1,17 +1,14 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import {
-  Repeat, Plus, Loader2, AlertCircle, Clock, Check, Pause, Play,
-  CalendarClock, Pencil, Ban, Send, ChevronRight, Layers,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { Button, ConfirmDialog, InlineNotice, Status, Tag, type StatusKind } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks';
 import { api } from '@/lib/api-client';
 import { addToast } from '@/hooks/use-toast';
-import { PageHeader } from '@/components/ui';
+import { PageHeader, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { RecurringJeBuilder, type ExistingTemplate } from './recurring-je-builder';
+import s from './recurring.module.css';
 
 // ─── Types (mirror the store's TemplateSummary / ProposedRunDetail) ─────────
 
@@ -55,12 +52,17 @@ interface RunsResponse {
 
 const CADENCE_LABEL: Record<string, string> = { MONTHLY: 'Monthly', QUARTERLY: 'Quarterly' };
 
-const STATUS_STYLE: Record<string, { label: string; cls: string; icon: typeof Check }> = {
-  ACTIVE: { label: 'Active', cls: 'bg-emerald-500/10 text-emerald-400', icon: Check },
-  PAUSED: { label: 'Paused', cls: 'bg-slate-500/10 text-slate-400', icon: Pause },
-  COMPLETED: { label: 'Completed', cls: 'bg-blue-500/10 text-blue-400', icon: Check },
-  CANCELLED: { label: 'Cancelled', cls: 'bg-red-500/10 text-red-400', icon: Ban },
+// Pip shape + word (never colour alone).
+const STATUS_STYLE: Record<string, { label: string; kind: StatusKind; pip?: 'closed' | 'soft' }> = {
+  ACTIVE: { label: 'Active', kind: 'ready' },
+  PAUSED: { label: 'Paused', kind: 'track', pip: 'soft' },
+  COMPLETED: { label: 'Completed', kind: 'track', pip: 'closed' },
+  CANCELLED: { label: 'Cancelled', kind: 'blocked' },
 };
+
+type PendingConfirm =
+  | { kind: 'cancel'; template: TemplateRow }
+  | { kind: 'skip'; run: ProposedRun };
 
 export function RecurringJeView() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -86,6 +88,7 @@ export function RecurringJeView() {
   const [generating, setGenerating] = useState(false);
   const [busyRun, setBusyRun] = useState<string | null>(null);
   const [busyTemplate, setBusyTemplate] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState<PendingConfirm | null>(null);
 
   const openNew = () => { setEditing(null); setBuilderOpen(true); };
   const openEdit = (t: TemplateRow) => {
@@ -122,8 +125,8 @@ export function RecurringJeView() {
     bump();
   }
 
+  // Confirmed in a kit dialog (was a browser confirm()).
   async function cancelTemplate(t: TemplateRow) {
-    if (!confirm(`Cancel "${t.name}"? Posted periods stay; no future entries will be proposed.`)) return;
     setBusyTemplate(t.id);
     const res = await api.delete(`/api/recurring-journal-entries/${t.id}`);
     setBusyTemplate(null);
@@ -133,7 +136,6 @@ export function RecurringJeView() {
   }
 
   async function reviewRun(run: ProposedRun, action: 'approve' | 'reject') {
-    if (action === 'reject' && !confirm(`Skip the ${run.period} entry for "${run.template_name}"? It won't be re-proposed.`)) return;
     setBusyRun(run.id);
     const res = await api.post<{ entry_number?: string }>('/api/recurring-journal-entries/approve', {
       run_id: run.id, action,
@@ -148,218 +150,223 @@ export function RecurringJeView() {
   const errorAll = tError && rError;
 
   return (
-    <div className="space-y-6">
+    <div className={s.stack}>
       <PageHeader
-        title="Recurring Journal Entries"
+        title="Recurring journal entries"
         description={
           summary
             ? `${summary.active} active · ${summary.total} template${summary.total === 1 ? '' : 's'} · ${runs.length} awaiting approval`
             : 'Scheduled entries that post a balanced journal each period'
         }
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button" onClick={generateDue} disabled={generating}
-              className={clsx('flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border',
-                generating ? 'bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-slate-800 border-slate-700 text-slate-200 hover:bg-slate-700')}
-            >
-              {generating ? <Loader2 size={14} className="animate-spin" /> : <CalendarClock size={14} />}
-              Generate due
-            </button>
-            <button
-              type="button" onClick={openNew}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500"
-            >
-              <Plus size={14} /> New template
-            </button>
-          </div>
+          <>
+            <Button icon="calendar" onClick={generateDue} disabled={generating} aria-busy={generating || undefined}>
+              {generating ? 'Generating…' : 'Generate due'}
+            </Button>
+            <Button variant="primary" icon="plus" onClick={openNew}>
+              New template
+            </Button>
+          </>
         }
       />
 
       {errorAll && (
-        <div className="card p-8 text-center">
-          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
-          <p className="text-red-400 text-sm">{tError || rError}</p>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Couldn&apos;t load recurring entries.</p>
+          <p className="ink-2">{tError || rError}</p>
+          <Button onClick={bump}>Try again</Button>
         </div>
       )}
 
       {/* ── Review & post queue ─────────────────────────────────────────── */}
+      {rError && !errorAll && (
+        <InlineNotice tone="neg" title="The approval queue didn't load.">
+          {rError} <Button variant="quiet" onClick={bump}>Try again</Button>
+        </InlineNotice>
+      )}
       {!rLoading && runs.length > 0 && (
-        <div className="card overflow-hidden border-amber-500/25">
-          <div className="flex items-center justify-between px-5 py-3 border-b border-slate-800 bg-amber-500/[0.04]">
-            <div className="flex items-center gap-2">
-              <Send size={15} className="text-amber-400" />
-              <h2 className="text-sm font-semibold text-white">Awaiting approval</h2>
-              <span className="text-xs text-slate-500">{runs.length} entr{runs.length === 1 ? 'y' : 'ies'} · {formatMoney(rData?.summary.amount_cents ?? 0)}</span>
+        <section className={`${s.section} ${s.sectionAttn}`} aria-label="Awaiting approval">
+          <div className={s.sectionHead}>
+            <div className={s.sectionTitle}>
+              <h2>Awaiting approval</h2>
+              <span className="t-cap tnum">
+                {runs.length} entr{runs.length === 1 ? 'y' : 'ies'} · {formatMoney(rData?.summary.amount_cents ?? 0)}
+              </span>
             </div>
+            <Status kind="risk">Needs review</Status>
           </div>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800 bg-slate-800/20">
-                <th className="px-5 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Template</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Period</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Post date</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Lines</th>
-                <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Amount</th>
-                <th className="px-5 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Review</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {runs.map((run) => (
-                <tr key={run.id} className="hover:bg-slate-800/20">
-                  <td className="px-5 py-3 text-white">{run.template_name}</td>
-                  <td className="px-4 py-3 text-center text-xs font-mono text-slate-300">{run.period}</td>
-                  <td className="px-4 py-3 text-center text-xs font-mono text-slate-400">{run.entry_date}</td>
-                  <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">{run.lines.length}</td>
-                  <td className="px-4 py-3 text-right text-sm font-mono text-white">{formatMoney(run.amount_cents)}</td>
-                  <td className="px-5 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        type="button" onClick={() => reviewRun(run, 'reject')} disabled={busyRun === run.id}
-                        className="px-2.5 py-1.5 rounded-lg text-xs text-slate-400 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40"
-                      >
-                        Skip
-                      </button>
-                      <button
-                        type="button" onClick={() => reviewRun(run, 'approve')} disabled={busyRun === run.id}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50"
-                      >
-                        {busyRun === run.id ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                        Approve &amp; post
-                      </button>
-                    </div>
-                  </td>
+          <div className={s.scroll}>
+            <table className="tbl tbl-q tbl-q--compact">
+              <colgroup>
+                <col />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 144 }} />
+                <col style={{ width: 232 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Template</th>
+                  <th scope="col">Period</th>
+                  <th scope="col">Post date</th>
+                  <th scope="col" className="n">Lines</th>
+                  <th scope="col" className="n">Amount</th>
+                  <th scope="col" className="n">Review</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {runs.map((run) => (
+                  <tr key={run.id} className="q-row">
+                    <td><span className="l1">{run.template_name}</span></td>
+                    <td className="tnum">{run.period}</td>
+                    <td className="tnum ink-2">{run.entry_date}</td>
+                    <td className="n ink-2">{run.lines.length}</td>
+                    <td className="n">{formatMoney(run.amount_cents)}</td>
+                    <td className="n">
+                      <span className="mb-row-acts">
+                        <Button
+                          variant="quiet"
+                          onClick={() => setConfirming({ kind: 'skip', run })}
+                          disabled={busyRun === run.id}
+                        >
+                          Skip
+                        </Button>
+                        <Button
+                          variant="primary"
+                          icon="check"
+                          onClick={() => reviewRun(run, 'approve')}
+                          disabled={busyRun === run.id}
+                          aria-busy={busyRun === run.id || undefined}
+                        >
+                          {busyRun === run.id ? 'Posting…' : 'Approve & post'}
+                        </Button>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {/* ── Templates ───────────────────────────────────────────────────── */}
       {tLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 text-emerald-400 animate-spin" />
+        <TableSkeleton rows={4} cols={7} />
+      ) : tError && !errorAll ? (
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Templates didn&apos;t load.</p>
+          <p className="ink-2">{tError}</p>
+          <Button onClick={bump}>Try again</Button>
         </div>
       ) : templates.length === 0 && !tError ? (
-        <div className="card p-12 text-center">
-          <Repeat className="w-10 h-10 mx-auto text-slate-700 mb-3" />
-          <p className="text-sm text-slate-400">No recurring journal entries yet.</p>
-          <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
-            Create a template for a fixed accrual (rent, insurance, depreciation) or a straight-line
-            allocation across departments. Each period generates a balanced entry you approve before it posts.
-          </p>
-          <button
-            type="button" onClick={openNew}
-            className="mt-4 inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500"
-          >
-            <Plus size={14} /> New template
-          </button>
-        </div>
+        <EmptyState
+          title="No recurring journal entries yet"
+          description="Create a template for a fixed accrual (rent, insurance, depreciation) or a straight-line allocation across departments. Each period generates a balanced entry you approve before it posts."
+          action={{ label: 'New template', onClick: openNew }}
+        />
       ) : templates.length > 0 ? (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="px-5 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Template</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Cadence</th>
-                <th className="px-4 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Per period</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Lines</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Next run</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500">Status</th>
-                <th className="px-5 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {templates.map((t) => {
-                const st = STATUS_STYLE[t.status] ?? STATUS_STYLE.ACTIVE;
-                const StIcon = st.icon;
-                const busy = busyTemplate === t.id;
-                return (
-                  <tr key={t.id} className="hover:bg-slate-800/20">
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm text-white font-medium">{t.name}</p>
-                        {t.pending_count > 0 && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400">
-                            <Clock size={9} /> {t.pending_count} pending
+        <section className={s.section} aria-label="Templates">
+          <div className={s.scroll}>
+            <table className="tbl tbl-q">
+              <colgroup>
+                <col />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 144 }} />
+                <col style={{ width: 80 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 248 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Template</th>
+                  <th scope="col">Cadence</th>
+                  <th scope="col" className="n">Per period</th>
+                  <th scope="col" className="n">Lines</th>
+                  <th scope="col">Next run</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="n">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((t) => {
+                  const st = STATUS_STYLE[t.status] ?? STATUS_STYLE.ACTIVE;
+                  const busy = busyTemplate === t.id;
+                  return (
+                    <tr key={t.id} className="q-row">
+                      <td>
+                        <div className={s.cellRow}>
+                          <span className="l1">{t.name}</span>
+                          {t.pending_count > 0 && (
+                            <Tag tone="warn"><span className="tnum">{t.pending_count}</span> pending</Tag>
+                          )}
+                        </div>
+                        {t.memo && <span className="l2">{t.memo}</span>}
+                      </td>
+                      <td className="ink-2">{CADENCE_LABEL[t.cadence] ?? t.cadence}</td>
+                      <td className="n">{formatMoney(t.amount_per_period_cents)}</td>
+                      <td className="n ink-2">{t.line_count}</td>
+                      <td className="tnum">{t.next_post_date ?? <span className="ink-3">—</span>}</td>
+                      <td><Status kind={st.kind} pip={st.pip}>{st.label}</Status></td>
+                      <td className="n">
+                        {(t.status === 'ACTIVE' || t.status === 'PAUSED') && (
+                          <span className="mb-row-acts">
+                            <Button variant="quiet" onClick={() => openEdit(t)} disabled={busy}>Edit</Button>
+                            {t.status === 'ACTIVE' ? (
+                              <Button variant="quiet" onClick={() => setStatus(t, 'PAUSED')} disabled={busy}>Pause</Button>
+                            ) : (
+                              <Button variant="quiet" onClick={() => setStatus(t, 'ACTIVE')} disabled={busy}>Resume</Button>
+                            )}
+                            <Button variant="quiet" onClick={() => setConfirming({ kind: 'cancel', template: t })} disabled={busy} aria-busy={busy || undefined}>
+                              {busy ? 'Working…' : 'Cancel'}
+                            </Button>
                           </span>
                         )}
-                      </div>
-                      {t.memo && <p className="text-xs text-slate-500 truncate max-w-[280px]">{t.memo}</p>}
-                    </td>
-                    <td className="px-4 py-3 text-center text-xs text-slate-400">{CADENCE_LABEL[t.cadence] ?? t.cadence}</td>
-                    <td className="px-4 py-3 text-right text-sm font-mono text-white">{formatMoney(t.amount_per_period_cents)}</td>
-                    <td className="px-4 py-3 text-center text-xs font-mono text-slate-500">{t.line_count}</td>
-                    <td className="px-4 py-3 text-center">
-                      {t.next_post_date ? (
-                        <span className="text-xs font-mono text-slate-300">{t.next_post_date}</span>
-                      ) : (
-                        <span className="text-xs text-slate-600">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={clsx('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium', st.cls)}>
-                        <StIcon size={9} /> {st.label}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        {(t.status === 'ACTIVE' || t.status === 'PAUSED') && (
-                          <>
-                            <button
-                              type="button" onClick={() => openEdit(t)} disabled={busy}
-                              title="Edit" className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 disabled:opacity-40"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            {t.status === 'ACTIVE' ? (
-                              <button
-                                type="button" onClick={() => setStatus(t, 'PAUSED')} disabled={busy}
-                                title="Pause" className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-slate-800 disabled:opacity-40"
-                              >
-                                <Pause size={14} />
-                              </button>
-                            ) : (
-                              <button
-                                type="button" onClick={() => setStatus(t, 'ACTIVE')} disabled={busy}
-                                title="Resume" className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-slate-800 disabled:opacity-40"
-                              >
-                                <Play size={14} />
-                              </button>
-                            )}
-                            <button
-                              type="button" onClick={() => cancelTemplate(t)} disabled={busy}
-                              title="Cancel" className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 disabled:opacity-40"
-                            >
-                              {busy ? <Loader2 size={14} className="animate-spin" /> : <Ban size={14} />}
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
-      {/* ── How it works (empty-state helper for populated screens) ─────── */}
+      {/* ── How it works ────────────────────────────────────────────────── */}
       {templates.length > 0 && (
-        <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-slate-900/60 border border-slate-800">
-          <Layers size={14} className="text-indigo-400 mt-0.5 shrink-0" />
-          <p className="text-xs text-slate-500">
-            <span className="text-slate-400">Generate due</span> stages a balanced entry for each period that has come due
-            <ChevronRight size={11} className="inline mx-0.5 text-slate-600" />
-            it lands in <span className="text-slate-400">Awaiting approval</span>
-            <ChevronRight size={11} className="inline mx-0.5 text-slate-600" />
-            you review and <span className="text-slate-400">Approve &amp; post</span> it to the GL. Nothing posts automatically.
-          </p>
-        </div>
+        <InlineNotice title="How it works." className={s.how}>
+          Generate due stages a balanced entry for each period that has come due → it lands in Awaiting approval → you
+          review it and Approve &amp; post it to the GL. Nothing posts automatically.
+        </InlineNotice>
       )}
+
+      <ConfirmDialog
+        open={confirming?.kind === 'cancel'}
+        onClose={() => setConfirming(null)}
+        onConfirm={async () => { if (confirming?.kind === 'cancel') await cancelTemplate(confirming.template); }}
+        title={confirming?.kind === 'cancel' ? `Cancel "${confirming.template.name}"?` : 'Cancel template?'}
+        confirmLabel="Cancel template"
+        cancelLabel="Keep it"
+        tone="danger"
+      >
+        Posted periods stay; no future entries will be proposed.
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirming?.kind === 'skip'}
+        onClose={() => setConfirming(null)}
+        onConfirm={async () => { if (confirming?.kind === 'skip') await reviewRun(confirming.run, 'reject'); }}
+        title={confirming?.kind === 'skip' ? `Skip the ${confirming.run.period} entry?` : 'Skip entry?'}
+        confirmLabel="Skip entry"
+        cancelLabel="Keep it"
+        tone="danger"
+      >
+        {confirming?.kind === 'skip' ? `"${confirming.run.template_name}" for ${confirming.run.period} won't be re-proposed.` : null}
+      </ConfirmDialog>
 
       {builderOpen && (
         <RecurringJeBuilder

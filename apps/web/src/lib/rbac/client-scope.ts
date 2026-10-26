@@ -94,6 +94,18 @@ export function isClientInScope(state: ClientScopeState, locationId: string | nu
   return state.allClients || state.locationIds.has(locationId);
 }
 
+/**
+ * App-side mirror of `core.client_scope_bypass()` for ORG-WIDE (location_id NULL) rows that
+ * carry figures from every client (a combined forecast snapshot, an org-wide scenario, an
+ * org-wide report pack): true when the caller holds all-clients scope, or scope is not
+ * enforced for the tenant. FAILS CLOSED on the degraded state (no membership resolved — e.g.
+ * the scope RPC was unavailable), so an org-wide write never rides a lookup failure.
+ */
+export function clientScopeBypass(state: ClientScopeState): boolean {
+  if (state.allClients) return true;
+  return state.mode !== 'enforce' && state.membershipId !== null;
+}
+
 /** Pure decision for one client under the state's mode. */
 export function decideClientScope(state: ClientScopeState, locationId: string | null | undefined): ClientScopeDecision {
   const inScope = isClientInScope(state, locationId);

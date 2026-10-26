@@ -1,9 +1,15 @@
 'use client';
 
-import { Search } from 'lucide-react';
-import { clsx } from 'clsx';
+/**
+ * Search + status tabs. Each status tab carries its count and its dollar total
+ * ("Pending 41 · $12.3K"); the search is debounced by the caller and focuses on "/".
+ */
+
+import type { ReactNode } from 'react';
+import { Search, Tabs, type TabItem } from '@meritbooks/merit-ui';
 import { formatMoney } from '@meritbooks/shared';
 import type { BankFeedStatusCounts } from '@meritbooks/shared';
+import styles from './bank-feed.module.css';
 
 interface BankFeedFiltersProps {
   activeTab: string;
@@ -11,6 +17,8 @@ interface BankFeedFiltersProps {
   search: string;
   onSearchChange: (value: string) => void;
   counts: Record<string, BankFeedStatusCounts> | null;
+  /** Page verbs shown at the right of the search row (Refresh, Import, AI categorize). */
+  actions?: ReactNode;
 }
 
 const TAB_CONFIG = [
@@ -22,52 +30,42 @@ const TAB_CONFIG = [
   { key: 'POSTED', label: 'Posted' },
 ] as const;
 
-export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange, counts }: BankFeedFiltersProps) {
+export function BankFeedFilters({ activeTab, onTabChange, search, onSearchChange, counts, actions }: BankFeedFiltersProps) {
+  const items: TabItem<string>[] = TAB_CONFIG.map((tab) => {
+    const stats = counts?.[tab.key] ?? null;
+    return {
+      value: tab.key,
+      label: tab.label,
+      count: stats
+        ? `${stats.count.toLocaleString()} · ${formatMoney(stats.amount_cents, { compact: true })}`
+        : tab.key === 'POSTED'
+          ? undefined
+          : '—',
+    };
+  });
+
   return (
-    <div className="mb-4 space-y-3">
-      {/* Status tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
-        {TAB_CONFIG.map((tab) => {
-          const stats = counts?.[tab.key] ?? null;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => onTabChange(tab.key)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-                activeTab === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
-                  : 'text-slate-400 hover:text-slate-300'
-              )}
-            >
-              <span>{tab.label}</span>
-              <span className={clsx(
-                'text-2xs font-mono tabular-nums',
-                activeTab === tab.key ? 'text-brand-400' : 'text-slate-600'
-              )}>
-                {stats
-                  ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}`
-                  : tab.key === 'POSTED' ? '' : '--'}
-              </span>
-            </button>
-          );
-        })}
+    <>
+      <div className={styles.toolbar}>
+        <Search
+          className={styles.search}
+          slashToFocus
+          value={search}
+          onChange={(e) => onSearchChange(e.target.value)}
+          placeholder="Vendor, amount or description"
+          aria-label="Search bank transactions"
+        />
+        <span className="sp" />
+        {actions}
       </div>
 
-      {/* Search row */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by vendor, amount, or description..."
-            aria-label="Search bank transactions"
-            className="input pl-9"
-          />
-        </div>
-      </div>
-    </div>
+      <Tabs<string>
+        className={styles.statusTabs}
+        aria-label="Status"
+        value={activeTab}
+        onChange={onTabChange}
+        items={items}
+      />
+    </>
   );
 }

@@ -17,12 +17,11 @@ export default async function ExpensesPage() {
   return (
     <>
       <PageHeader
-        title="Expenses & Cards"
-        description="Employee expense reports — build from receipts, submit, approve, reimburse, and reconcile corporate-card charges."
+        eyebrow={['Payables', 'Expenses']}
+        title="Expenses & cards"
+        description="Employee expense reports: build from receipts, submit, approve, reimburse, and match corporate-card charges."
       />
-      <div className="mb-6">
-        <ExpensesTabs />
-      </div>
+      <ExpensesTabs />
       <CompanyScopeGuard>
         <ExpensesClient />
       </CompanyScopeGuard>

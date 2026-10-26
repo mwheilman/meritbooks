@@ -5,7 +5,7 @@
  * for a month / QTD / YTD / TTM window — material variances with the owner's explanation and
  * finance's review, the GL drill, and the three bridges.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -25,7 +25,7 @@ import {
 import { ChartCard, VarianceBars, summarizeVariance, varianceTable, type VarianceRow } from '@/components/charts';
 import type { BudgetAccessSummary, BvaLine, BvaWindow, DepartmentViewResponse, GlDrillLine } from '@/lib/budgets/types';
 import { BridgeCard } from './bridge-card';
-import { MONTH_LABELS, SECTION_LABEL, SECTION_OF_TYPE, defaultMonth, errText, pctText } from './budget-format';
+import { MONTH_LABELS, SECTION_LABEL, SECTION_OF_TYPE, defaultMonth, errText, maxThroughMonth, pctText } from './budget-format';
 import s from './budgets.module.css';
 
 const WINDOWS: Array<{ value: BvaWindow; label: string }> = [
@@ -46,13 +46,28 @@ export interface DepartmentViewProps {
 
 export function DepartmentView({ locationId, fiscalYear, departmentId, departmentName, versionId, access }: DepartmentViewProps) {
   const [window, setWindow] = useState<BvaWindow>('YTD');
-  const [month, setMonth] = useState<number>(() => defaultMonth(fiscalYear));
+  // Never open on a future month: a year that hasn't started shows the full-year budget (no actuals).
+  const maxMonth = maxThroughMonth(fiscalYear);
+  const notStarted = maxMonth === 0;
+  const [month, setMonthState] = useState<number>(() => defaultMonth(fiscalYear) ?? 12);
+  const [monthTouched, setMonthTouched] = useState(false);
+  const setMonth = (m: number) => {
+    setMonthTouched(true);
+    setMonthState(m);
+  };
   const [onlyMaterial, setOnlyMaterial] = useState(false);
   const [drill, setDrill] = useState<BvaLine | null>(null);
   const q = useQuery<DepartmentViewResponse>('/api/budgets/department-view', {
-    location_id: locationId, fiscal_year: String(fiscalYear), month: String(month), window, department_id: departmentId ?? 'company', version_id: versionId ?? undefined,
+    location_id: locationId, fiscal_year: String(fiscalYear), month: String(notStarted ? 12 : month), window: notStarted ? 'YTD' : window, department_id: departmentId ?? 'company', version_id: versionId ?? undefined,
   });
   const d = q.data;
+  // Once we know where this department's actuals end, open on that month (until the user picks one).
+  const latestActual = d?.latestActualMonth ?? null;
+  useEffect(() => {
+    if (monthTouched || notStarted || latestActual === null) return;
+    const m = defaultMonth(fiscalYear, new Date(), latestActual);
+    if (m !== null && m !== month) setMonthState(m);
+  }, [latestActual, monthTouched, notStarted, fiscalYear, month]);
   const periodKey = `${fiscalYear}-${String(month).padStart(2, '0')}`;
 
   const varRows: VarianceRow[] = useMemo(
@@ -71,9 +86,15 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
         <Seg aria-label="Window" items={WINDOWS} value={window} onChange={setWindow} />
       </Field>
       <Field label="Through">
-        <Select value={String(month)} onChange={(e) => setMonth(parseInt(e.target.value, 10))}>
-          {MONTH_LABELS.map((m, i) => <option key={m} value={String(i + 1)}>{m} {fiscalYear}</option>)}
-        </Select>
+        {notStarted ? (
+          <Select value="full" disabled aria-describedby="dept-not-started">
+            <option value="full">Full year — not started</option>
+          </Select>
+        ) : (
+          <Select value={String(month)} onChange={(e) => setMonth(parseInt(e.target.value, 10))}>
+            {MONTH_LABELS.map((m, i) => <option key={m} value={String(i + 1)} disabled={i + 1 > maxMonth}>{m} {fiscalYear}</option>)}
+          </Select>
+        )}
       </Field>
     </div>
   );
@@ -85,6 +106,8 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
   const t = d.totals;
   const variance = t.actualCents - t.budgetCents;
   const fav = t.measure === 'contribution' ? variance >= 0 : variance <= 0;
+  // Nothing budgeted for the window: no favourable / unfavourable call.
+  const noBudget = t.budgetCents === 0;
   const material = d.lines.filter((l) => l.material);
   const lines = onlyMaterial ? material : d.lines;
   const finance = !!access && access.scope === 'ALL';
@@ -94,8 +117,9 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
     <div>
       {header}
       <p className={s.muted} style={{ marginTop: -8 }}>
-        {d.period.label} · budget: {d.version ? d.version.label : 'none for this year'}{d.closedThrough ? ` · books closed through ${d.closedThrough}` : ' · no closed months yet (actuals are preliminary)'}
+        {notStarted ? `Full year FY ${fiscalYear} (not started)` : d.period.label} · budget: {d.version ? d.version.label : 'none for this year'}{d.closedThrough ? ` · actuals locked (soft-closed or closed) through ${d.closedThrough}` : ' · no soft-closed or closed months yet (actuals are preliminary)'}
       </p>
+      {notStarted && <InlineNotice tone="info" className={s.notice}><span id="dept-not-started">FY {fiscalYear} hasn’t started — there are no actuals yet, so this shows the full-year budget against last year.</span></InlineNotice>}
       {!d.version && <InlineNotice tone="info" className={s.notice}>There is no FY {fiscalYear} budget yet — actuals and last year still show.</InlineNotice>}
 
       <div className={s.strip}>
@@ -103,8 +127,8 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
         <div className={s.cell}><span className={s.cellL}>{measureWord} budget</span><span className={s.cellV}>{money(t.budgetCents)}</span></div>
         <div className={s.cell}>
           <span className={s.cellL}>Variance</span>
-          <span className={`${s.cellV} ${variance === 0 ? '' : fav ? s.pos : s.neg}`}>{money(variance, { sign: 'delta' })}</span>
-          <span className={s.cellS}>{variance === 0 ? 'On budget' : fav ? 'Favourable' : 'Unfavourable'}{t.budgetCents ? ` · ${pctText(variance / Math.abs(t.budgetCents))}` : ''}</span>
+          <span className={`${s.cellV} ${variance === 0 || noBudget ? '' : fav ? s.pos : s.neg}`}>{noBudget ? '—' : money(variance, { sign: 'delta' })}</span>
+          <span className={s.cellS}>{noBudget ? 'Nothing budgeted for this period' : variance === 0 ? 'On budget' : fav ? 'Favourable' : 'Unfavourable'}{t.budgetCents ? ` · ${pctText(variance / Math.abs(t.budgetCents))}` : ''}</span>
         </div>
         <div className={s.cell}><span className={s.cellL}>Last year</span><span className={s.cellV}>{money(t.pyCents)}</span><span className={s.cellS}>{t.pyCents ? `${pctText((t.actualCents - t.pyCents) / Math.abs(t.pyCents))} vs last year` : 'No prior-year activity'}</span></div>
         <div className={s.cell}><span className={s.cellL}>Material variances</span><span className={`${s.cellV} ${d.materialCount ? s.neg : ''}`}>{d.materialCount}</span><span className={s.cellS}>Over {d.version ? money(d.version.materialityCents) : '$5,000'} or {d.version ? (d.version.materialityBps / 100).toFixed(0) : '10'}%</span></div>
@@ -161,7 +185,7 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
                         <td className={s.n}>{money(l.budgetCents)}</td>
                         <td className={`${s.n} ${l.verdict === 'favourable' ? s.pos : l.verdict === 'unfavourable' ? s.neg : ''}`}>{money(l.varianceCents, { sign: 'delta' })}</td>
                         <td className={s.n}>{pctText(l.variancePct)}</td>
-                        <td>{l.verdict === 'on_budget' ? '—' : <Tag tone={l.verdict === 'favourable' ? 'pos' : 'neg'}>{l.verdict === 'favourable' ? 'F' : 'U'}</Tag>}{l.material && <span className="sr-only"> material</span>}</td>
+                        <td>{l.verdict === 'on_budget' || l.verdict === 'no_budget' ? <span title={l.verdict === 'no_budget' ? 'Nothing budgeted for this period' : 'On budget'}>—</span> : <Tag tone={l.verdict === 'favourable' ? 'pos' : 'neg'}>{l.verdict === 'favourable' ? 'F' : 'U'}</Tag>}{l.material && <span className="sr-only"> material</span>}</td>
                         <td className={`${s.n} ${s.muted}`}>{money(l.pyCents)}</td>
                         <td className={s.n}>{pctText(l.pyChangePct)}</td>
                         <td>{l.explanation ? <Tag tone={l.explanation.status === 'REVIEWED' ? 'pos' : 'default'}>{l.explanation.status === 'REVIEWED' ? 'Reviewed' : 'Explained'}</Tag> : l.material ? <Tag tone="warn">Needs a note</Tag> : null}</td>
@@ -202,7 +226,7 @@ export function DepartmentView({ locationId, fiscalYear, departmentId, departmen
         )}
       </div>
 
-      <DrillDrawer line={drill} onClose={() => setDrill(null)} locationId={locationId} fiscalYear={fiscalYear} month={month} window={window} departmentId={departmentId} />
+      <DrillDrawer line={drill} onClose={() => setDrill(null)} locationId={locationId} fiscalYear={fiscalYear} month={notStarted ? 12 : month} window={notStarted ? 'YTD' : window} departmentId={departmentId} />
     </div>
   );
 }
@@ -244,7 +268,9 @@ function VarianceItem({ line, locationId, versionId, departmentId, periodKey, wi
         <button type="button" className={s.linkBtn} onClick={onDrill}>{line.accountNumber} {line.accountName}</button>
         <span className={s.row}>
           <span className={s.tnum}>Actual {money(line.actualCents)} vs budget {money(line.budgetCents)}</span>
-          <Tag tone={line.verdict === 'favourable' ? 'pos' : 'neg'}>{money(line.varianceCents, { sign: 'delta' })} {line.verdict === 'favourable' ? 'F' : 'U'}</Tag>
+          {line.verdict === 'no_budget'
+            ? <Tag tone="default">{money(line.varianceCents, { sign: 'delta' })} · not budgeted</Tag>
+            : <Tag tone={line.verdict === 'favourable' ? 'pos' : 'neg'}>{money(line.varianceCents, { sign: 'delta' })} {line.verdict === 'favourable' ? 'F' : 'U'}</Tag>}
         </span>
       </div>
       {e ? (

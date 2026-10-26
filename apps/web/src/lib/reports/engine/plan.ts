@@ -167,7 +167,11 @@ export function planReport(req: ReportRequest, ctx: PlanContext): Plan {
   if (req.ttmColumn && effectiveMode === 'month' && !pit) {
     const end = base[base.length - 1]?.range.end ?? main.end;
     const ttm: DateRange = { start: addMonths(monthStart(end), -11), end };
-    totals.push(amountCol('ttm', 'TTM', 'ttm', { range: ttm, companyIds, kinds }, 'actual', { sublabel: 'Trailing 12 months' }));
+    // Twelve monthly columns ending in the TTM month already make the Total the TTM — a second,
+    // identical column would only invite "why are these the same?". Say so on the Total instead.
+    const total = totals.find((t) => t.role === 'total');
+    if (total && total.range.start === ttm.start && total.range.end === ttm.end) total.sublabel = 'Trailing 12 months';
+    else totals.push(amountCol('ttm', 'TTM', 'ttm', { range: ttm, companyIds, kinds }, 'actual', { sublabel: 'Trailing 12 months' }));
   }
   cols.push(...totals);
 

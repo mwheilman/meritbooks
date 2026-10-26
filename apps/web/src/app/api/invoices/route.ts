@@ -11,7 +11,8 @@ import { fetchAll } from '@/lib/supabase/fetch-all';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { resolvePayLinksBatch, type PayLinkState } from '@/lib/invoices/pay-link';
 import { summarizeOnlineActivity, ONLINE_EVENT_TYPES, type OnlineEvent } from '@/lib/invoices/online-activity';
-import { daysPastDue, effectiveInvoiceStatus, invoiceTabOrFilter, isInvoiceOverdue, isOpenInvoiceStatus } from '@/lib/ar/overdue';
+import { effectiveInvoiceStatus, invoiceTabOrFilter, isOpenInvoiceStatus } from '@/lib/ar/overdue';
+import { deriveInvoiceStatus, hasReachedCustomer, DELIVERY_EVIDENCE_EVENTS } from '@/lib/invoices/display-status';
 
 // ─── GET: List invoices ───────────────────────────────────────────────
 const querySchema = z.object({
@@ -162,7 +163,9 @@ export async function GET(request: Request) {
       .select('invoice_id, event_type, created_at, meta')
       .eq('org_id', orgId)
       .in('invoice_id', pageIds)
-      .in('event_type', ONLINE_EVENT_TYPES);
+      // Online activity + delivery evidence (did it ever reach the customer? — the same
+      // fact the drawer's status uses, lib/invoices/display-status.ts).
+      .in('event_type', Array.from(new Set([...ONLINE_EVENT_TYPES, ...DELIVERY_EVIDENCE_EVENTS])));
     for (const e of (evRows ?? []) as Array<OnlineEvent & { invoice_id: string }>) {
       const list = eventsByInvoice.get(e.invoice_id) ?? [];
       list.push(e);
@@ -207,8 +210,14 @@ export async function GET(request: Request) {
       balanceCents: Number(inv.balance_cents ?? 0),
       amountPaidCents: Number(inv.amount_paid_cents ?? 0),
     };
-    const isOverdue = isInvoiceOverdue(ov, today);
-    const daysOverdue = isOverdue ? daysPastDue(ov.dueDate, today) : 0;
+    const evs = eventsByInvoice.get(inv.id as string) ?? [];
+    // THE display status (list, drawer and peek share lib/invoices/display-status.ts).
+    const display = deriveInvoiceStatus(
+      { ...ov, sentToCustomer: hasReachedCustomer(evs, (inv.sent_at as string | null) ?? null) },
+      today,
+    );
+    const isOverdue = display.key === 'OVERDUE';
+    const daysOverdue = display.daysOverdue;
 
     return {
       id: inv.id,
@@ -222,9 +231,11 @@ export async function GET(request: Request) {
       totalCents: Number(inv.total_cents),
       amountPaidCents: Number(inv.amount_paid_cents),
       balanceCents: Number(inv.balance_cents),
-      // Display status is derived (OVERDUE when past due with a balance); the
-      // stored value is kept for workflows that act on it.
-      status: effectiveInvoiceStatus(ov, today),
+      // Display status is derived (OVERDUE when past due with a balance, ISSUED when
+      // never delivered); the stored value is kept for workflows that act on it.
+      status: display.key,
+      statusLabel: display.label,
+      statusHint: display.hint,
       storedStatus: inv.status,
       isOverdue,
       isProgressBill: inv.is_progress_bill,
@@ -236,7 +247,7 @@ export async function GET(request: Request) {
       location: location ? { id: location.id, name: location.name, shortCode: location.short_code } : null,
       job: job ? { id: job.id, jobNumber: job.job_number, name: job.name } : null,
       online: (() => {
-        const a = summarizeOnlineActivity(eventsByInvoice.get(inv.id as string) ?? []);
+        const a = summarizeOnlineActivity(evs);
         const pay = payById.get(inv.id as string);
         return {
           status: a.status, label: a.label, views: a.views, paidOnlineAt: a.paidOnlineAt,

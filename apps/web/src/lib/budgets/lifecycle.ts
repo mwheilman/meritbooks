@@ -3,7 +3,7 @@
  * refuses an illegal move with a clear message BEFORE the database does (the database stays the
  * guarantor). Pure; docs/FPB-reports-fpna.md §4.11, AC-B9…B11.
  */
-import type { PlanStatus, VersionKind, VersionStatus } from './types';
+import type { BoardStatus, PlanStatus, VersionKind, VersionStatus } from './types';
 
 export type BudgetErrorCode = 'LOCKED' | 'SOD' | 'NOT_FOUND' | 'SCOPE' | 'VALIDATION' | 'CONFLICT' | 'PERIOD_CLOSED';
 
@@ -155,6 +155,43 @@ export function checkPlanAction(i: PlanActionInput): PlanStatus {
       if (i.status !== 'APPROVED' && i.status !== 'SUBMITTED') throw new BudgetError('LOCKED', 'Only a submitted or approved department budget can be reopened.');
       return 'DRAFT';
   }
+}
+
+/**
+ * A department's status on the submission board.
+ *  - It has a plan row → that plan's status.
+ *  - No plan row, version still a DRAFT → 'NOT_STARTED' (the department can start; its first
+ *    save creates the plan, and from then on the approval gate counts it).
+ *  - No plan row, version past draft (in review / approved / locked / superseded) → the
+ *    department never had a budget of its own in this version: 'NO_REVIEW' when the version
+ *    carries lines for it anyway (e.g. migrated in), else 'NOT_IN_VERSION'. Showing "Not
+ *    started" next to an approved budget would claim a review step that was never required.
+ */
+export function boardStatus(plan: PlanStatus | null, versionStatus: VersionStatus, hasLines: boolean): BoardStatus {
+  if (plan) return plan;
+  if (versionStatus === 'DRAFT') return 'NOT_STARTED';
+  return hasLines ? 'NO_REVIEW' : 'NOT_IN_VERSION';
+}
+
+/**
+ * Department budgets that block submitting / approving a version: every plan not APPROVED, plus
+ * every department that carries lines in the version but has no plan at all (its numbers would
+ * otherwise be published without department review). Company-level lines (no department) don't
+ * count — finance owns those and approves them with the version.
+ */
+export function openDepartmentCount(
+  plans: ReadonlyArray<{ departmentId: string; status: PlanStatus }>,
+  lineDepartmentIds: Iterable<string | null>,
+): number {
+  const planned = new Set(plans.map((p) => p.departmentId));
+  let open = plans.filter((p) => p.status !== 'APPROVED').length;
+  const seen = new Set<string>();
+  for (const d of lineDepartmentIds) {
+    if (!d || planned.has(d) || seen.has(d)) continue;
+    seen.add(d);
+    open++;
+  }
+  return open;
 }
 
 /** Why a grid is read-only (null = editable). */

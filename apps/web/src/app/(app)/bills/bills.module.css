@@ -1,0 +1,574 @@
+/* Bills — layout only; every visual token comes from the kit (system.css). */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+/* ── List ─────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.searchBox {
+  width: 320px;
+  max-width: 100%;
+}
+
+.tableWrap {
+  border: 1px solid var(--line);
+  background: var(--white);
+  max-height: calc(100vh - 320px);
+  min-height: 240px;
+  overflow: auto;
+}
+
+.tableWrap > :global(.tbl) {
+  width: 100%;
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.cellRow > :global(.l1) {
+  min-width: 0;
+}
+
+.due {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hints {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 0 0;
+}
+
+/* ── Hover peek (a miniature vendor bill) ─────────────────────────── */
+.peek {
+  padding: 16px;
+}
+
+.peekHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.peekDue {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.peekLines {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.peekLines td {
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.peekLines td:first-child {
+  max-width: 200px;
+  padding-right: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.peekTotals {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  padding-top: 8px;
+}
+
+.peekTotals dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.peekState {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 16px;
+}
+
+/* ── Detail drawer ────────────────────────────────────────────────── */
+.summary {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 16px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  margin-top: 8px;
+}
+
+.summary dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.summaryTotal {
+  font-size: var(--t-20);
+  line-height: var(--lh-20);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.inlineForm {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.inlineForm > :global(.field),
+.inlineForm > :global(.select),
+.inlineForm > :global(.input) {
+  flex: 1;
+  min-width: 140px;
+}
+
+.violations {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.violations li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.lineCell {
+  white-space: normal !important;
+  height: auto !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+.foot {
+  position: sticky;
+  bottom: -24px;
+  margin: 24px -24px -24px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--white);
+  z-index: 2;
+}
+
+.footRow {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.footRow + .footRow {
+  margin-top: 8px;
+}
+
+.footRow > :global(.input) {
+  flex: 1;
+  min-width: 140px;
+}
+
+.money {
+  position: relative;
+  display: block;
+}
+
+.footRow > .money {
+  flex: 1;
+  min-width: 140px;
+}
+
+.qtyRow > .money {
+  flex: 1;
+  min-width: 0;
+}
+
+.money > span {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.money > :global(.input) {
+  padding-left: 22px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.pct {
+  position: relative;
+  display: block;
+}
+
+.pct > span {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
+.pct > :global(.input) {
+  padding-right: 24px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Bill form ────────────────────────────────────────────────────── */
+.form {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+}
+
+.formHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--electric);
+}
+
+.formBody {
+  display: flex;
+  align-items: stretch;
+}
+
+.preview {
+  width: 320px;
+  flex: none;
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.preview img {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid var(--line);
+}
+
+.formMain {
+  flex: 1;
+  min-width: 0;
+  padding: 24px;
+}
+
+.formMain > * + * {
+  margin-top: var(--s2);
+}
+
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 32px 24px;
+  border: 1px dashed var(--line-2);
+  background: var(--white);
+  color: var(--ink-2);
+  text-align: center;
+  cursor: pointer;
+  font: inherit;
+  transition: border-color var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+
+.drop:hover:not(:disabled),
+.drop:focus-visible,
+.dropOver {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+
+.drop:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.dropIcon {
+  color: var(--electric);
+  display: inline-flex;
+  gap: 8px;
+}
+
+.or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.or::before,
+.or::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+
+.grid4 {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 1000px) {
+  .grid4,
+  .grid3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .formBody {
+    flex-direction: column;
+  }
+  .preview {
+    width: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.labelRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lines {
+  border: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.lines > :global(.tbl) {
+  width: 100%;
+  min-width: 760px;
+}
+
+.lines :global(.tbl) td {
+  vertical-align: top;
+  padding: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lines :global(.tbl) th {
+  padding: 0 8px;
+  height: 40px;
+  background: var(--warm);
+  border-bottom: 1px solid var(--line-2);
+}
+
+.lines :global(.tbl) tfoot td {
+  border-bottom: 0;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.lineNo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  color: var(--ink-3);
+}
+
+.qtyRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.qty {
+  width: 64px !important;
+  flex: none;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.subRow td {
+  border-top: 1px solid var(--line-2);
+}
+
+.totalRow td {
+  border-top: 1px solid var(--midnight) !important;
+  font-weight: 600;
+  color: var(--ink);
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+.formFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+/* Searchable pickers (account / job) — the kit popover, anchored under the trigger. */
+.picker {
+  position: relative;
+}
+
+.pickerBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 32px;
+  padding: 0 28px 0 10px;
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  color: var(--ink);
+  text-align: left;
+  font: inherit;
+  position: relative;
+  cursor: pointer;
+}
+
+.pickerBtn:hover:not(:disabled) {
+  border-color: var(--grey-400);
+}
+
+.pickerBtn:focus-visible {
+  border-color: var(--electric);
+  box-shadow: 0 0 0 1px var(--electric);
+  outline: none;
+}
+
+.pickerBtn:disabled {
+  background: var(--grey-100);
+  color: var(--ink-3);
+  cursor: not-allowed;
+}
+
+.pickerBtn > span:first-of-type {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.pickerEmpty {
+  color: var(--ink-3);
+}
+
+.pickerChevron {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-3);
+  display: inline-flex;
+}
+
+.pickerClear {
+  position: absolute;
+  right: 28px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.pickerPop {
+  top: calc(100% + 4px);
+  left: 0;
+  width: 300px;
+}
+
+.pickerPop :global(.popover-head) {
+  height: 40px;
+}
+
+.pickerPop :global(.popover-head) input {
+  height: 38px;
+  font-size: var(--t-13);
+}
+
+.pickerList {
+  max-height: 200px;
+}
+
+.pickerItem {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  min-height: 32px !important;
+}
+
+.pickerNum {
+  width: 56px;
+  flex: none;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.pickerMsg {
+  padding: 12px 16px;
+  text-align: center;
+}
+
+/* ── Auto-file dialog ─────────────────────────────────────────────── */
+.dialogBody > * + * {
+  margin-top: var(--s2);
+}

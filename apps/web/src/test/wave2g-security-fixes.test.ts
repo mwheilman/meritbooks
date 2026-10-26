@@ -161,7 +161,8 @@ describe('§1 payroll write lock + §2 comp column mask', () => {
   it('the registry records the comp columns as column_revoke', async () => {
     const r = await db.query<{ n: string }>(
       `select count(*) n from core.field_class_columns where table_name = 'payroll_run_employees' and enforcement = 'column_revoke'`);
-    expect(Number(r.rows[0].n)).toBe(7);
+    // 7 from 170 §2 + employer_benefits_cents (mig 194 §99, Projects seam labor burden).
+    expect(Number(r.rows[0].n)).toBe(8);
   });
 });
 

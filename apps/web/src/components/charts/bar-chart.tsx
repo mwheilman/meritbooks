@@ -127,7 +127,7 @@ export function BarChart({
         }
       });
     });
-    return { t, y, band, bars, left, narrow, every: labelEvery(nc, width - left - 12, 56) };
+    return { t, y, band, bars, left, narrow, every: labelEvery(nc, width - left - 12, 56, categories.map((c) => c.label)) };
   }, [width, mode, series, nc, unit, horizontal, categories, showValues, height, direction]);
 
   const focusBars = geo.bars;

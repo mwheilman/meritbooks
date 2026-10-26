@@ -118,13 +118,21 @@ export interface DepartmentPlan {
 }
 
 /** One department row on the submission board. */
+/**
+ * A department's row status on the submission board: its plan's status, or — when the version
+ * has no plan row for it — whether it is simply not part of the version ('NOT_IN_VERSION', e.g. a
+ * company-level budget migrated in) or carries budget lines that never went through department
+ * review ('NO_REVIEW'). Derived by `boardStatus` (lifecycle.ts).
+ */
+export type BoardStatus = PlanStatus | 'NOT_IN_VERSION' | 'NO_REVIEW';
+
 export interface BoardRow {
   departmentId: string;
   departmentName: string;
   plan: DepartmentPlan | null;
   ownerUserId: string | null;
   ownerName: string | null;
-  status: PlanStatus;
+  status: BoardStatus;
   dueDate: string | null;
   overdue: boolean;
   /** Budget totals for the version (natural sign). */
@@ -229,7 +237,8 @@ export interface BvaLine {
   variancePct: number | null;
   pyChangeCents: number;
   pyChangePct: number | null;
-  verdict: 'favourable' | 'unfavourable' | 'on_budget';
+  /** 'no_budget' when nothing was budgeted for the window: no F/U call (the UI shows "—"). */
+  verdict: 'favourable' | 'unfavourable' | 'on_budget' | 'no_budget';
   material: boolean;
   explanation: VarianceNote | null;
 }
@@ -285,6 +294,8 @@ export interface DepartmentViewResponse {
   bridges: { pyToBudget: BridgeOut; budgetToActual: BridgeOut; budgetToForecast: BridgeOut };
   forecastLabel: string;
   closedThrough: string | null;
+  /** Latest month (1–12) of the fiscal year with any actual for this department; null = none yet. */
+  latestActualMonth: number | null;
   access: BudgetAccessSummary;
 }
 
@@ -397,6 +408,12 @@ export const PLAN_STATUS_LABEL: Record<PlanStatus, string> = {
   SUBMITTED: 'Submitted',
   RETURNED: 'Returned',
   APPROVED: 'Approved',
+};
+
+export const BOARD_STATUS_LABEL: Record<BoardStatus, string> = {
+  ...PLAN_STATUS_LABEL,
+  NOT_IN_VERSION: 'Not in this version',
+  NO_REVIEW: 'In the budget — no department review',
 };
 
 export const DRIVER_METHOD_LABEL: Record<DriverMethod, string> = {

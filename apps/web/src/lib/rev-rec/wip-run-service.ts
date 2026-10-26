@@ -44,6 +44,7 @@ import {
   type WipLine,
   type WipTotals,
 } from './wip-engine';
+import { loadJobInputsAsOf, withInputsAsOf, type InputsSource } from './as-of-inputs';
 import {
   policyFromRow,
   resolveJobPolicy,
@@ -130,6 +131,8 @@ export interface WipSchedule {
   accounts: { unbilled: string | null; deferred: string | null; lossProvision: string | null; lossExpense: string | null };
   /** Blocking setup problems (an unresolved required role). Empty = ready. */
   setupIssues: string[];
+  /** Where cost / billed / contract inputs came from (A4): the books as of period end, or the job columns before migration 194. */
+  inputsSource: InputsSource;
   period: PeriodState;
   nextPeriod: PeriodState;
   /** Latest live run for this month (PROPOSED wins, else the newest non-superseded). */
@@ -346,6 +349,12 @@ export async function loadWipSchedule(
     }
   }
 
+  // A4 (migration 194): cost incurred, billed to date and the pinned contract / estimate / % are
+  // read AS OF the period end from the books (GL + posted invoices + JOB_PROGRESS snapshots), so a
+  // closed month re-prints identically and nothing depends on the never-maintained job columns.
+  const asOfInputs = await loadJobInputsAsOf(db, orgId, jobs.map((j) => j.id), asOf);
+  for (let i = 0; i < jobs.length; i++) jobs[i] = withInputsAsOf(jobs[i], asOfInputs.byJob.get(jobs[i].id));
+
   const methodOf = (j: JobRow) => resolveRevRecMethod(j, jobTypeMethod, companyDefault, revTypeMap);
 
   // Cash collected (CASH method only).
@@ -431,6 +440,7 @@ export async function loadWipSchedule(
       lossExpense: lossExpense?.account_number ?? null,
     },
     setupIssues,
+    inputsSource: asOfInputs.source,
     period,
     nextPeriod,
     currentRun: pickCurrent(runs.filter((r) => r.period_key === periodKey)),

@@ -97,7 +97,7 @@ describe('stop-gap — unsupported versions and types are rejected with an error
 
   it('an unknown Projects event type is rejected (UNSUPPORTED_EVENT_TYPE); planned types keep waiting', async () => {
     const weird = await enqueue(db, t.org, 'JOB_TELEPORT', { schema_version: 1 });
-    const planned = await enqueue(db, t.org, 'JOB_COMMITMENT', { schema_version: 1 });
+    const planned = await enqueue(db, t.org, 'JOB_MATERIAL', { schema_version: 1 });
     const n = await rejectUnknownProjectsEventTypes(sb, t.org);
     expect(n).toBe(1);
     expect(await eventRow(db, weird)).toMatchObject({ status: 'rejected', error_code: 'UNSUPPORTED_EVENT_TYPE' });

@@ -1,0 +1,323 @@
+/* Expenses — layout only; every visual token comes from the kit (system.css). */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+/* Figure strip: value + what it means + where it goes. */
+.figs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.figs > * {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.figs > *:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 1000px) {
+  .figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .figs > *:nth-child(2) {
+    border-right: 0;
+  }
+  .figs > *:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.figLink {
+  align-self: flex-start;
+  color: var(--electric);
+  font-weight: 600;
+  font-size: var(--t-12);
+  line-height: var(--lh-12);
+}
+
+.figLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.figSkel {
+  width: 64px;
+  height: 20px;
+}
+
+/* Toolbar: filter · search · page verbs. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 16px;
+}
+
+.searchBox {
+  width: 300px;
+  max-width: 100%;
+}
+
+/* The queue scrolls inside its frame so the kit's sticky header holds. */
+.tableWrap {
+  border: 1px solid var(--line);
+  background: var(--white);
+  max-height: calc(100vh - 360px);
+  min-height: 240px;
+  overflow: auto;
+}
+
+.tableWrap > :global(.tbl) {
+  width: 100%;
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.rowActs {
+  display: inline-flex;
+  justify-content: flex-end;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.batchBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.keybar {
+  margin-top: 0;
+}
+
+/* ── Drawer ─────────────────────────────────────────────────────────── */
+.drawerStack > * + * {
+  margin-top: var(--s2);
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+}
+
+.tiles > * {
+  padding: 12px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.tiles > *:last-child {
+  border-right: 0;
+}
+
+.policy {
+  border: 1px solid var(--line);
+}
+
+.policyHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.policyBody {
+  padding: 12px;
+}
+
+.policyBody > * + * {
+  margin-top: 8px;
+}
+
+.violation {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+}
+
+.lines > li {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.lines > li:last-child {
+  border-bottom: 0;
+}
+
+.line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.lineHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.lineRight {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.picker {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  max-height: 200px;
+  overflow: auto;
+}
+
+.picker > p {
+  padding: 8px 12px;
+}
+
+.pickList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pickBtn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 12px;
+  text-align: left;
+  border-top: 1px solid var(--line);
+  transition: background-color var(--fast);
+}
+
+.pickBtn:hover,
+.pickBtn:focus-visible {
+  background: var(--sky);
+}
+
+.addForm {
+  margin-top: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.formFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.addLine {
+  margin-top: 8px;
+}
+
+/* ── Create dialog ──────────────────────────────────────────────────── */
+.dialogStack > * + * {
+  margin-top: 16px;
+}
+
+.receipts {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.receipts > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 0 12px;
+  min-height: 40px;
+  border-bottom: 1px solid var(--line);
+}
+
+.receipts > li:last-child {
+  border-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .two,
+  .tiles {
+    grid-template-columns: 1fr;
+  }
+  .tiles > * {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

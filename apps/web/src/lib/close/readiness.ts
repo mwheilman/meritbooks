@@ -38,7 +38,9 @@ import { resolveRole, PostingError } from '@/lib/posting/account-roles';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { gatherOpenItemsByLocation, gatherEntityOpenItems, emptyOpenItems } from './open-items';
 import { loadWipCloseSignals } from '@/lib/rev-rec/wip-close-signal';
+import { periodEnd as wipPeriodEnd } from '@/lib/rev-rec/wip-engine';
 import { loadFluxCloseSignals } from './flux/load';
+import { loadSeamCloseSignals, SEAM_SIGNAL_UNKNOWN } from './seam-close-signal';
 import { FLUX_SIGNAL_UNKNOWN } from './flux/gate';
 import {
   evaluateCloseGraph,
@@ -278,7 +280,7 @@ export async function gatherCloseOrchestration(
   });
 
   // Shared, run-once reads.
-  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc, wipByLoc, fluxByLoc] = await Promise.all([
+  const [subledger, leakage, aiRes, checkoffsByLoc, openItemsByLoc, wipByLoc, fluxByLoc, seamByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true, asOfISO: now.toISOString() }),
     fetchAll(
@@ -289,6 +291,7 @@ export async function gatherCloseOrchestration(
     gatherOpenItemsByLocation(supabase, openItemsContexts).catch(() => new Map<string, ReturnType<typeof emptyOpenItems>>()),
     loadWipCloseSignals(supabase, orgId, periodKey, locations.map((l) => l.id)),
     loadFluxCloseSignals(supabase, orgId, periodKey, locations.filter((l) => periodByLoc.has(l.id)).map((l) => l.id)),
+    loadSeamCloseSignals(supabase, orgId, /^\d{4}-\d{2}$/.test(periodKey) ? wipPeriodEnd(periodKey) : null, locations.map((l) => l.id)),
   ]);
 
   // Per-entity leakage roll-up (across all aged periods — how a controller reasons).
@@ -342,6 +345,7 @@ export async function gatherCloseOrchestration(
       pendingApprovalCount: oi.pendingApprovalCount,
       wipAccrual: wipByLoc.get(loc.id) ?? null,
       flux: fluxByLoc.get(loc.id) ?? null,
+      projectsSeam: seamByLoc.get(loc.id) ?? null,
     };
     const checkoffs = checkoffsByLoc.get(loc.id) ?? new Set<CloseTaskKey>();
     const evaluation = evaluateCloseGraph(signals, checkoffs);
@@ -417,7 +421,7 @@ export async function gatherCloseSignals(
     ? `${pr.period_year}-${String(pr.period_month).padStart(2, '0')}`
     : periodEndISO ? periodEndISO.slice(0, 7) : null;
 
-  const [subledger, leakage, recon, aiRes, openItems, wipByLoc, fluxByLoc] = await Promise.all([
+  const [subledger, leakage, recon, aiRes, openItems, wipByLoc, fluxByLoc, seamByLoc] = await Promise.all([
     loadSubledgerVariance(supabase, orgId),
     scanUncategorizedLeakage(supabase, orgId, { dryRun: true }),
     gatherReconciliationCloseStatus(supabase, args).catch(() => null),
@@ -432,6 +436,7 @@ export async function gatherCloseSignals(
     }).catch(() => emptyOpenItems()),
     periodKey ? loadWipCloseSignals(supabase, orgId, periodKey, [args.locationId]) : Promise.resolve(null),
     periodKey ? loadFluxCloseSignals(supabase, orgId, periodKey, [args.locationId]) : Promise.resolve(null),
+    loadSeamCloseSignals(supabase, orgId, periodEndISO, [args.locationId]),
   ]);
 
   let uncodedBankCents = 0;
@@ -464,6 +469,8 @@ export async function gatherCloseSignals(
       : { applicable: true, status: 'UNKNOWN', jobs: 0, underbilledCents: 0, overbilledCents: 0, lossProvisionCents: 0, dismissReason: null, reversalPending: false },
     // Same rule for the flux review: no resolvable month (or a read error) ⇒ UNKNOWN blocks.
     flux: fluxByLoc ? fluxByLoc.get(args.locationId) ?? FLUX_SIGNAL_UNKNOWN : FLUX_SIGNAL_UNKNOWN,
+    // A8: Merit Projects backlog for this company + period (not applicable ⇒ passes; unknown blocks).
+    projectsSeam: seamByLoc.get(args.locationId) ?? SEAM_SIGNAL_UNKNOWN,
   };
 }
 

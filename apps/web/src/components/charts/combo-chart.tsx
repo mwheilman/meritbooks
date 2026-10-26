@@ -62,7 +62,7 @@ export function ComboChart({ periods, bars, line, height = 260, hidden: hiddenPr
     const x = bandScale(n, [left, width - right], 0.32, 0.1);
     const yb = linearScale([tb.min, tb.max], [height - M.bottom, M.top]);
     const yl = linearScale([tl.min, tl.max], [height - M.bottom, M.top]);
-    return { tb, tl, x, yb, yl, left, right, every: labelEvery(n, width - left - right, 36) };
+    return { tb, tl, x, yb, yl, left, right, every: labelEvery(n, width - left - right, 36, periods.map((p) => p.label)) };
   }, [bars, line, width, height, n]);
 
   const { tb, tl, x, yb, yl, left, right, every } = geo;

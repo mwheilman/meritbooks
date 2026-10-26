@@ -1,12 +1,10 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import {
-  ChevronDown, ChevronRight, Lock, Building2, CreditCard, Landmark,
-  Clock, ScrollText, EyeOff,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { Button, Icon, Keyhints, Tag, cx, useListKeynav } from '@meritbooks/merit-ui';
 import { formatMoney } from '@meritbooks/shared';
+import { AccountFlags } from './account-flags';
+import s from './coa.module.css';
 
 export interface GroupedAccount {
   id: string;
@@ -37,17 +35,31 @@ interface Totals {
   ytd: number;
 }
 
+interface GroupNode { name: string; totals: Totals; rows: GroupedAccount[] }
+interface SubTypeNode { name: string; totals: Totals; groups: Map<string, GroupNode> }
+interface TypeNode { name: string; normalBalance: string; totals: Totals; subTypes: Map<string, SubTypeNode> }
+
+type RenderRow =
+  | { kind: 'type'; key: string; node: TypeNode; open: boolean; count: number }
+  | { kind: 'sub'; key: string; node: SubTypeNode; open: boolean }
+  | { kind: 'group'; key: string; node: GroupNode; open: boolean }
+  | { kind: 'acct'; key: string; account: GroupedAccount; acctIndex: number };
+
 // Natural-balance sign: a CREDIT-normal account (liability/equity/revenue)
 // carries the opposite raw (debit − credit) net, so flip it for display.
 function toNatural(rawNetCents: number, normalBalance: string): number {
   return normalBalance === 'CREDIT' ? -rawNetCents : rawNetCents;
 }
 
-function NetCell({ cents, strong }: { cents: number; strong?: boolean }) {
-  const cls = cents < 0 ? 'text-red-400' : cents === 0 ? 'text-slate-600' : strong ? 'text-white' : 'text-slate-200';
+/** A net figure: tabular, right-aligned, never coloured by sign; zero is a quiet dash. */
+function NetCell({ cents }: { cents: number }) {
+  return cents === 0 ? <span className="ink-3">—</span> : <>{formatMoney(cents)}</>;
+}
+
+function Chevron({ open }: { open: boolean }) {
   return (
-    <span className={clsx('font-mono tabular-nums', strong && 'font-semibold', cls)}>
-      {cents === 0 ? '—' : formatMoney(cents)}
+    <span className={cx(s.chev, open && s.chevOpen)} aria-hidden="true">
+      <Icon name="right" />
     </span>
   );
 }
@@ -58,25 +70,20 @@ export function AccountsGroupedView({
   periodLabel,
   onSelectAccount,
   onOpenLedger,
+  keynavEnabled = true,
 }: {
   accounts: GroupedAccount[];
   balances: Record<string, AccountBalance>;
   periodLabel: string;
   onSelectAccount: (id: string) => void;
   onOpenLedger: (a: GroupedAccount) => void;
+  /** J/K/Enter/L row keys; turn off while a drawer or dialog is open. */
+  keynavEnabled?: boolean;
 }) {
   // Build type → subType → group → accounts, preserving the account_number order
   // the API already sorted by. Subtotals (natural sign) roll up at each level.
   const tree = useMemo(() => {
-    const types = new Map<
-      string,
-      {
-        name: string;
-        normalBalance: string;
-        totals: Totals;
-        subTypes: Map<string, { name: string; totals: Totals; groups: Map<string, { name: string; totals: Totals; rows: GroupedAccount[] }> }>;
-      }
-    >();
+    const types = new Map<string, TypeNode>();
 
     for (const a of accounts) {
       const bal = balances[a.id];
@@ -129,218 +136,182 @@ export function AccountsGroupedView({
     setExpanded(keys);
   }
 
+  // Flatten what is visible into table rows; account rows get a cursor index.
+  const { rows, visibleAccounts } = useMemo(() => {
+    const out: RenderRow[] = [];
+    const accts: GroupedAccount[] = [];
+    for (const t of tree.values()) {
+      const typeKey = t.name;
+      const typeOpen = expanded.has(typeKey);
+      const count = Array.from(t.subTypes.values()).reduce((sum, st) => sum + Array.from(st.groups.values()).reduce((g, gr) => g + gr.rows.length, 0), 0);
+      out.push({ kind: 'type', key: typeKey, node: t, open: typeOpen, count });
+      if (!typeOpen) continue;
+      for (const st of t.subTypes.values()) {
+        const stKey = `${t.name}::${st.name}`;
+        const stOpen = expanded.has(stKey);
+        out.push({ kind: 'sub', key: stKey, node: st, open: stOpen });
+        if (!stOpen) continue;
+        for (const g of st.groups.values()) {
+          const gKey = `${stKey}::${g.name}`;
+          const gOpen = expanded.has(gKey);
+          out.push({ kind: 'group', key: gKey, node: g, open: gOpen });
+          if (!gOpen) continue;
+          for (const a of g.rows) {
+            out.push({ kind: 'acct', key: a.id, account: a, acctIndex: accts.length });
+            accts.push(a);
+          }
+        }
+      }
+    }
+    return { rows: out, visibleAccounts: accts };
+  }, [tree, expanded]);
+
+  // J/K move between visible accounts · Enter opens the account · L opens its ledger.
+  const { setActiveIndex, rowProps } = useListKeynav({
+    count: visibleAccounts.length,
+    onOpen: (i) => { const a = visibleAccounts[i]; if (a) onSelectAccount(a.id); },
+    onAction: (i) => { const a = visibleAccounts[i]; if (a) onOpenLedger(a); },
+    actionKey: 'l',
+    enabled: keynavEnabled,
+    owner: 'Chart of accounts (grouped)',
+  });
+
+  const typeTag = (normalBalance: string) => (
+    <Tag title={normalBalance === 'DEBIT' ? 'Debit-normal' : 'Credit-normal'}>{normalBalance === 'DEBIT' ? 'DR' : 'CR'}</Tag>
+  );
+
   return (
     <div>
-      <div className="flex items-center justify-end gap-4 mb-2 text-xs">
-        <button onClick={() => setAll(true)} className="text-emerald-400 hover:text-emerald-300 transition-colors">Expand all</button>
-        <button onClick={() => setAll(false)} className="text-slate-400 hover:text-slate-300 transition-colors">Collapse all</button>
+      <div className={s.viewBar}>
+        <span className="t-cap">Net movement shown in each account&apos;s normal balance.</span>
+        <span className={s.viewActs}>
+          <Button variant="quiet" onClick={() => setAll(true)}>Expand all</Button>
+          <Button variant="quiet" onClick={() => setAll(false)}>Collapse all</Button>
+        </span>
       </div>
 
-      <div className="card overflow-x-auto">
-        <table className="w-full text-sm min-w-[760px]">
+      <div className={s.tableWrap}>
+        <table className="tbl tbl-q tbl-q--compact" aria-label="Chart of accounts, grouped">
+          <colgroup>
+            <col />
+            <col style={{ width: 176 }} />
+            <col style={{ width: 168 }} />
+            <col style={{ width: 168 }} />
+            <col style={{ width: 120 }} />
+          </colgroup>
           <thead>
-            <tr className="border-b border-slate-800 text-2xs uppercase tracking-wider text-slate-500">
-              <th className="px-4 py-2.5 text-left">Account</th>
-              <th className="px-4 py-2.5 text-center w-16">Flags</th>
-              <th className="px-4 py-2.5 text-right w-36" title={`Net movement in ${periodLabel}`}>Period · {periodLabel}</th>
-              <th className="px-4 py-2.5 text-right w-36" title="Net movement year-to-date">YTD</th>
-              <th className="px-4 py-2.5 text-right w-20"></th>
+            <tr>
+              <th scope="col">Account</th>
+              <th scope="col">Flags</th>
+              <th scope="col" className="n" title={`Net movement in ${periodLabel}`}>{periodLabel}</th>
+              <th scope="col" className="n" title="Net movement year-to-date">Year to date</th>
+              <th scope="col"><span className="sr">Ledger</span></th>
             </tr>
           </thead>
           <tbody>
-            {Array.from(tree.values()).map((t) => {
-              const typeKey = t.name;
-              const typeOpen = expanded.has(typeKey);
+            {rows.map((r) => {
+              if (r.kind === 'type') {
+                return (
+                  <tr key={r.key} className={s.typeRow} onClick={() => toggle(r.key)}>
+                    <td>
+                      <button type="button" className={s.groupBtn} aria-expanded={r.open} onClick={(e) => { e.stopPropagation(); toggle(r.key); }}>
+                        <Chevron open={r.open} />
+                        <span>{r.node.name}</span>
+                        {typeTag(r.node.normalBalance)}
+                        <span className="t-cap tnum">{r.count}</span>
+                      </button>
+                    </td>
+                    <td />
+                    <td className="n"><NetCell cents={r.node.totals.period} /></td>
+                    <td className="n"><NetCell cents={r.node.totals.ytd} /></td>
+                    <td />
+                  </tr>
+                );
+              }
+              if (r.kind === 'sub') {
+                return (
+                  <tr key={r.key} className={s.subRow} onClick={() => toggle(r.key)}>
+                    <td className={s.lvl1}>
+                      <button type="button" className={s.groupBtn} aria-expanded={r.open} onClick={(e) => { e.stopPropagation(); toggle(r.key); }}>
+                        <Chevron open={r.open} />
+                        <span>{r.node.name}</span>
+                      </button>
+                    </td>
+                    <td />
+                    <td className="n"><NetCell cents={r.node.totals.period} /></td>
+                    <td className="n"><NetCell cents={r.node.totals.ytd} /></td>
+                    <td />
+                  </tr>
+                );
+              }
+              if (r.kind === 'group') {
+                return (
+                  <tr key={r.key} className={s.grpRow} onClick={() => toggle(r.key)}>
+                    <td className={s.lvl2}>
+                      <button type="button" className={s.groupBtn} aria-expanded={r.open} onClick={(e) => { e.stopPropagation(); toggle(r.key); }}>
+                        <Chevron open={r.open} />
+                        <span>{r.node.name}</span>
+                        <span className="t-cap tnum">{r.node.rows.length}</span>
+                      </button>
+                    </td>
+                    <td />
+                    <td className="n"><NetCell cents={r.node.totals.period} /></td>
+                    <td className="n"><NetCell cents={r.node.totals.ytd} /></td>
+                    <td />
+                  </tr>
+                );
+              }
+              const a = r.account;
+              const bal = balances[a.id];
+              const periodNat = bal ? toNatural(bal.periodNetCents, a.normalBalance) : 0;
+              const ytdNat = bal ? toNatural(bal.ytdNetCents, a.normalBalance) : 0;
+              const { ref, 'data-active': active } = rowProps(r.acctIndex);
               return (
-                <TypeBlock
-                  key={typeKey}
-                  t={t}
-                  typeOpen={typeOpen}
-                  expanded={expanded}
-                  toggle={toggle}
-                  balances={balances}
-                  onSelectAccount={onSelectAccount}
-                  onOpenLedger={onOpenLedger}
-                />
+                <tr
+                  key={r.key}
+                  ref={ref}
+                  className={cx('q-row', active && 'is-cursor', !a.isActive && s.inactive)}
+                  aria-current={active ? 'true' : undefined}
+                  onClick={() => { setActiveIndex(r.acctIndex); onSelectAccount(a.id); }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <td className={s.lvl3}>
+                    <span className={s.acctCell}>
+                      <span className={s.num}>{a.accountNumber}</span>
+                      <span className="mb-trunc">{a.name}</span>
+                      {a.approvalStatus === 'PENDING' && <Tag tone="warn">Pending</Tag>}
+                      {!a.isActive && <Tag>Inactive</Tag>}
+                    </span>
+                  </td>
+                  <td><AccountFlags account={a} /></td>
+                  <td className="n"><NetCell cents={periodNat} /></td>
+                  <td className="n"><NetCell cents={ytdNat} /></td>
+                  <td className="n">
+                    <Button
+                      variant="quiet"
+                      className={s.ledgerBtn}
+                      icon="book"
+                      onClick={(e) => { e.stopPropagation(); onOpenLedger(a); }}
+                      aria-label={`View GL detail for ${a.accountNumber} ${a.name}`}
+                    >
+                      Ledger
+                    </Button>
+                  </td>
+                </tr>
               );
             })}
           </tbody>
         </table>
       </div>
+      <Keyhints
+        className={s.hints}
+        hints={[
+          { chord: 'j k', label: 'Move' },
+          { chord: 'enter', label: 'Open account' },
+          { chord: 'l', label: 'Open ledger' },
+          { chord: '/', label: 'Search' },
+        ]}
+      />
     </div>
-  );
-}
-
-function TypeBlock({
-  t, typeOpen, expanded, toggle, balances, onSelectAccount, onOpenLedger,
-}: {
-  t: { name: string; normalBalance: string; totals: Totals; subTypes: Map<string, { name: string; totals: Totals; groups: Map<string, { name: string; totals: Totals; rows: GroupedAccount[] }> }> };
-  typeOpen: boolean;
-  expanded: Set<string>;
-  toggle: (k: string) => void;
-  balances: Record<string, AccountBalance>;
-  onSelectAccount: (id: string) => void;
-  onOpenLedger: (a: GroupedAccount) => void;
-}) {
-  const acctCount = Array.from(t.subTypes.values()).reduce((s, st) => s + Array.from(st.groups.values()).reduce((g, gr) => g + gr.rows.length, 0), 0);
-  return (
-    <>
-      <tr className="border-b border-slate-800 bg-slate-800/20 cursor-pointer hover:bg-slate-800/30" onClick={() => toggle(t.name)}>
-        <td className="px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            {typeOpen ? <ChevronDown size={15} className="text-slate-500" /> : <ChevronRight size={15} className="text-slate-500" />}
-            <span className="text-sm font-semibold text-white">{t.name}</span>
-            <span className="text-2xs font-mono text-slate-600">{t.normalBalance === 'DEBIT' ? 'DR' : 'CR'}</span>
-            <span className="text-2xs text-slate-600">· {acctCount}</span>
-          </div>
-        </td>
-        <td />
-        <td className="px-4 py-2.5 text-right"><NetCell cents={t.totals.period} strong /></td>
-        <td className="px-4 py-2.5 text-right"><NetCell cents={t.totals.ytd} strong /></td>
-        <td />
-      </tr>
-
-      {typeOpen && Array.from(t.subTypes.values()).map((st) => {
-        const stKey = `${t.name}::${st.name}`;
-        const stOpen = expanded.has(stKey);
-        return (
-          <SubTypeBlock
-            key={stKey}
-            typeName={t.name}
-            st={st}
-            stKey={stKey}
-            stOpen={stOpen}
-            expanded={expanded}
-            toggle={toggle}
-            balances={balances}
-            onSelectAccount={onSelectAccount}
-            onOpenLedger={onOpenLedger}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-function SubTypeBlock({
-  typeName, st, stKey, stOpen, expanded, toggle, balances, onSelectAccount, onOpenLedger,
-}: {
-  typeName: string;
-  st: { name: string; totals: Totals; groups: Map<string, { name: string; totals: Totals; rows: GroupedAccount[] }> };
-  stKey: string;
-  stOpen: boolean;
-  expanded: Set<string>;
-  toggle: (k: string) => void;
-  balances: Record<string, AccountBalance>;
-  onSelectAccount: (id: string) => void;
-  onOpenLedger: (a: GroupedAccount) => void;
-}) {
-  return (
-    <>
-      <tr className="border-b border-slate-800/50 cursor-pointer hover:bg-white/[0.02]" onClick={() => toggle(stKey)}>
-        <td className="px-4 py-2 pl-9">
-          <div className="flex items-center gap-2">
-            {stOpen ? <ChevronDown size={13} className="text-slate-500" /> : <ChevronRight size={13} className="text-slate-500" />}
-            <span className="text-sm font-medium text-slate-300">{st.name}</span>
-          </div>
-        </td>
-        <td />
-        <td className="px-4 py-2 text-right"><NetCell cents={st.totals.period} /></td>
-        <td className="px-4 py-2 text-right"><NetCell cents={st.totals.ytd} /></td>
-        <td />
-      </tr>
-
-      {stOpen && Array.from(st.groups.values()).map((g) => {
-        const gKey = `${stKey}::${g.name}`;
-        const gOpen = expanded.has(gKey);
-        return (
-          <GroupBlock
-            key={gKey}
-            g={g}
-            gKey={gKey}
-            gOpen={gOpen}
-            toggle={toggle}
-            balances={balances}
-            onSelectAccount={onSelectAccount}
-            onOpenLedger={onOpenLedger}
-          />
-        );
-      })}
-    </>
-  );
-}
-
-function GroupBlock({
-  g, gKey, gOpen, toggle, balances, onSelectAccount, onOpenLedger,
-}: {
-  g: { name: string; totals: Totals; rows: GroupedAccount[] };
-  gKey: string;
-  gOpen: boolean;
-  toggle: (k: string) => void;
-  balances: Record<string, AccountBalance>;
-  onSelectAccount: (id: string) => void;
-  onOpenLedger: (a: GroupedAccount) => void;
-}) {
-  return (
-    <>
-      <tr className="cursor-pointer hover:bg-white/[0.02]" onClick={() => toggle(gKey)}>
-        <td className="px-4 py-1.5 pl-14">
-          <div className="flex items-center gap-2">
-            {gOpen ? <ChevronDown size={12} className="text-slate-600" /> : <ChevronRight size={12} className="text-slate-600" />}
-            <span className="text-xs text-slate-400">{g.name}</span>
-            <span className="text-2xs text-slate-600">· {g.rows.length}</span>
-          </div>
-        </td>
-        <td />
-        <td className="px-4 py-1.5 text-right text-xs"><NetCell cents={g.totals.period} /></td>
-        <td className="px-4 py-1.5 text-right text-xs"><NetCell cents={g.totals.ytd} /></td>
-        <td />
-      </tr>
-
-      {gOpen && g.rows.map((a) => {
-        const bal = balances[a.id];
-        const periodNat = bal ? toNatural(bal.periodNetCents, a.normalBalance) : 0;
-        const ytdNat = bal ? toNatural(bal.ytdNetCents, a.normalBalance) : 0;
-        return (
-          <tr
-            key={a.id}
-            className={clsx('group border-t border-slate-800/20 hover:bg-white/[0.02] cursor-pointer', !a.isActive && 'opacity-55')}
-            onClick={() => onSelectAccount(a.id)}
-          >
-            <td className="px-4 py-2 pl-24">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <span className="text-xs font-mono text-emerald-400 shrink-0">{a.accountNumber}</span>
-                <span className="text-sm text-slate-300 truncate">{a.name}</span>
-                {a.approvalStatus === 'PENDING' && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400 shrink-0"><Clock size={9} />Pending</span>
-                )}
-                {!a.isActive && (
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-700/40 text-slate-400 shrink-0"><EyeOff size={9} />Inactive</span>
-                )}
-              </div>
-            </td>
-            <td className="px-4 py-2">
-              <div className="flex items-center justify-center gap-1.5">
-                {a.isControlAccount && <span title="Control account — no direct posting"><Lock size={11} className="text-amber-500/70" /></span>}
-                {a.isCompanySpecific && <span title="Company-specific account"><Building2 size={11} className="text-blue-400/70" /></span>}
-                {a.isBankAccount && <span title="Bank account"><Landmark size={11} className="text-slate-500" /></span>}
-                {a.isCreditCard && <span title="Credit card account"><CreditCard size={11} className="text-slate-500" /></span>}
-              </div>
-            </td>
-            <td className="px-4 py-2 text-right"><NetCell cents={periodNat} /></td>
-            <td className="px-4 py-2 text-right"><NetCell cents={ytdNat} /></td>
-            <td className="px-4 py-2 text-right">
-              <button
-                onClick={(e) => { e.stopPropagation(); onOpenLedger(a); }}
-                aria-label={`View GL detail for ${a.accountNumber} ${a.name}`}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-slate-400 opacity-0 group-hover:opacity-100 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all"
-              >
-                <ScrollText size={12} /> Ledger
-              </button>
-            </td>
-          </tr>
-        );
-      })}
-    </>
   );
 }

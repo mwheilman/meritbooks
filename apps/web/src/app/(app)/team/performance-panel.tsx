@@ -46,6 +46,7 @@ import { clsx } from 'clsx';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery } from '@/hooks';
 import { EmptyState, TableSkeleton } from '@/components/ui';
+import { formatCompactMoney } from '@/lib/format/money';
 
 // ── Data contract (matches /api/team-performance) ────────────────────────────
 
@@ -206,11 +207,7 @@ function money(cents: number | null | undefined): string {
 /** Compact money for tight columns ($1.2M / $840K / $512). */
 function moneyCompact(cents: number | null | undefined): string {
   if (cents == null || Number.isNaN(cents) || cents === 0) return cents === 0 ? '$0' : NA;
-  const dollars = cents / 100;
-  const abs = Math.abs(dollars);
-  if (abs >= 1_000_000) return `$${(dollars / 1_000_000).toFixed(1)}M`;
-  if (abs >= 1_000) return `$${(dollars / 1_000).toFixed(1)}K`;
-  return `$${dollars.toFixed(0)}`;
+  return formatCompactMoney(cents);
 }
 
 function pctStr(v: number | null | undefined): string {

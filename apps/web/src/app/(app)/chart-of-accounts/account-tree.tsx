@@ -1,14 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { ChevronRight, ChevronDown, Lock, Building2, CreditCard, Landmark } from 'lucide-react';
-import { clsx } from 'clsx';
-import { StatusBadge } from '@/components/ui';
+import { Button, Icon, Tag, cx } from '@meritbooks/merit-ui';
 import { ACCOUNT_TYPE_HIERARCHY, COA_STATS } from '@meritbooks/shared';
+import { AccountFlags } from './account-flags';
+import s from './coa.module.css';
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <span className={cx(s.chev, open && s.chevOpen)} aria-hidden="true">
+      <Icon name="right" />
+    </span>
+  );
+}
 
 export function AccountTree() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set(['ASSET', 'LIABILITY']));
-  const [search, setSearch] = useState('');
 
   function toggle(key: string) {
     setExpanded((prev) => {
@@ -34,24 +41,18 @@ export function AccountTree() {
   return (
     <div>
       {/* Stats bar */}
-      <div className="flex items-center gap-6 mb-4 text-xs text-slate-500">
+      <div className={cx('t-cap tnum', s.treeStats)}>
         <span>{COA_STATS.accountTypes} account types</span>
-        <span className="text-slate-700">·</span>
         <span>{COA_STATS.subTypes} sub-types</span>
-        <span className="text-slate-700">·</span>
         <span>{COA_STATS.groups} groups</span>
-        <span className="text-slate-700">·</span>
         <span>{COA_STATS.accounts} accounts</span>
-        <button onClick={expandAll} className="ml-auto text-brand-400 hover:text-brand-300 transition-colors">
-          Expand all
-        </button>
-        <button onClick={() => setExpanded(new Set())} className="text-slate-400 hover:text-slate-300 transition-colors">
-          Collapse all
-        </button>
+        <span className={s.grow} />
+        <Button variant="quiet" onClick={expandAll}>Expand all</Button>
+        <Button variant="quiet" onClick={() => setExpanded(new Set())}>Collapse all</Button>
       </div>
 
       {/* Tree */}
-      <div className="card divide-y divide-slate-800/30 overflow-x-auto">
+      <div className={s.tree} aria-label="Chart of accounts">
         {ACCOUNT_TYPE_HIERARCHY.map((type) => {
           const typeKey = type.code;
           const typeExpanded = expanded.has(typeKey);
@@ -59,20 +60,13 @@ export function AccountTree() {
           return (
             <div key={typeKey}>
               {/* Account Type level */}
-              <button
-                onClick={() => toggle(typeKey)}
-                className="w-full flex items-center gap-3 px-5 py-3 hover:bg-white/[0.02] transition-colors"
-              >
-                {typeExpanded ? <ChevronDown size={16} className="text-slate-500" /> : <ChevronRight size={16} className="text-slate-500" />}
-                <span className="text-sm font-semibold text-white">{type.name}</span>
-                <span className="text-2xs text-slate-600 font-mono">
-                  {type.normal_balance === 'DEBIT' ? 'DR' : 'CR'}
-                </span>
-                {type.closes_to_retained_earnings && (
-                  <span className="text-2xs text-slate-600">· closes to RE</span>
-                )}
-                <span className="ml-auto text-2xs text-slate-500">
-                  {type.sub_types.reduce((s, st) => s + st.groups.reduce((g, gr) => g + gr.accounts.length, 0), 0)} accounts
+              <button type="button" onClick={() => toggle(typeKey)} className={cx(s.treeRow, s.treeType)} aria-expanded={typeExpanded}>
+                <Chevron open={typeExpanded} />
+                <span>{type.name}</span>
+                <Tag>{type.normal_balance === 'DEBIT' ? 'DR' : 'CR'}</Tag>
+                {type.closes_to_retained_earnings && <span className="t-cap">closes to retained earnings</span>}
+                <span className={cx('t-cap tnum', s.treeEnd)}>
+                  {type.sub_types.reduce((sum, st) => sum + st.groups.reduce((g, gr) => g + gr.accounts.length, 0), 0)} accounts
                 </span>
               </button>
 
@@ -83,13 +77,10 @@ export function AccountTree() {
 
                 return (
                   <div key={stKey}>
-                    <button
-                      onClick={() => toggle(stKey)}
-                      className="w-full flex items-center gap-3 pl-10 pr-5 py-2.5 hover:bg-white/[0.02] transition-colors"
-                    >
-                      {stExpanded ? <ChevronDown size={14} className="text-slate-500" /> : <ChevronRight size={14} className="text-slate-500" />}
-                      <span className="text-sm font-medium text-slate-300">{subType.name}</span>
-                      <span className="ml-auto text-2xs text-slate-600">
+                    <button type="button" onClick={() => toggle(stKey)} className={cx(s.treeRow, s.treeSub)} aria-expanded={stExpanded}>
+                      <Chevron open={stExpanded} />
+                      <span>{subType.name}</span>
+                      <span className={cx('t-cap tnum', s.treeEnd)}>
                         {subType.groups.reduce((g, gr) => g + gr.accounts.length, 0)}
                       </span>
                     </button>
@@ -101,47 +92,29 @@ export function AccountTree() {
 
                       return (
                         <div key={gKey}>
-                          <button
-                            onClick={() => toggle(gKey)}
-                            className="w-full flex items-center gap-3 pl-16 pr-5 py-2 hover:bg-white/[0.02] transition-colors"
-                          >
-                            {gExpanded ? <ChevronDown size={12} className="text-slate-600" /> : <ChevronRight size={12} className="text-slate-600" />}
-                            <span className="text-sm text-slate-400">{group.name}</span>
-                            <span className="ml-auto text-2xs text-slate-600">{group.accounts.length}</span>
+                          <button type="button" onClick={() => toggle(gKey)} className={cx(s.treeRow, s.treeGroup)} aria-expanded={gExpanded}>
+                            <Chevron open={gExpanded} />
+                            <span>{group.name}</span>
+                            <span className={cx('t-cap tnum', s.treeEnd)}>{group.accounts.length}</span>
                           </button>
 
                           {/* Accounts */}
                           {gExpanded && group.accounts.map((account) => (
-                            <div
-                              key={account.number}
-                              className="flex items-center gap-3 pl-24 pr-5 py-2 min-w-[480px] hover:bg-white/[0.02] transition-colors"
-                            >
-                              <span className="text-xs font-mono text-brand-400 w-12 shrink-0">{account.number}</span>
-                              <span className="text-sm text-slate-300">{account.name}</span>
+                            <div key={account.number} className={cx(s.treeRow, s.treeAcct)}>
+                              <span className={s.num}>{account.number}</span>
+                              <span>{account.name}</span>
 
                               {/* Flags */}
-                              <div className="ml-auto flex items-center gap-2">
-                                {account.is_control_account && (
-                                  <span title="Control account — no direct posting">
-                                    <Lock size={12} className="text-amber-500/60" />
-                                  </span>
-                                )}
-                                {account.is_company_specific && (
-                                  <span title="Company-specific account">
-                                    <Building2 size={12} className="text-blue-400/60" />
-                                  </span>
-                                )}
-                                {account.is_bank_account && (
-                                  <span title="Bank account">
-                                    <Landmark size={12} className="text-slate-500" />
-                                  </span>
-                                )}
-                                {account.is_credit_card && (
-                                  <span title="Credit card account">
-                                    <CreditCard size={12} className="text-slate-500" />
-                                  </span>
-                                )}
-                              </div>
+                              <span className={s.treeEnd}>
+                                <AccountFlags
+                                  account={{
+                                    isControlAccount: !!account.is_control_account,
+                                    isCompanySpecific: !!account.is_company_specific,
+                                    isBankAccount: !!account.is_bank_account,
+                                    isCreditCard: !!account.is_credit_card,
+                                  }}
+                                />
+                              </span>
                             </div>
                           ))}
                         </div>

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { addressText, exactMatchOrNull } from '@/lib/parties/match';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
@@ -32,6 +33,9 @@ interface VendorInput {
   tax_id?: string;
   notes?: string;
   website?: string;
+  /** "Already in Merit": the person saw the possible match and chose to create anyway (also `force`). */
+  create_anyway?: boolean;
+  force?: boolean;
 }
 
 // core.vendors stores terms as an integer day count (payment_terms_days), but
@@ -295,12 +299,32 @@ export async function POST(req: NextRequest) {
       return similarity > 0.8;
     });
 
-    if (duplicates.length > 0) {
+    const createAnyway = body.create_anyway === true || body.force === true;
+    if (duplicates.length > 0 && !createAnyway) {
       return NextResponse.json({
         error: 'Potential duplicate vendor detected',
         duplicates: duplicates.map((d: { id: string; name: string }) => ({ id: d.id, name: d.name })),
         message: `Similar vendor(s) already exist: ${duplicates.map((d: { name: string }) => d.name).join(', ')}. Set force=true to create anyway.`,
       }, { status: 409 });
+    }
+
+    // "Already in Merit" (Projects 1111 matcher, suite-level): an EXACT match (same email / phone /
+    // tax id, or name + address) is offered instead of a second record, unless the person chose
+    // to create anyway. The duplicate safety net still files strong matches for review.
+    if (!createAnyway) {
+      const exact = await exactMatchOrNull(supabase, {
+        kind: 'vendor', name: trimmedName, email: body.email ?? null, phone: body.phone ?? null,
+        address: addressText(body),
+      });
+      if (exact) {
+        return NextResponse.json({
+          error: `Already in Merit: ${exact.name} — ${exact.usage}`,
+          code: 'ALREADY_IN_MERIT',
+          duplicates: [{ id: exact.id, name: exact.name }],
+          matches: [exact],
+          message: 'Use the existing vendor, or send create_anyway: true to create a new one.',
+        }, { status: 409 });
+      }
     }
 
     // Create vendor. Only columns that exist on core.vendors are written;

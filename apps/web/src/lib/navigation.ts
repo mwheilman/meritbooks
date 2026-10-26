@@ -79,6 +79,7 @@ export const navigation: NavGroup[] = [
       { label: 'Receipts', href: '/receipts', icon: 'camera' },
       { label: 'Payroll', href: '/payroll', icon: 'users' },
       { label: 'Vendors', href: '/vendors', icon: 'building' },
+      { label: 'Vendor duplicates', href: '/vendors/duplicates', icon: 'layers', disclosure: 'M' },
       { label: 'Vendor compliance', href: '/vendor-compliance', icon: 'lock' },
     ],
   },
@@ -91,6 +92,7 @@ export const navigation: NavGroup[] = [
       { label: 'Customer deposits', href: '/customer-deposits', icon: 'dollar' },
       { label: 'Collections', href: '/collections', icon: 'clock' },
       { label: 'Customers', href: '/customers', icon: 'users' },
+      { label: 'Customer duplicates', href: '/customers/duplicates', icon: 'layers', disclosure: 'M' },
     ],
   },
   {
@@ -99,6 +101,7 @@ export const navigation: NavGroup[] = [
       { label: 'Revenue recognition', href: '/rev-rec', icon: 'calendar' },
       { label: 'Jobs', href: '/jobs', icon: 'hammer' },
       { label: 'WIP schedule', href: '/jobs/wip', icon: 'clipboard' },
+      { label: 'Merit Projects link', href: '/jobs/projects-seam', icon: 'plug', disclosure: 'M' },
       { label: 'Inventory', href: '/inventory', icon: 'box' },
     ],
   },
@@ -176,6 +179,8 @@ export const navigation: NavGroup[] = [
     items: [
       { label: 'Clients', href: '/portfolio', icon: 'building' },
       { label: 'Add clients', href: '/onboarding/portfolio', icon: 'plus' },
+      { label: 'Client conversions', href: '/onboarding/migrations', icon: 'upload' },
+      { label: 'Mapping rules', href: '/onboarding/migrations/rules', icon: 'sliders', disclosure: 'M' },
       { label: 'Get started', href: '/onboarding', icon: 'plus' },
     ],
   },

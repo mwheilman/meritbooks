@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { displayInvoiceStatus, summarizeDelivery } from './delivery-state';
+import { summarizeDelivery } from './delivery-state';
+import { deriveInvoiceStatus, hasReachedCustomer } from './display-status';
+
+// The drawer's status word now comes from the shared derivation (display-status.ts).
+const TODAY = '2026-10-10';
+const displayInvoiceStatus = (status: string, d: { sentAt: string | null }) => ({
+  status: deriveInvoiceStatus({ status, dueDate: '2026-12-31', balanceCents: 100, sentToCustomer: hasReachedCustomer([], d.sentAt) }, TODAY).key,
+});
 
 const ev = (event_type: string, day: string, meta: Record<string, unknown> = {}) => ({ event_type, created_at: `2026-10-${day}T10:00:00Z`, meta });
 
@@ -22,6 +29,8 @@ describe('invoice delivery — header and Delivery from one source (1G-9)', () =
   });
   it('other statuses pass through', () => {
     const none = summarizeDelivery([]);
-    for (const s of ['DRAFT', 'PAID', 'PARTIALLY_PAID', 'VOIDED', 'OVERDUE']) expect(displayInvoiceStatus(s, none).status).toBe(s);
+    for (const s of ['DRAFT', 'PAID', 'PARTIALLY_PAID', 'VOIDED']) expect(displayInvoiceStatus(s, none).status).toBe(s);
+    // A stored OVERDUE that is not past due (due 2026-12-31) reverts to its open status.
+    expect(displayInvoiceStatus('OVERDUE', none).status).toBe('ISSUED');
   });
 });

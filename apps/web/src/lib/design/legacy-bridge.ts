@@ -59,6 +59,35 @@ export const PORTED_ROUTES: readonly string[] = [
   '/portal/vendor/[token]',
   // Document intelligence — the Documents center, rebuilt on the kit (FPB-document-intelligence)
   '/documents',
+  // Wave 4C — cash workspace (position, 13-week forecast, scenarios, accuracy, settings), built on the kit
+  '/cash',
+  // Port batch 1 (Wave 4) — the most-used work screens, rebuilt on the kit
+  '/bank-feed',
+  '/bills',
+  '/bills/intake-queue',
+  '/cash-application',
+  '/chart-of-accounts',
+  '/collections',
+  '/credit-cards',
+  '/customers',
+  '/expenses',
+  '/invoices',
+  '/invoices/collections',
+  '/journal-entries',
+  '/payroll',
+  '/recurring-journal-entries',
+  '/vendors',
+  // Wave 4A — FP&A workspace on the metric registry + chart kit
+  '/fpna',
+  // Onboarding v2 part 1 — Migration Control Tower, client migration, team guide, mapping rules
+  '/onboarding/migrations',
+  '/onboarding/migrations/[projectId]',
+  '/onboarding/migrations/[projectId]/team',
+  '/onboarding/migrations/rules',
+  // Projects seam part 2 — duplicate review queues + the Projects link page
+  '/customers/duplicates',
+  '/vendors/duplicates',
+  '/jobs/projects-seam',
 ];
 
 /**
@@ -71,9 +100,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/ai-decisions',
   '/assets',
   '/audit',
-  '/bank-feed',
-  '/bills',
-  '/bills/intake-queue',
   '/bills/policy',
   '/board-package',
   '/book-to-tax',
@@ -81,22 +107,16 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/budgets',
   '/budgets/drivers',
   '/budgets/reforecast',
-  '/cash',
-  '/cash-application',
   '/categorize',
-  '/chart-of-accounts',
   '/checks',
   '/close',
   '/close-status',
-  '/collections',
   '/compliance',
   '/compliance-1099',
   '/consolidation',
   '/controls',
   '/covenants',
-  '/credit-cards',
   '/customer-deposits',
-  '/customers',
   '/dealer',
   '/dealer/deals',
   '/dealer/deals/[saleId]',
@@ -118,12 +138,10 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/departments',
   '/estimates',
   '/exceptions',
-  '/expenses',
   '/expenses/policy',
   '/fixed-assets',
   '/flagged',
   '/forecast',
-  '/fpna',
   '/import',
   '/insurance',
   '/intangibles',
@@ -133,12 +151,9 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/inventory',
   '/inventory/[id]',
   '/inventory/valuation',
-  '/invoices',
-  '/invoices/collections',
   '/jobs',
   '/jobs/[id]',
   '/jobs/wip',
-  '/journal-entries',
   '/leases',
   '/no-access',
   '/obligations',
@@ -150,7 +165,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/onboarding/sections/equity',
   '/onboarding/tour',
   '/operations',
-  '/payroll',
   '/pbc',
   '/periods',
   '/platform',
@@ -162,7 +176,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/purchase-orders',
   '/reconciliation',
   '/recurring',
-  '/recurring-journal-entries',
   '/reports',
   '/reports/basis-adjustments',
   '/retainage',
@@ -190,7 +203,6 @@ export const LEGACY_ROUTES: readonly string[] = [
   '/tax-provision',
   '/tax/sales-tax',
   '/team',
-  '/vendors',
   '/year-end-close',
 ];
 
@@ -198,7 +210,7 @@ export const LEGACY_ROUTES: readonly string[] = [
  * The ratchet. LEGACY_ROUTES.length may never exceed this, and the test asks you
  * to lower it whenever a page is ported. It only ever goes DOWN.
  */
-export const LEGACY_BASELINE = 126;
+export const LEGACY_BASELINE = 109;
 
 /** Compile a route pattern to a pathname matcher. */
 export function routePatternToRegExp(pattern: string): RegExp {

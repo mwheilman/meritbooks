@@ -1,5 +1,5 @@
 /**
- * Invoice delivery + the status word the drawer shows — derived from ONE source (the
+ * Invoice delivery facts — derived from ONE source (the
  * stored invoice status + invoice_events), so the header and the Delivery section can't
  * disagree (live check Wave 1, fix 1G-9: header "Sent" while Delivery said "Not sent yet").
  *
@@ -26,13 +26,6 @@ export interface InvoiceDelivery {
   lastReminderAt: string | null;
 }
 
-export interface DisplayStatus {
-  /** The status key the badge renders ('ISSUED' = open but never sent). */
-  status: string;
-  /** Plain words for a title/tooltip. */
-  hint: string | null;
-}
-
 const last = (xs: string[]) => (xs.length ? [...xs].sort().at(-1) ?? null : null);
 
 export function summarizeDelivery(events: ReadonlyArray<DeliveryEvent>, sentAtColumn: string | null = null): InvoiceDelivery {
@@ -52,10 +45,5 @@ export function summarizeDelivery(events: ReadonlyArray<DeliveryEvent>, sentAtCo
   };
 }
 
-/** The drawer/list status word. Only "Sent" changes: never sent → "Issued". */
-export function displayInvoiceStatus(status: string, delivery: Pick<InvoiceDelivery, 'sentAt'>): DisplayStatus {
-  if (status === 'SENT' && !delivery.sentAt) {
-    return { status: 'ISSUED', hint: 'Issued and on the books, but not sent to the customer yet.' };
-  }
-  return { status, hint: null };
-}
+// The status WORD is derived in ./display-status.ts (`deriveInvoiceStatus`) — the one
+// derivation shared by the list, drawer and peek; delivery facts feed its `sentToCustomer`.

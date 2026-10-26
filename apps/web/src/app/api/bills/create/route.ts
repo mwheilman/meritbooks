@@ -7,6 +7,7 @@ import { createAttribution, resolveApprover } from '@/lib/services/cost-approval
 import { logHumanAction, logAction } from '@/lib/trust/action-log';
 import { evaluateProposedBill } from '@/lib/policy/ap-enforce';
 import { assertWriteScope, isWriteScopeError, serviceWriter } from '@/lib/db/scoped-writer';
+import { planCommitmentMatches, recordCommitmentMatches } from '@/lib/projects-seam/commitment-match';
 
 export async function POST(request: Request) {
   const ctx = await requireAuthedContext();
@@ -45,11 +46,27 @@ export async function POST(request: Request) {
       (doc) => doc.status === 'MISSING' || doc.status === 'EXPIRED'
     );
 
+    // Projects commitments (migration 194; a no-op unless the org uses Projects): match each
+    // job line to the commitment it bills against (explicit pick, or the one unambiguous open
+    // line), default the retainage % from the commitment, and honour its payment hold.
+    const commitmentPlan = await planCommitmentMatches(supabase, orgId, {
+      vendorId: body.vendor_id,
+      locationId: body.location_id,
+      lines: body.lines.map((l, i) => ({
+        index: i, jobId: l.job_id ?? null, amountCents: l.amount_cents, costType: l.cost_type ?? null, commitmentLineId: l.commitment_line_id ?? null,
+      })),
+    });
+    if (commitmentPlan.errors.length > 0) {
+      return NextResponse.json({ error: commitmentPlan.errors.join('; '), code: 'COMMITMENT_MATCH_INVALID' }, { status: 422 });
+    }
+    const retainageGiven = !!raw && typeof raw === 'object' && (raw as { retainage_pct?: unknown }).retainage_pct !== undefined;
+    const retainagePct = retainageGiven ? body.retainage_pct : (commitmentPlan.defaultRetainagePct ?? body.retainage_pct);
+
     const subtotalCents = body.lines.reduce((s, l) => s + l.amount_cents, 0);
     // Retainage is withheld on the subtotal (not tax), mirroring the AR side.
     // total_cents is the currently-due payable, NET of retainage; the withheld
     // portion is parked in Retainage Payable at approval.
-    const retainageCents = body.retainage_pct > 0 ? Math.round(subtotalCents * body.retainage_pct / 100) : 0;
+    const retainageCents = retainagePct > 0 ? Math.round(subtotalCents * retainagePct / 100) : 0;
     const totalCents = subtotalCents + body.tax_cents - retainageCents;
 
     // Route the bill to an approver (by vendor, falling back to ACCOUNTING).
@@ -123,10 +140,10 @@ export async function POST(request: Request) {
         subtotal_cents: subtotalCents,
         tax_cents: body.tax_cents,
         total_cents: totalCents,
-        retainage_pct: body.retainage_pct,
+        retainage_pct: retainagePct,
         retainage_cents: retainageCents,
-        status: hasIssue ? 'ON_HOLD' : 'PENDING',
-        payment_hold_reason: hasIssue ? 'Vendor compliance documents missing or expired' : null,
+        status: hasIssue || commitmentPlan.holdReason ? 'ON_HOLD' : 'PENDING',
+        payment_hold_reason: hasIssue ? 'Vendor compliance documents missing or expired' : commitmentPlan.holdReason,
         approver_type: approver.approver_type,
         approver_ref: approver.approver_ref,
         ai_extracted: false,
@@ -163,6 +180,20 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: linesErr.message }, { status: 500 });
     }
 
+    // Commitment matches (bill line ↔ Projects commitment line) + 3-way score.
+    const orderedLines = ((insertedLines ?? []) as Array<{ id: string; line_number: number; amount_cents: number }>)
+      .slice().sort((a, b) => a.line_number - b.line_number);
+    let commitmentMatches = 0;
+    try {
+      commitmentMatches = await recordCommitmentMatches(writer, orgId, {
+        billId: bill.id as string, locationId: body.location_id, lines: orderedLines, plan: commitmentPlan, matchedBy: userId,
+        heldStatusBefore: 'PENDING',
+      });
+    } catch (e) {
+      console.error('[bills/create] commitment match failed', e);
+    }
+    const matchByLineNo = new Map(commitmentPlan.matches.map((m) => [m.index + 1, m]));
+
     // Account numbers for GL_CODE routing of job-tagged lines.
     const jobLines = (insertedLines ?? []).filter((l) => (l as { job_id: string | null }).job_id);
     const acctIds = [...new Set(jobLines.map((l) => (l as { account_id: string }).account_id))];
@@ -193,6 +224,9 @@ export async function POST(request: Request) {
           sourceType: 'BILL',
           sourceRef: (l as { id: string }).id,
           billId: bill.id,
+          commitmentLineRef: matchByLineNo.get(lineNo)?.pmCommitmentLineId || null,
+          costCodeRef: matchByLineNo.get(lineNo)?.costCodeRef ?? null,
+          vendorId: body.vendor_id,
           routing: {
             vendorId: body.vendor_id,
             accountNumber: acctNumberById.get((l as { account_id: string }).account_id) ?? null,
@@ -235,8 +269,17 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       bill_id: bill.id,
-      status: hasIssue ? 'ON_HOLD' : 'PENDING',
+      status: hasIssue || commitmentPlan.holdReason ? 'ON_HOLD' : 'PENDING',
       committed_cost_lines: committedCosts,
+      commitments: commitmentPlan.applies
+        ? {
+            matched_lines: commitmentMatches,
+            auto_matched_lines: commitmentPlan.matches.filter((m) => m.source === 'AUTO').length,
+            lines_needing_a_match: commitmentPlan.unmatchedWithOptions.map((i) => i + 1),
+            default_retainage_pct: commitmentPlan.defaultRetainagePct,
+            hold_reason: commitmentPlan.holdReason,
+          }
+        : null,
       compliance_warning: hasIssue ? 'Bill placed on hold due to vendor compliance issues' : null,
       policy: policy.active
         ? {

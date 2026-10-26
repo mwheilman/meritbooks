@@ -352,7 +352,7 @@ describe('department BvA ties to the GL; bridges tie (AC-B16 / AC-B15)', () => {
     expect(rev.budgetCents).toBe(await lineSum(v2.id, `and department_id = '${SALES}' and account_id = '${t.acct.revenue}' and period_number between 1 and 3`));
     const wages = v.lines.find((l) => l.accountId === t.acct.wages)!;
     expect(wages.actualCents).toBe(1_350_000); // the DRAFT entry is excluded
-    expect(wages.verdict).toBe('unfavourable'); // budget is 0 Jan–Mar (hire starts April)
+    expect(wages.verdict).toBe('no_budget'); // budget is 0 Jan–Mar (hire starts April): no F/U call, shown as "—"
     expect(v.totals.measure).toBe('contribution');
     expect(v.closedThrough).toBe('Feb 2026');
     for (const b of Object.values(v.bridges)) expect(bridgeTies(b)).toBe(true);

@@ -1,9 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import {
-  Link2, Copy, Check, Trash2, Loader2, ExternalLink, ShieldOff, FileText, Clock,
-} from 'lucide-react';
+import { useMemo, useState, type CSSProperties } from 'react';
+import { Button, Icon, Input, InlineNotice, Tag } from '@meritbooks/merit-ui';
 import { useQuery, addToast } from '@/hooks';
 
 /**
@@ -17,6 +15,8 @@ import { useQuery, addToast } from '@/hooks';
  * The link is a bearer credential: the list shows only its last four characters. The
  * full link is shown ONCE, right after it is created (copy it then). A W-9 image shows
  * the vendor's full TIN, so it opens only through a logged reveal with a reason.
+ *
+ * Presentation: kit classes + inline layout only (renders inside bridged and ported pages).
  */
 
 type DocKind = 'W9' | 'COI' | 'BANKING';
@@ -52,6 +52,9 @@ interface PortalResponse {
 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+
+const box: CSSProperties = { padding: '12px 16px', border: '1px solid var(--line)', background: 'var(--white)' };
+const stack: CSSProperties = { display: 'grid', gap: 12 };
 
 export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
   const { data, isLoading, error, refetch } = useQuery<PortalResponse>(
@@ -175,203 +178,195 @@ export function VendorPortalAccess({ vendorId }: { vendorId: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500">
-        <Loader2 size={13} className="animate-spin" /> Loading portal access…
+      <div className="wg-loading" aria-busy="true" style={{ display: 'grid', gap: 10, padding: '8px 0' }}>
+        <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '45%' }} aria-hidden="true" />
+        <span className="t-cap" role="status">Loading portal access…</span>
       </div>
     );
   }
   if (error) {
-    return <p className="text-xs text-slate-500">Portal access unavailable.</p>;
+    return (
+      <InlineNotice tone="neg" title="Portal access didn’t load.">
+        <span>{error}</span>{' '}
+        <Button variant="quiet" onClick={() => refetch()}>Try again</Button>
+      </InlineNotice>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-2xs text-slate-500 leading-relaxed">
-        Send this vendor a secure, no-login link to upload their W-9, COI, and/or banking details.
-        Submissions land here as <span className="text-slate-300">pending review</span> — accepting a
-        document stays a manual step, so a link can never mark a vendor compliant on its own. The link
-        is a secret: share it directly and revoke if it leaks.
+    <div style={stack}>
+      <p className="t-cap">
+        Send this vendor a secure, no-login link to upload their W-9, COI and/or banking details.
+        Submissions land here as <b className="ink-2">pending review</b> — accepting a document stays a
+        manual step, so a link can never mark a vendor compliant on its own. The link is a secret:
+        share it directly and revoke it if it leaks.
       </p>
 
       {/* Active links */}
       {activeTokens.length > 0 ? (
-        <div className="space-y-2">
+        <div style={{ display: 'grid', gap: 8 }}>
           {activeTokens.map((t) => (
-            <div key={t.id} className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <Link2 size={13} className="text-emerald-300" />
-                <span className="text-2xs uppercase tracking-wider text-emerald-300 font-semibold">Active upload link</span>
-                <span className="ml-auto flex items-center gap-1.5">
-                  {t.requestedDocs.map((d) => (
-                    <span key={d} className="rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-medium text-slate-300">{d}</span>
-                  ))}
+            <div key={t.id} style={{ ...box, boxShadow: 'inset 3px 0 var(--electric)', display: 'grid', gap: 8 }}>
+              <div className="row row--between">
+                <span className="mb-sev"><Icon name="plug" /> Active upload link</span>
+                <span className="row" style={{ gap: 4 }}>
+                  {t.requestedDocs.map((d) => <Tag key={d}>{d}</Tag>)}
                 </span>
               </div>
               {fresh && fresh.id === t.id ? (
-                <div className="space-y-1">
-                  <div className="flex items-center gap-1.5">
-                    <input
+                <div style={{ display: 'grid', gap: 6 }}>
+                  <div className="row">
+                    <Input
                       readOnly
                       value={urlFor(fresh.token)}
                       onFocus={(e) => e.currentTarget.select()}
                       aria-label="Portal link URL"
-                      className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
+                      style={{ flex: 1, minWidth: 0 }}
                     />
-                    <button
-                      onClick={() => copy(fresh.token)}
-                      title="Copy link"
-                      className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
-                    >
-                      {copiedId === fresh.token ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                    <Button onClick={() => copy(fresh.token)} title="Copy link" icon={copiedId === fresh.token ? 'check' : undefined}>
                       {copiedId === fresh.token ? 'Copied' : 'Copy'}
-                    </button>
+                    </Button>
                     <a
                       href={urlFor(fresh.token)}
                       target="_blank"
                       rel="noreferrer"
                       title="Open the portal as the vendor sees it"
-                      className="shrink-0 inline-flex items-center px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
+                      aria-label="Open the portal as the vendor sees it"
+                      className="btn btn--quiet btn--icon"
                     >
-                      <ExternalLink size={12} />
+                      <Icon name="right" />
                     </a>
                   </div>
-                  <p className="text-2xs text-amber-300">Copy this link now. For security it won’t be shown again — create a new link if you lose it.</p>
+                  <InlineNotice tone="warn" title="Copy this link now.">
+                    For security it won’t be shown again — create a new link if you lose it.
+                  </InlineNotice>
                 </div>
               ) : (
-                <p className="text-2xs text-slate-400">
-                  Link ending <span className="font-mono text-slate-300">…{t.tokenLast4}</span>. The full link was shown once when it was created; create a new one if you need to resend it.
+                <p className="ink-2">
+                  Link ending <span className="tnum">…{t.tokenLast4}</span>. The full link was shown once when it was created; create a new one if you need to resend it.
                 </p>
               )}
-              <div className="flex items-center gap-3 text-2xs text-slate-500">
-                {t.expiresAt ? <span className="inline-flex items-center gap-1"><Clock size={10} /> Expires {fmt(t.expiresAt)}</span> : <span>No expiry</span>}
-                <span>·</span>
+              <div className="row t-cap" style={{ flexWrap: 'wrap' }}>
+                {t.expiresAt ? <span className="row" style={{ gap: 4 }}><Icon name="clock" /> Expires {fmt(t.expiresAt)}</span> : <span>No expiry</span>}
+                <span aria-hidden="true">·</span>
                 {t.lastUsedAt ? <span>Last used {fmt(t.lastUsedAt)}</span> : <span>Not used yet</span>}
-                <button
-                  onClick={() => revoke(t.id)}
-                  disabled={busy !== null}
-                  className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {busy === t.id ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />} Revoke
-                </button>
+                <span style={{ flex: 1 }} />
+                <Button variant="danger" onClick={() => revoke(t.id)} disabled={busy !== null} aria-busy={busy === t.id || undefined}>
+                  {busy === t.id ? 'Revoking…' : 'Revoke'}
+                </Button>
               </div>
             </div>
           ))}
         </div>
       ) : (
-        <div className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-slate-400">
-          <ShieldOff size={13} />
-          <span className="text-xs">No active upload link.</span>
+        <div className="row ink-2" style={{ ...box, borderStyle: 'dashed', borderColor: 'var(--line-2)' }}>
+          <Icon name="lock" />
+          <span>No active upload link.</span>
         </div>
       )}
 
       {/* Create a new link */}
-      <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-2xs text-slate-500 uppercase tracking-wider mr-1">Request</span>
+      <div style={{ ...box, display: 'grid', gap: 12 }}>
+        <div className="row" style={{ flexWrap: 'wrap' }} role="group" aria-label="Documents to request">
+          <span className="eyebrow" style={{ marginRight: 4 }}>Request</span>
           {DOC_KINDS.map((d) => (
-            <button
+            <Button
               key={d.key}
-              type="button"
+              variant={kinds[d.key] ? 'default' : 'quiet'}
+              icon={kinds[d.key] ? 'check' : undefined}
               onClick={() => toggleKind(d.key)}
               aria-pressed={kinds[d.key]}
-              className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-2xs font-medium transition-colors ${
-                kinds[d.key]
-                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                  : 'border-slate-700 bg-slate-800/40 text-slate-400 hover:text-slate-200'
-              }`}
             >
-              {kinds[d.key] && <Check size={11} />} {d.label}
-            </button>
+              {d.label}
+            </Button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-2xs text-slate-500 uppercase tracking-wider">Expires (default 45 days)</span>
-          <input
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <label className="field-label" htmlFor={`vp-expiry-${vendorId}`}>Expires (default 45 days)</label>
+          <Input
+            id={`vp-expiry-${vendorId}`}
             type="date"
             min={today}
             value={expiry}
             onChange={(e) => setExpiry(e.target.value)}
             aria-label="Link expiration date (optional)"
-            className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+            style={{ width: 168 }}
           />
         </div>
-        <button
-          onClick={mint}
-          disabled={busy !== null}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />} Create upload link
-        </button>
+        <div>
+          <Button onClick={mint} disabled={busy !== null} icon="plug" aria-busy={busy === 'mint' || undefined}>
+            {busy === 'mint' ? 'Creating…' : 'Create upload link'}
+          </Button>
+        </div>
       </div>
 
       {/* Submissions — pending review */}
       <div>
-        <h4 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-1.5">
+        <h4 className="eyebrow" style={{ marginBottom: 8 }}>
           Submitted documents{submissions.length > 0 ? ` (${submissions.length})` : ''}
         </h4>
         {submissions.length === 0 ? (
-          <p className="text-2xs text-slate-600">Nothing submitted yet.</p>
+          <p className="t-cap">Nothing submitted yet. Uploads through the link appear here for review.</p>
         ) : (
-          <div className="rounded-lg bg-slate-800/30 divide-y divide-slate-800/50">
-            {submissions.map((sub) => (
-              <div key={sub.id}>
-              <div className="flex items-center justify-between gap-3 px-3 py-2">
-                <span className="inline-flex items-center gap-2 min-w-0 text-sm text-slate-200">
-                  <FileText size={13} className="shrink-0 text-slate-500" />
-                  <span className="truncate">{sub.fileName}</span>
-                </span>
-                <span className="flex items-center gap-2 shrink-0">
-                  <span className="rounded border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
-                    Pending review
+          <ul style={{ listStyle: 'none', border: '1px solid var(--line)' }}>
+            {submissions.map((sub, i) => (
+              <li key={sub.id} style={{ borderTop: i === 0 ? 0 : '1px solid var(--line)', padding: '8px 12px' }}>
+                <div className="row row--between" style={{ minWidth: 0 }}>
+                  <span className="row" style={{ minWidth: 0 }}>
+                    <Icon name="file-text" />
+                    <span className="mb-trunc">{sub.fileName}</span>
                   </span>
-                  <span className="text-2xs text-slate-500">{fmt(sub.createdAt)}</span>
-                  {sub.viewUrl && (
-                    <a
-                      href={sub.viewUrl}
-                      rel="noreferrer"
-                      title="Download submitted file"
-                      className="inline-flex items-center rounded-md bg-slate-800 px-1.5 py-1 text-slate-300 hover:bg-slate-700"
-                    >
-                      <ExternalLink size={12} />
-                    </a>
-                  )}
-                  {sub.requiresReveal && revealFor !== sub.id && (
-                    <button
-                      type="button"
-                      onClick={() => { setRevealFor(sub.id); setRevealReason(''); }}
-                      title="This W-9 shows the full taxpayer ID — opening it is logged"
-                      className="inline-flex items-center rounded-md bg-slate-800 px-1.5 py-1 text-2xs text-slate-300 hover:bg-slate-700"
-                    >
-                      Open W-9
-                    </button>
-                  )}
-                </span>
-              </div>
-              {revealFor === sub.id && (
-                <div className="flex items-center gap-1.5 px-3 pb-2">
-                  <input
-                    value={revealReason}
-                    onChange={(e) => setRevealReason(e.target.value)}
-                    placeholder="Why are you opening it? (logged)"
-                    aria-label="Reason for opening the W-9"
-                    className="flex-1 min-w-0 px-2 py-1 rounded-md bg-slate-950 border border-slate-700 text-2xs text-slate-200 focus:outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void openW9(sub.id)}
-                    disabled={busy !== null || revealReason.trim().length < 3}
-                    className="shrink-0 px-2 py-1 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    {busy === sub.id ? 'Opening…' : 'Open'}
-                  </button>
-                  <button type="button" onClick={() => setRevealFor(null)} className="shrink-0 px-2 py-1 text-2xs text-slate-400 hover:text-slate-200">
-                    Cancel
-                  </button>
+                  <span className="row" style={{ flex: 'none' }}>
+                    <Tag tone="warn">Pending review</Tag>
+                    <span className="t-cap">{fmt(sub.createdAt)}</span>
+                    {sub.viewUrl && (
+                      <a
+                        href={sub.viewUrl}
+                        rel="noreferrer"
+                        title="Download submitted file"
+                        aria-label={`Download ${sub.fileName}`}
+                        className="btn btn--quiet btn--icon"
+                      >
+                        <Icon name="down" />
+                      </a>
+                    )}
+                    {sub.requiresReveal && revealFor !== sub.id && (
+                      <Button
+                        variant="quiet"
+                        icon="eye"
+                        onClick={() => { setRevealFor(sub.id); setRevealReason(''); }}
+                        title="This W-9 shows the full taxpayer ID — opening it is logged"
+                      >
+                        Open W-9
+                      </Button>
+                    )}
+                  </span>
                 </div>
-              )}
-              </div>
+                {revealFor === sub.id && (
+                  <div className="row" style={{ marginTop: 8 }}>
+                    <Input
+                      value={revealReason}
+                      onChange={(e) => setRevealReason(e.target.value)}
+                      placeholder="Why are you opening it? (logged)"
+                      aria-label="Reason for opening the W-9"
+                      style={{ flex: 1, minWidth: 0 }}
+                      autoFocus
+                    />
+                    <Button
+                      onClick={() => void openW9(sub.id)}
+                      disabled={busy !== null || revealReason.trim().length < 3}
+                    >
+                      {busy === sub.id ? 'Opening…' : 'Open'}
+                    </Button>
+                    <Button variant="quiet" onClick={() => setRevealFor(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </li>
             ))}
-          </div>
+          </ul>
         )}
       </div>
     </div>

@@ -25,7 +25,8 @@ import {
   toast,
 } from '@meritbooks/merit-ui';
 import { entityRecordHref, entityTypeLabel, formatBytes } from '@/lib/documents/schema';
-import { DOC_CLASSES, DOC_CLASS_LABEL, TARGETS, type DocClass, type ProposalSummaryDto } from '@/lib/documents/intelligence/types';
+import { TARGETS, type DocClass, type ProposalSummaryDto } from '@/lib/documents/intelligence/types';
+import { DOCUMENT_TYPES, parseDocumentType } from '@/lib/documents/catalog';
 import { openDocument, proposalHref } from '@/components/documents/intelligence-client';
 import { LinkRecordDialog } from './link-record-dialog';
 import { KEY_DATE_LABEL, fmtDate, fmtTime, statusOf, typeLabel, type AnalyzeResponse, type CenterRow, type LocationOption } from './documents-types';
@@ -193,10 +194,10 @@ export function DocumentPanel({ row, locations, onClose, onChanged, onDeleted }:
       <PanelSection title="Correct it">
         <div className={s.inline}>
           <Field label="Type">
-            <Select value={docClass} onChange={(e) => setDocClass(e.target.value as DocClass)}>
-              {DOC_CLASSES.map((c) => (
-                <option key={c} value={c}>
-                  {DOC_CLASS_LABEL[c]}
+            <Select value={docClass} onChange={(e) => setDocClass(parseDocumentType(e.target.value) ?? 'other')}>
+              {DOCUMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
                 </option>
               ))}
             </Select>

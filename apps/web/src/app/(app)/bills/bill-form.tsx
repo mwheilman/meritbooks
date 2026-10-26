@@ -1,15 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import {
-  Upload, Plus, Trash2, AlertCircle, Loader2, Check, Send,
-  Search, X, ChevronDown, AlertTriangle, FileText,
-  Camera, Sparkles, Eye, Briefcase,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { useState, useEffect, useCallback, useRef, useMemo, type DragEvent } from 'react';
+import { Button, Conf, Field, Icon, InlineNotice, Input, Select, Tag, cx } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
 import type { JobSearchResult } from '@meritbooks/shared';
+import s from './bills.module.css';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -74,26 +70,21 @@ function emptyLine(): BillLineState {
   return { key: genKey(), description: '', account_id: '', accountLabel: '', quantity: '1', unitCost: '', amount: '', confidence: null, job_id: '', jobLabel: '', cost_type: 'MATERIALS' };
 }
 
-function confidenceColor(c: number): string {
-  if (c >= 0.85) return 'text-emerald-400';
-  if (c >= 0.6) return 'text-amber-400';
-  return 'text-red-400';
-}
-function confidenceBg(c: number): string {
-  if (c >= 0.85) return 'bg-emerald-500/10 border-emerald-500/20';
-  if (c >= 0.6) return 'bg-amber-500/10 border-amber-500/20';
-  return 'bg-red-500/10 border-red-500/20';
-}
-
+/** AI confidence on an extracted field: the kit meter + number (0–100). */
 function ConfBadge({ score }: { score: number | null }) {
   if (score === null) return null;
-  const pct = Math.round(score * 100);
-  return (
-    <span className={clsx('inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-mono font-medium border', confidenceBg(score))}>
-      <Sparkles size={8} className={confidenceColor(score)} />
-      <span className={confidenceColor(score)}>{pct}%</span>
-    </span>
-  );
+  return <Conf score={Math.round(score * 100)} label={`AI confidence ${Math.round(score * 100)} of 100`} />;
+}
+
+function useOutsideClose(open: boolean, setOpen: (v: boolean) => void) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, setOpen]);
+  return ref;
 }
 
 // ─── Account Picker ─────────────────────────────────────────
@@ -106,49 +97,56 @@ function AccountPicker({ value, label, onChange, locationId }: {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useOutsideClose(open, setOpen);
 
   useEffect(() => { const t = setTimeout(() => setDebounced(search), 200); return () => clearTimeout(t); }, [search]);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const params: Record<string, string> = {};
   if (debounced.length >= 1) params.q = debounced;
   if (locationId) params.location_id = locationId;
 
-  const { data } = useQuery<{ data: AccountOption[] }>(open ? '/api/accounts/search' : null, Object.keys(params).length > 0 ? params : undefined);
-  const accounts = (data?.data ?? []).filter((a) => !a.is_control_account);
+  // /api/accounts/search answers `{ recent, accounts }` (raw body — api.get does not unwrap).
+  // Reading `data.data` (never sent) left this picker empty; read the real shape.
+  const { data, isLoading } = useQuery<{ recent?: AccountOption[]; accounts?: AccountOption[] }>(open ? '/api/accounts/search' : null, Object.keys(params).length > 0 ? params : undefined);
+  const accounts = [...(data?.recent ?? []), ...(data?.accounts ?? [])].filter((a) => !a.is_control_account);
 
   return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate',
-          value ? 'bg-slate-800 border-slate-700 text-white' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
-        {label || 'Select account...'}
-        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
+    <div ref={ref} className={s.picker}>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className={s.pickerBtn}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label ? `GL account: ${label}` : 'Choose a GL account'}
+      >
+        <span className={value ? undefined : s.pickerEmpty}>{label || 'Choose account'}</span>
+        <span className={s.pickerChevron} aria-hidden="true"><Icon name="down" /></span>
       </button>
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <div className="relative">
-              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
-            </div>
+        <div className={cx('popover', s.pickerPop)} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}>
+          <div className="popover-head">
+            <Icon name="search" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search accounts" aria-label="Search accounts" autoFocus />
           </div>
-          <div className="max-h-40 overflow-y-auto">
-            {accounts.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-slate-500 text-center">{debounced ? 'No matches' : 'Type to search'}</p>
+          <ul className={cx('popover-list', s.pickerList)} role="listbox" aria-label="GL accounts">
+            {isLoading && accounts.length === 0 ? (
+              <li className={cx('t-cap', s.pickerMsg)}>Searching…</li>
+            ) : accounts.length === 0 ? (
+              <li className={cx('t-cap', s.pickerMsg)}>{debounced ? 'No account matches.' : 'Type to search.'}</li>
             ) : accounts.slice(0, 20).map((a) => (
-              <button key={a.id} type="button" onClick={() => { onChange(a.id, `${a.account_number} · ${a.name}`); setOpen(false); setSearch(''); }}
-                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 flex items-center gap-2">
-                <span className="font-mono text-slate-500 w-12 shrink-0">{a.account_number}</span>
-                <span className="text-slate-300 truncate">{a.name}</span>
-              </button>
+              <li key={a.id} role="option" aria-selected={a.id === value}>
+                <button
+                  type="button"
+                  className={cx('popover-item', s.pickerItem)}
+                  onClick={() => { onChange(a.id, `${a.account_number} · ${a.name}`); setOpen(false); setSearch(''); }}
+                >
+                  <span className={s.pickerNum}>{a.account_number}</span>
+                  <span className="mb-trunc">{a.name}</span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
     </div>
@@ -165,54 +163,66 @@ function JobPicker({ value, label, onChange, locationId }: {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useOutsideClose(open, setOpen);
 
   useEffect(() => { const t = setTimeout(() => setDebounced(search), 200); return () => clearTimeout(t); }, [search]);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h);
-  }, []);
 
   const params: Record<string, string> = {};
   if (locationId) params.location_id = locationId;
   if (debounced.length >= 1) params.q = debounced;
 
-  const { data } = useQuery<JobSearchResult[]>(open && locationId ? '/api/jobs/search' : null, Object.keys(params).length > 0 ? params : undefined);
+  const { data, isLoading } = useQuery<JobSearchResult[]>(open && locationId ? '/api/jobs/search' : null, Object.keys(params).length > 0 ? params : undefined);
   const jobs = data ?? [];
 
   return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => locationId && setOpen(!open)} disabled={!locationId}
-        className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate disabled:opacity-50',
-          value ? 'bg-brand-500/10 border-brand-500/30 text-brand-300' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
-        <Briefcase size={9} className="inline mr-1 -mt-0.5" />
-        {label || (locationId ? 'No job' : 'Pick company')}
-        {value && (
-          <span onClick={(e) => { e.stopPropagation(); onChange('', ''); }} className="float-right text-slate-500 hover:text-red-400"><X size={11} /></span>
-        )}
+    <div ref={ref} className={s.picker}>
+      <button
+        type="button"
+        onClick={() => locationId && setOpen(!open)}
+        disabled={!locationId}
+        className={s.pickerBtn}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={label ? `Job: ${label}` : 'Choose a job'}
+        style={value ? { paddingRight: 56 } : undefined}
+      >
+        <span className={value ? undefined : s.pickerEmpty}>{label || (locationId ? 'No job' : 'Pick a company first')}</span>
+        <span className={s.pickerChevron} aria-hidden="true"><Icon name="down" /></span>
       </button>
+      {value && (
+        <span className={s.pickerClear}>
+          <Button variant="quiet" iconOnly icon="x" aria-label="Clear job" onClick={() => onChange('', '')} />
+        </span>
+      )}
       {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-64 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <div className="relative">
-              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
-            </div>
+        <div className={cx('popover', s.pickerPop)} onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setOpen(false); } }}>
+          <div className="popover-head">
+            <Icon name="search" />
+            <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search jobs" aria-label="Search jobs" autoFocus />
           </div>
-          <div className="max-h-40 overflow-y-auto">
-            <button type="button" onClick={() => { onChange('', ''); setOpen(false); setSearch(''); }}
-              className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">No job (overhead)</button>
-            {jobs.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-slate-500 text-center">{debounced ? 'No matches' : 'Type to search'}</p>
-            ) : jobs.map((j) => (
-              <button key={j.id} type="button" onClick={() => { onChange(j.id, `${j.job_number} · ${j.name}`); setOpen(false); setSearch(''); }}
-                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 flex items-center gap-2">
-                <span className="font-mono text-slate-500 shrink-0">{j.job_number}</span>
-                <span className="text-slate-300 truncate">{j.name}</span>
+          <ul className={cx('popover-list', s.pickerList)} role="listbox" aria-label="Jobs">
+            <li role="option" aria-selected={!value}>
+              <button type="button" className={cx('popover-item', s.pickerItem)} onClick={() => { onChange('', ''); setOpen(false); setSearch(''); }}>
+                <span className="ink-2">No job (overhead)</span>
               </button>
+            </li>
+            {isLoading && jobs.length === 0 ? (
+              <li className={cx('t-cap', s.pickerMsg)}>Searching…</li>
+            ) : jobs.length === 0 ? (
+              <li className={cx('t-cap', s.pickerMsg)}>{debounced ? 'No job matches.' : 'Type to search.'}</li>
+            ) : jobs.map((j) => (
+              <li key={j.id} role="option" aria-selected={j.id === value}>
+                <button
+                  type="button"
+                  className={cx('popover-item', s.pickerItem)}
+                  onClick={() => { onChange(j.id, `${j.job_number} · ${j.name}`); setOpen(false); setSearch(''); }}
+                >
+                  <span className={s.pickerNum}>{j.job_number}</span>
+                  <span className="mb-trunc">{j.name}</span>
+                </button>
+              </li>
             ))}
-          </div>
+          </ul>
         </div>
       )}
     </div>
@@ -226,6 +236,7 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [uploadError, setUploadError] = useState('');
   const [documentPreview, setDocumentPreview] = useState<string | null>(null);
   const [isAiParsed, setIsAiParsed] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   const [locationId, setLocationId] = useState('');
   const [vendorId, setVendorId] = useState('');
@@ -245,9 +256,9 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
   const [duplicateWarning, setDuplicateWarning] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const { data: locData } = useQuery<LocationOption[]>('/api/locations');
+  const { data: locData, isLoading: locLoading, error: locError } = useQuery<LocationOption[]>('/api/locations');
   const locations = locData ?? [];
-  const { data: vendorData } = useQuery<{ data: VendorOption[] }>('/api/vendors?per_page=200');
+  const { data: vendorData, isLoading: vendorLoading, error: vendorError } = useQuery<{ data: VendorOption[] }>('/api/vendors?per_page=200');
   const vendors = vendorData?.data ?? [];
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -394,230 +405,236 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
     setSubmitting(false);
   }, [locationId, vendorId, billNumber, billDate, dueDate, taxCents, retainagePct, lines, onSuccess]);
 
+  const onDrop = (e: DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && !uploading) void handleFileUpload(f);
+  };
+
+  const cannotSubmit = submitting || !locationId || !vendorId || subtotalCents === 0;
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-white">New Bill</h2>
-          {isAiParsed && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-              <Sparkles size={10} /> AI Extracted
-            </span>
-          )}
+    <section className={s.form} aria-label="New bill">
+      <div className={s.formHead}>
+        <div className="row">
+          <h2 className="t-section">New bill</h2>
+          {isAiParsed && <Tag tone="ai">Read by AI</Tag>}
         </div>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white"><X size={18} /></button>
+        <Button variant="quiet" iconOnly icon="x" aria-label="Close the new bill form" onClick={onClose} />
       </div>
 
-      <div className="flex">
+      <div className={s.formBody}>
         {documentPreview && (
-          <div className="w-80 border-r border-slate-800 p-4 shrink-0">
-            <p className="text-xs text-slate-500 mb-2 flex items-center gap-1"><Eye size={11} /> Original Document</p>
-            <img src={documentPreview} alt="Invoice" className="w-full rounded-lg border border-slate-700" />
+          <div className={s.preview}>
+            <span className="eyebrow">Original document</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={documentPreview} alt="The uploaded vendor invoice" />
           </div>
         )}
 
-        <div className="flex-1 p-6 space-y-5">
+        <div className={s.formMain}>
           {!isAiParsed && (
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:border-indigo-500/40 hover:bg-indigo-500/[0.02] transition-colors"
-            >
-              <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.jpg,.jpeg,.png,.webp"
+            <>
+              <input ref={fileInputRef} type="file" className="sr" tabIndex={-1} aria-hidden="true" accept=".pdf,.jpg,.jpeg,.png,.webp"
                 onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
-              {uploading ? (
-                <div className="flex flex-col items-center gap-2">
-                  <Loader2 size={24} className="text-indigo-400 animate-spin" />
-                  <p className="text-sm text-indigo-300">AI is reading the invoice...</p>
-                  <p className="text-xs text-slate-500">Extracting vendor, amounts, line items, and dates</p>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-center gap-3 mb-2">
-                    <Upload size={20} className="text-slate-500" />
-                    <Camera size={20} className="text-slate-500" />
-                    <FileText size={20} className="text-slate-500" />
-                  </div>
-                  <p className="text-sm text-slate-300">Drop an invoice or click to upload</p>
-                  <p className="text-xs text-slate-500 mt-1">PDF, JPEG, PNG, WebP · AI will auto-extract all fields</p>
-                </>
-              )}
-            </div>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                aria-busy={uploading || undefined}
+                className={cx(s.drop, dragOver && s.dropOver)}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={onDrop}
+              >
+                {uploading ? (
+                  <>
+                    <span className="t-head" role="status">Reading the invoice…</span>
+                    <span className="t-cap">Pulling out the vendor, amounts, line items and dates.</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={s.dropIcon} aria-hidden="true"><Icon name="upload" /><Icon name="camera" /><Icon name="file-text" /></span>
+                    <span className="t-head">Drop an invoice, or click to upload</span>
+                    <span className="t-cap">PDF, JPEG, PNG or WebP. AI fills in every field for you to check.</span>
+                  </>
+                )}
+              </button>
+            </>
           )}
 
           {uploadError && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <AlertCircle size={13} className="text-red-400" />
-              <p className="text-xs text-red-400">{uploadError}</p>
-            </div>
+            <InlineNotice tone="neg" title="Couldn't read that file.">{uploadError}</InlineNotice>
           )}
           {duplicateWarning && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <AlertTriangle size={13} className="text-amber-400" />
-              <p className="text-xs text-amber-400">{duplicateWarning}</p>
-            </div>
+            <InlineNotice tone="warn" title="Possible duplicate.">{duplicateWarning}</InlineNotice>
           )}
 
           {!isAiParsed && !uploading && (
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-800" />
-              <span className="text-xs text-slate-600">or enter manually</span>
-              <div className="h-px flex-1 bg-slate-800" />
-            </div>
+            <div className={cx('t-cap', s.or)}>or enter it by hand</div>
           )}
 
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium">Company</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
-                <option value="">Select...</option>
+          {/* match-before-create */}
+          <div className={s.grid4}>
+            <Field label="Company" error={locError ? "Couldn't load companies — reopen the form to retry." : undefined}>
+              <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                <option value="">{locLoading ? 'Loading companies…' : 'Select…'}</option>
                 {locations.map((l) => <option key={l.id} value={l.id}>{l.short_code} · {l.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Vendor <ConfBadge score={vendorConfidence} /></label>
-              <select value={vendorId} onChange={(e) => { setVendorId(e.target.value); setVendorConfidence(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white">
-                <option value="">{vendorName && !vendorId ? `"${vendorName}" (no match)` : 'Select vendor...'}</option>
+              </Select>
+            </Field>
+            <Field
+              label={<span className={s.labelRow}>Vendor <ConfBadge score={vendorConfidence} /></span>}
+              error={vendorError ? "Couldn't load vendors — reopen the form to retry." : undefined}
+            >
+              <Select value={vendorId} onChange={(e) => { setVendorId(e.target.value); setVendorConfidence(null); }}>
+                <option value="">{vendorName && !vendorId ? `"${vendorName}" (no match)` : vendorLoading ? 'Loading vendors…' : 'Select vendor…'}</option>
                 {vendors.map((v) => <option key={v.id} value={v.id}>{v.display_name ?? v.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill # <ConfBadge score={billNumberConf} /></label>
-              <input type="text" value={billNumber} onChange={(e) => { setBillNumber(e.target.value); setBillNumberConf(null); }}
-                placeholder="INV-001" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium">Tax</label>
-              <div className="relative">
-                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">$</span>
-                <input type="number" value={taxCents / 100} onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value || '0') * 100))}
-                  step="0.01" min="0" className="w-full pl-6 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
-              </div>
-            </div>
+              </Select>
+            </Field>
+            <Field label={<span className={s.labelRow}>Bill # <ConfBadge score={billNumberConf} /></span>}>
+              <Input type="text" className="tnum" value={billNumber} onChange={(e) => { setBillNumber(e.target.value); setBillNumberConf(null); }}
+                placeholder="INV-001" />
+            </Field>
+            <Field label="Tax">
+              <span className={s.money}>
+                <span aria-hidden="true">$</span>
+                <Input type="number" value={taxCents / 100} onChange={(e) => setTaxCents(Math.round(parseFloat(e.target.value || '0') * 100))}
+                  step="0.01" min="0" />
+              </span>
+            </Field>
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Bill Date <ConfBadge score={billDateConf} /></label>
-              <input type="date" value={billDate} onChange={(e) => { setBillDate(e.target.value); setBillDateConf(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium flex items-center gap-1">Due Date <ConfBadge score={dueDateConf} /></label>
-              <input type="date" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueDateConf(null); }}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1 font-medium">Retainage %</label>
-              <div className="relative">
-                <input type="number" value={retainagePct || ''} onChange={(e) => setRetainagePct(Math.min(100, Math.max(0, parseFloat(e.target.value || '0'))))}
-                  step="0.5" min="0" max="100" placeholder="0"
-                  className="w-full pr-7 pl-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono placeholder:text-slate-600" />
-                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
-              </div>
-            </div>
+          <div className={s.grid3}>
+            <Field label={<span className={s.labelRow}>Bill date <ConfBadge score={billDateConf} /></span>}>
+              <Input type="date" className="tnum" value={billDate} onChange={(e) => { setBillDate(e.target.value); setBillDateConf(null); }} />
+            </Field>
+            <Field
+              label={<span className={s.labelRow}>Due date <ConfBadge score={dueDateConf} /></span>}
+              help={!isAiParsed && vendorId ? "Set from the vendor's payment terms; change it if this bill differs." : undefined}
+            >
+              <Input type="date" className="tnum" value={dueDate} onChange={(e) => { setDueDate(e.target.value); setDueDateConf(null); }} />
+            </Field>
+            <Field label="Retainage %">
+              <span className={s.pct}>
+                <Input type="number" value={retainagePct || ''} onChange={(e) => setRetainagePct(Math.min(100, Math.max(0, parseFloat(e.target.value || '0'))))}
+                  step="0.5" min="0" max="100" placeholder="0" />
+                <span aria-hidden="true">%</span>
+              </span>
+            </Field>
           </div>
 
           {/* Line items */}
-          <div className="border border-slate-800 rounded-xl overflow-hidden">
-            <table className="w-full">
+          <div className={s.lines}>
+            <table className="tbl" aria-label="Bill lines">
+              <colgroup>
+                <col style={{ width: 64 }} />
+                <col />
+                <col style={{ width: 200 }} />
+                <col style={{ width: 180 }} />
+                <col style={{ width: 128 }} />
+                <col style={{ width: 48 }} />
+              </colgroup>
               <thead>
-                <tr className="border-b border-slate-800 bg-slate-800/30">
-                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 w-8">#</th>
-                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500">Description</th>
-                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[170px]">Account</th>
-                  <th className="px-3 py-2 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[150px]">Job</th>
-                  <th className="px-3 py-2 text-right text-2xs font-semibold uppercase text-slate-500 w-24">Amount</th>
-                  <th className="w-8" />
+                <tr>
+                  <th scope="col">#</th>
+                  <th scope="col">Description</th>
+                  <th scope="col">GL account</th>
+                  <th scope="col">Job</th>
+                  <th scope="col" className="n">Amount</th>
+                  <th scope="col"><span className="sr">Remove</span></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/30">
+              <tbody>
                 {lines.map((line, idx) => (
-                  <tr key={line.key} className="hover:bg-slate-800/20 align-top">
-                    <td className="px-3 py-2 text-xs text-slate-600 font-mono">
-                      {idx + 1}
-                      {line.confidence !== null && <ConfBadge score={line.confidence} />}
+                  <tr key={line.key}>
+                    <td>
+                      <span className={cx('tnum', s.lineNo)}>
+                        {idx + 1}
+                        {line.confidence !== null && <ConfBadge score={line.confidence} />}
+                      </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <input type="text" value={line.description} onChange={(e) => updateLine(line.key, 'description', e.target.value)}
-                        placeholder="Line description" className="w-full px-2 py-1 bg-slate-800/50 border border-slate-700/50 rounded text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50" />
-                      <div className="flex items-center gap-1 mt-1">
-                        <input type="number" value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', e.target.value)}
-                          min="0" step="1" title="Qty" className="w-12 px-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
-                        <span className="text-2xs text-slate-600">×</span>
-                        <div className="relative flex-1">
-                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
-                          <input type="text" value={line.unitCost} onChange={(e) => updateLine(line.key, 'unitCost', e.target.value.replace(/[^0-9.]/g, ''))}
-                            placeholder="0.00" title="Unit cost" className="w-full pl-4 pr-1 py-0.5 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none" />
-                        </div>
+                    <td>
+                      <Input type="text" aria-label={`Line ${idx + 1} description`} value={line.description} onChange={(e) => updateLine(line.key, 'description', e.target.value)}
+                        placeholder="Line description" />
+                      <div className={s.qtyRow}>
+                        <Input type="number" aria-label={`Line ${idx + 1} quantity`} className={s.qty} value={line.quantity} onChange={(e) => updateLine(line.key, 'quantity', e.target.value)}
+                          min="0" step="1" title="Quantity" />
+                        <span className="ink-3" aria-hidden="true">×</span>
+                        <span className={s.money}>
+                          <span aria-hidden="true">$</span>
+                          <Input type="text" inputMode="decimal" aria-label={`Line ${idx + 1} unit cost`} value={line.unitCost} onChange={(e) => updateLine(line.key, 'unitCost', e.target.value.replace(/[^0-9.]/g, ''))}
+                            placeholder="0.00" title="Unit cost" />
+                        </span>
                       </div>
                     </td>
-                    <td className="px-3 py-2">
+                    <td>
                       <AccountPicker value={line.account_id} label={line.accountLabel}
                         onChange={(id, lbl) => setLines((prev) => prev.map((l) => l.key === line.key ? { ...l, account_id: id, accountLabel: lbl } : l))}
                         locationId={locationId} />
                     </td>
-                    <td className="px-3 py-2">
+                    <td>
                       <JobPicker value={line.job_id} label={line.jobLabel}
                         onChange={(id, lbl) => setLines((prev) => prev.map((l) => l.key === line.key ? { ...l, job_id: id, jobLabel: lbl } : l))}
                         locationId={locationId} />
                       {line.job_id && (
-                        <select value={line.cost_type} onChange={(e) => updateLine(line.key, 'cost_type', e.target.value)}
-                          className="w-full mt-1 px-1.5 py-1 bg-slate-800 border border-slate-700 rounded text-2xs text-slate-300 focus:outline-none">
+                        <Select aria-label={`Line ${idx + 1} cost type`} value={line.cost_type} onChange={(e) => updateLine(line.key, 'cost_type', e.target.value)}
+                          style={{ marginTop: 6 }}>
                           <option value="MATERIALS">Materials</option>
                           <option value="SUBCONTRACTOR">Subcontractor</option>
                           <option value="EQUIPMENT">Equipment</option>
                           <option value="OTHER">Other</option>
-                        </select>
+                        </Select>
                       )}
                     </td>
-                    <td className="px-3 py-2">
-                      <div className="relative">
-                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
-                        <input type="text" value={line.amount} onChange={(e) => updateLine(line.key, 'amount', e.target.value.replace(/[^0-9.]/g, ''))}
-                          placeholder="0.00" className="w-full pl-4 pr-1 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-white font-mono text-right focus:outline-none focus:border-emerald-500/50" />
-                      </div>
+                    <td>
+                      <span className={s.money}>
+                        <span aria-hidden="true">$</span>
+                        <Input type="text" inputMode="decimal" aria-label={`Line ${idx + 1} amount`} value={line.amount} onChange={(e) => updateLine(line.key, 'amount', e.target.value.replace(/[^0-9.]/g, ''))}
+                          placeholder="0.00" />
+                      </span>
                     </td>
-                    <td className="px-3 py-2">
-                      <button type="button" onClick={() => lines.length > 1 && setLines((p) => p.filter((l) => l.key !== line.key))}
+                    <td>
+                      <Button
+                        variant="quiet"
+                        iconOnly
+                        icon="x"
+                        aria-label={`Remove line ${idx + 1}`}
+                        onClick={() => lines.length > 1 && setLines((p) => p.filter((l) => l.key !== line.key))}
                         disabled={lines.length <= 1}
-                        className={clsx('p-1 rounded', lines.length <= 1 ? 'text-slate-700' : 'text-slate-500 hover:text-red-400')}>
-                        <Trash2 size={12} />
-                      </button>
+                      />
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="border-t border-slate-700">
-                  <td colSpan={3} className="px-3 py-2">
-                    <button type="button" onClick={() => setLines((p) => [...p, emptyLine()])}
-                      className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
-                      <Plus size={12} /> Add line
-                    </button>
+                <tr className={s.subRow}>
+                  <td colSpan={3}>
+                    <Button variant="quiet" icon="plus" onClick={() => setLines((p) => [...p, emptyLine()])}>
+                      Add line
+                    </Button>
                   </td>
-                  <td className="px-3 py-2 text-right text-xs text-slate-500">Subtotal</td>
-                  <td className="px-3 py-2 text-right text-sm font-mono font-semibold text-white">{formatMoney(subtotalCents)}</td>
+                  <td className="n ink-2">Subtotal</td>
+                  <td className="n">{formatMoney(subtotalCents)}</td>
                   <td />
                 </tr>
                 {taxCents > 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-1 text-right text-xs text-slate-500">Tax</td>
-                    <td className="px-3 py-1 text-right text-xs font-mono text-slate-400">{formatMoney(taxCents)}</td>
+                    <td colSpan={4} className="n ink-2">Tax</td>
+                    <td className="n">{formatMoney(taxCents)}</td>
                     <td />
                   </tr>
                 )}
                 {retainageCents > 0 && (
                   <tr>
-                    <td colSpan={4} className="px-3 py-1 text-right text-xs text-amber-500/80">Retainage withheld ({retainagePct}%)</td>
-                    <td className="px-3 py-1 text-right text-xs font-mono text-amber-400">−{formatMoney(retainageCents)}</td>
+                    <td colSpan={4} className="n ink-2">Retainage withheld ({retainagePct}%)</td>
+                    <td className="n">−{formatMoney(retainageCents)}</td>
                     <td />
                   </tr>
                 )}
-                <tr className="bg-slate-800/20">
-                  <td colSpan={4} className="px-3 py-2.5 text-right text-sm font-medium text-white">{retainageCents > 0 ? 'Due now' : 'Total'}</td>
-                  <td className="px-3 py-2.5 text-right text-base font-mono font-bold text-white">{formatMoney(totalCents)}</td>
+                <tr className={s.totalRow}>
+                  <td colSpan={4} className="n">{retainageCents > 0 ? 'Due now' : 'Total'}</td>
+                  <td className="n">{formatMoney(totalCents)}</td>
                   <td />
                 </tr>
               </tfoot>
@@ -625,28 +642,20 @@ export function BillForm({ onClose, onSuccess }: { onClose: () => void; onSucces
           </div>
 
           {formError && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-              <AlertCircle size={13} className="text-red-400" /><p className="text-xs text-red-400">{formError}</p>
-            </div>
+            <InlineNotice tone="neg" title="Not saved.">{formError}</InlineNotice>
           )}
           {successMsg && (
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-              <Check size={13} className="text-emerald-400" /><p className="text-xs text-emerald-400">{successMsg}</p>
-            </div>
+            <InlineNotice icon={<Tag tone="pos">Done</Tag>} title={`${successMsg}.`}>Back to the list in a moment.</InlineNotice>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
-            <button onClick={handleSubmit} disabled={submitting || !locationId || !vendorId || subtotalCents === 0}
-              className={clsx('flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
-                submitting || !locationId || !vendorId || subtotalCents === 0
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
-              {submitting ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : <><Send size={14} /> Create Bill</>}
-            </button>
+          <div className={s.formFoot}>
+            <Button onClick={onClose}>Cancel</Button>
+            <Button variant="primary" onClick={handleSubmit} disabled={cannotSubmit} aria-busy={submitting || undefined}>
+              {submitting ? 'Saving…' : 'Create bill'}
+            </Button>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

@@ -7,6 +7,8 @@ export const intelligenceListQuery = z.object({
   /** Comma-separated document ids (the center's current page), ≤ 100. */
   document_ids: z.string().trim().max(4000).optional(),
   status: z.enum(['needs_review', 'proposal_created', 'routed', 'accepted', 'linked', 'dismissed', 'duplicate', 'queued', 'classified']).optional(),
+  /** The catalog type (lib/documents/catalog.ts) — the center's "Filter by type". Combines with status. */
+  doc_class: z.enum(DOC_CLASSES).optional(),
 });
 
 export const analyzeBody = z.union([

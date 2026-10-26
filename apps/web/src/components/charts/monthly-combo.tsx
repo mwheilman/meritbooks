@@ -60,7 +60,7 @@ export function MonthlyCombo({ data, unit, direction, height = 240, ttmHeight = 
     const x = bandScale(n, [left, width - M.right], n > 18 ? 0.3 : 0.36, 0.12);
     const y = linearScale([t.min, t.max], [height - M.bottom, M.top]);
     const ty = tt ? linearScale([tt.min, tt.max], [height + 16 + ttmHeight - 8, height + 16 + 14]) : null;
-    return { t, tt, x, y, ty, left, every: labelEvery(n, width - left - M.right, narrow ? 44 : 34) };
+    return { t, tt, x, y, ty, left, every: labelEvery(n, width - left - M.right, narrow ? 44 : 34, data.periods.map((p) => p.label)) };
   }, [data, isHidden, unit, width, n, height, showTtm, ttmHeight]);
 
   const { t, tt, x, y, ty, left, every } = geo;

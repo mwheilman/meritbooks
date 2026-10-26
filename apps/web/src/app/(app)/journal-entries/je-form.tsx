@@ -1,23 +1,15 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  Plus, Trash2, AlertCircle, Loader2, Check, Save, Send,
-  Search, X, ChevronDown
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { useState, useEffect, useMemo, useCallback, type KeyboardEvent } from 'react';
+import { Button, Check, Field, InlineNotice, Input, Keyhints, Select, Status, cx } from '@meritbooks/merit-ui';
 import { useQuery, useMutation } from '@/hooks';
 import { formatMoney, dollarsToCents } from '@meritbooks/shared';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
+import { AccountPicker } from './je-account-picker';
+import s from './je.module.css';
 
 // ─── Types ──────────────────────────────────────────────────
-
-interface AccountOption {
-  id: string;
-  account_number: string;
-  name: string;
-  account_type: string;
-  is_control_account: boolean;
-}
 
 interface LocationOption {
   id: string;
@@ -26,6 +18,15 @@ interface LocationOption {
 }
 
 interface DeptOption {
+  id: string;
+  name: string;
+  code: string;
+  /** /api/departments answers camelCase (locationId, isActive). */
+  locationId?: string | null;
+  isActive?: boolean;
+}
+
+interface ClassOption {
   id: string;
   name: string;
   code: string;
@@ -53,105 +54,6 @@ function emptyLine(): JELine {
   return { key: genKey(), account_id: '', accountLabel: '', debit: '', credit: '', memo: '', department_id: '', class_id: '' };
 }
 
-// ─── Account Search Dropdown ────────────────────────────────
-
-function AccountPicker({ value, label, onChange, locationId }: {
-  value: string;
-  label: string;
-  onChange: (id: string, label: string) => void;
-  locationId: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search), 200);
-    return () => clearTimeout(t);
-  }, [search]);
-
-  const params: Record<string, string> = {};
-  if (debouncedSearch.length >= 1) params.q = debouncedSearch;
-  if (locationId) params.location_id = locationId;
-
-  const { data } = useQuery<{ data: AccountOption[] }>(
-    open ? '/api/accounts/search' : null,
-    Object.keys(params).length > 0 ? params : undefined,
-  );
-
-  const accounts = (data?.data ?? []).filter((a) => !a.is_control_account);
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen(!open)}
-        className={clsx(
-          'w-full text-left px-2.5 py-1.5 rounded-lg border text-sm truncate',
-          value
-            ? 'bg-slate-800 border-slate-700 text-white'
-            : 'bg-slate-800/50 border-slate-700/50 text-slate-500'
-        )}
-      >
-        {label || 'Select account...'}
-        <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
-      </button>
-
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-80 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <div className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by number or name..."
-                aria-label="Search accounts by number or name"
-                className="w-full pl-8 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50"
-                autoFocus
-              />
-            </div>
-          </div>
-          <div className="max-h-48 overflow-y-auto">
-            {accounts.length === 0 ? (
-              <p className="px-3 py-4 text-xs text-slate-500 text-center">
-                {debouncedSearch ? 'No accounts found' : 'Type to search accounts'}
-              </p>
-            ) : (
-              accounts.slice(0, 30).map((acct) => (
-                <button
-                  key={acct.id}
-                  type="button"
-                  onClick={() => {
-                    onChange(acct.id, `${acct.account_number} · ${acct.name}`);
-                    setOpen(false);
-                    setSearch('');
-                  }}
-                  className={clsx(
-                    'w-full text-left px-3 py-2 text-sm hover:bg-slate-800 transition-colors flex items-center gap-2',
-                    value === acct.id && 'bg-slate-800'
-                  )}
-                >
-                  <span className="font-mono text-xs text-slate-500 w-14 shrink-0">{acct.account_number}</span>
-                  <span className="text-slate-300 truncate">{acct.name}</span>
-                  <span className="ml-auto text-[10px] text-slate-600 shrink-0">{acct.account_type}</span>
-                  {value === acct.id && <Check size={12} className="text-emerald-400 shrink-0" />}
-                </button>
-              ))
-            )}
-          </div>
-          <div className="p-1.5 border-t border-slate-800">
-            <button type="button" onClick={() => { setOpen(false); setSearch(''); }} className="w-full text-center text-xs text-slate-500 hover:text-slate-400 py-1">
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Dollar Input ───────────────────────────────────────────
 
 function DollarInput({ value, onChange, disabled, placeholder, ariaLabel }: {
@@ -162,11 +64,12 @@ function DollarInput({ value, onChange, disabled, placeholder, ariaLabel }: {
   ariaLabel?: string;
 }) {
   return (
-    <div className="relative">
-      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs">$</span>
+    <span className={s.money}>
+      <span aria-hidden="true">$</span>
       <input
         type="text"
         inputMode="decimal"
+        autoComplete="off"
         aria-label={ariaLabel}
         value={value}
         onChange={(e) => {
@@ -179,14 +82,9 @@ function DollarInput({ value, onChange, disabled, placeholder, ariaLabel }: {
         }}
         disabled={disabled}
         placeholder={placeholder ?? '0.00'}
-        className={clsx(
-          'w-full pl-5 pr-2 py-1.5 rounded-lg border text-sm font-mono text-right',
-          disabled
-            ? 'bg-slate-900/50 border-slate-800 text-slate-600 cursor-not-allowed'
-            : 'bg-slate-800 border-slate-700 text-white focus:outline-none focus:border-emerald-500/50'
-        )}
+        className="input input--money"
       />
-    </div>
+    </span>
   );
 }
 
@@ -196,6 +94,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { activeCompanyId } = useActiveCompany();
   const [locationId, setLocationId] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
   const [entryType, setEntryType] = useState('STANDARD');
@@ -205,20 +104,37 @@ export function JournalEntryForm({ onClose, onSuccess }: {
   const [formError, setFormError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const { data: locData } = useQuery<LocationOption[]>('/api/locations');
-  const locations = locData ?? [];
+  const { data: locData, isLoading: locLoading, error: locError } = useQuery<LocationOption[]>('/api/locations');
+  const locations = useMemo(() => locData ?? [], [locData]);
 
-  const { mutate, isLoading: submitting } = useMutation<Record<string, unknown>, CreateResult>(
+  // Start on the company the header is scoped to (the page is behind the
+  // company-scope guard, so one is active); the select still lets you change it.
+  useEffect(() => {
+    if (locationId || !isSpecificCompany(activeCompanyId)) return;
+    if (locations.some((l) => l.id === activeCompanyId)) setLocationId(activeCompanyId);
+  }, [activeCompanyId, locations, locationId]);
+
+  // Dimensions for the line grid (department / class). Consolidated lists; the
+  // department list narrows to the chosen company (shared departments always show).
+  const { data: deptData } = useQuery<{ departments: DeptOption[] }>('/api/departments', undefined, { scope: false });
+  const { data: classData } = useQuery<ClassOption[]>('/api/classes', undefined, { scope: false });
+  const departments = useMemo(
+    () => (deptData?.departments ?? []).filter((d) => d.isActive !== false && (!d.locationId || !locationId || d.locationId === locationId)),
+    [deptData, locationId],
+  );
+  const classes = Array.isArray(classData) ? classData : [];
+
+  const { mutate, isLoading: submitting, error: mutationError } = useMutation<Record<string, unknown>, CreateResult>(
     '/api/journal-entries'
   );
 
   // Totals
   const totalDebits = useMemo(() =>
-    lines.reduce((s, l) => s + (parseFloat(l.debit) || 0), 0),
+    lines.reduce((sum, l) => sum + (parseFloat(l.debit) || 0), 0),
     [lines]
   );
   const totalCredits = useMemo(() =>
-    lines.reduce((s, l) => s + (parseFloat(l.credit) || 0), 0),
+    lines.reduce((sum, l) => sum + (parseFloat(l.credit) || 0), 0),
     [lines]
   );
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.005 && totalDebits > 0;
@@ -281,91 +197,107 @@ export function JournalEntryForm({ onClose, onSuccess }: {
         onSuccess();
       }, 1200);
     } else {
-      setFormError('Failed to create entry. Check the error above.');
+      setFormError("The entry wasn't saved.");
     }
   }, [locationId, entryDate, entryType, memo, postImmediately, lines, isBalanced, difference, mutate, onSuccess]);
 
+  const canSubmit = !submitting && isBalanced && !!locationId;
+
+  // ⌘/Ctrl + Enter posts (or saves) from anywhere in the form.
+  const onFormKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      if (canSubmit) void handleSubmit();
+    }
+  };
+
+  const hasAmounts = totalDebits > 0 || totalCredits > 0;
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+    <section className={s.form} aria-label="New journal entry" onKeyDown={onFormKeyDown}>
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <h2 className="text-lg font-semibold text-white">New Journal Entry</h2>
-        <button onClick={onClose} aria-label="Close new journal entry form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
-          <X size={18} />
-        </button>
+      <div className={s.formHead}>
+        <div className={s.formHeadMain}>
+          <h2 className="t-section">New journal entry</h2>
+          <span className="t-cap">Debits must equal credits before it can post.</span>
+        </div>
+        <Button variant="quiet" iconOnly icon="x" onClick={onClose} aria-label="Close new journal entry form" />
       </div>
 
-      <div className="p-6 space-y-5">
+      <div className={s.formBody}>
         {/* Top controls */}
-        <div className="grid grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1 font-medium">Company</label>
-            <select
-              value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
-            >
-              <option value="">Select company...</option>
+        <div className={s.grid4}>
+          <Field
+            label="Company"
+            error={locError ? "Companies didn't load. Close the form and try again." : undefined}
+          >
+            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={locLoading && locations.length === 0}>
+              <option value="">{locLoading && locations.length === 0 ? 'Loading companies…' : 'Select company…'}</option>
               {locations.map((loc) => (
                 <option key={loc.id} value={loc.id}>{loc.short_code} · {loc.name}</option>
               ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1 font-medium">Date</label>
-            <input
+            </Select>
+          </Field>
+          <Field label="Date" help="A closed period refuses the post.">
+            <Input
               type="date"
+              className="tnum"
               value={entryDate}
               onChange={(e) => setEntryDate(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1 font-medium">Type</label>
-            <select
-              value={entryType}
-              onChange={(e) => setEntryType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
-            >
+          </Field>
+          <Field label="Type">
+            <Select value={entryType} onChange={(e) => setEntryType(e.target.value)}>
               <option value="STANDARD">Standard</option>
               <option value="ADJUSTING">Adjusting</option>
               <option value="CLOSING">Closing</option>
               <option value="REVERSING">Reversing</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1 font-medium">Memo</label>
-            <input
+            </Select>
+          </Field>
+          <Field label="Memo">
+            <Input
               type="text"
               value={memo}
               onChange={(e) => setMemo(e.target.value)}
-              placeholder="Description of this entry..."
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600"
+              placeholder="What this entry records"
             />
-          </div>
+          </Field>
         </div>
 
-        {/* Line items table */}
-        <div className="border border-slate-800 rounded-xl overflow-x-auto">
-          <table className="w-full min-w-[640px]">
+        {/* Line items */}
+        <div className={s.lines}>
+          <table className="tbl" aria-label="Journal entry lines">
+            <colgroup>
+              <col style={{ width: 48 }} />
+              <col />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 132 }} />
+              <col style={{ width: 128 }} />
+              <col style={{ width: 128 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 56 }} />
+            </colgroup>
             <thead>
-              <tr className="border-b border-slate-800 bg-slate-800/30">
-                <th className="px-3 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-8">#</th>
-                <th className="px-3 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 min-w-[240px]">Account</th>
-                <th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-32">Debit</th>
-                <th className="px-3 py-2.5 text-right text-2xs font-semibold uppercase text-slate-500 w-32">Credit</th>
-                <th className="px-3 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-40">Line Memo</th>
-                <th className="px-3 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500 w-10" />
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Account</th>
+                <th scope="col">Department</th>
+                <th scope="col">Class</th>
+                <th scope="col" className="n">Debit</th>
+                <th scope="col" className="n">Credit</th>
+                <th scope="col">Line memo</th>
+                <th scope="col"><span className="sr">Remove</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/30">
+            <tbody>
               {lines.map((line, idx) => (
-                <tr key={line.key} className="hover:bg-slate-800/20">
-                  <td className="px-3 py-2 text-xs text-slate-600 font-mono">{idx + 1}</td>
-                  <td className="px-3 py-2">
+                <tr key={line.key}>
+                  <td><span className={cx('tnum', s.lineNo)}>{idx + 1}</span></td>
+                  <td>
                     <AccountPicker
                       value={line.account_id}
                       label={line.accountLabel}
+                      ariaLabel={`Line ${idx + 1} account`}
                       onChange={(id, label) => {
                         setLines((prev) => prev.map((l) =>
                           l.key === line.key ? { ...l, account_id: id, accountLabel: label } : l
@@ -374,7 +306,27 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       locationId={locationId}
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td>
+                    <Select
+                      aria-label={`Line ${idx + 1} department`}
+                      value={line.department_id}
+                      onChange={(e) => updateLine(line.key, 'department_id', e.target.value)}
+                    >
+                      <option value="">None</option>
+                      {departments.map((d) => <option key={d.id} value={d.id}>{d.code ? `${d.code} · ` : ''}{d.name}</option>)}
+                    </Select>
+                  </td>
+                  <td>
+                    <Select
+                      aria-label={`Line ${idx + 1} class`}
+                      value={line.class_id}
+                      onChange={(e) => updateLine(line.key, 'class_id', e.target.value)}
+                    >
+                      <option value="">None</option>
+                      {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </Select>
+                  </td>
+                  <td>
                     <DollarInput
                       value={line.debit}
                       onChange={(v) => updateLine(line.key, 'debit', v)}
@@ -382,7 +334,7 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       ariaLabel={`Line ${idx + 1} debit amount`}
                     />
                   </td>
-                  <td className="px-3 py-2">
+                  <td>
                     <DollarInput
                       value={line.credit}
                       onChange={(v) => updateLine(line.key, 'credit', v)}
@@ -390,66 +342,45 @@ export function JournalEntryForm({ onClose, onSuccess }: {
                       ariaLabel={`Line ${idx + 1} credit amount`}
                     />
                   </td>
-                  <td className="px-3 py-2">
-                    <input
+                  <td>
+                    <Input
                       type="text"
                       value={line.memo}
                       onChange={(e) => updateLine(line.key, 'memo', e.target.value)}
                       placeholder="—"
                       aria-label={`Line ${idx + 1} memo`}
-                      className="w-full px-2 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-xs text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50"
                     />
                   </td>
-                  <td className="px-3 py-2 text-center">
-                    <button
-                      type="button"
+                  <td className="n">
+                    <Button
+                      variant="quiet"
+                      iconOnly
+                      icon="x"
                       onClick={() => removeLine(line.key)}
                       disabled={lines.length <= 2}
                       aria-label={`Remove line ${idx + 1}`}
-                      className={clsx(
-                        'p-1 rounded',
-                        lines.length <= 2 ? 'text-slate-700 cursor-not-allowed' : 'text-slate-500 hover:text-red-400 hover:bg-red-500/10'
-                      )}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    />
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t border-slate-700">
-                <td colSpan={2} className="px-3 py-2.5">
-                  <button
-                    type="button"
-                    onClick={addLine}
-                    className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                  >
-                    <Plus size={13} /> Add line
-                  </button>
+              <tr>
+                <td colSpan={4}>
+                  <Button variant="quiet" icon="plus" onClick={addLine}>Add line</Button>
                 </td>
-                <td className="px-3 py-2.5 text-right">
-                  <span className={clsx('text-sm font-mono font-semibold', totalDebits > 0 ? 'text-white' : 'text-slate-600')}>
-                    {formatMoney(dollarsToCents(totalDebits))}
-                  </span>
-                </td>
-                <td className="px-3 py-2.5 text-right">
-                  <span className={clsx('text-sm font-mono font-semibold', totalCredits > 0 ? 'text-white' : 'text-slate-600')}>
-                    {formatMoney(dollarsToCents(totalCredits))}
-                  </span>
-                </td>
-                <td colSpan={2} className="px-3 py-2.5">
-                  {totalDebits > 0 || totalCredits > 0 ? (
+                <td className="n">{formatMoney(dollarsToCents(totalDebits))}</td>
+                <td className="n">{formatMoney(dollarsToCents(totalCredits))}</td>
+                <td colSpan={2}>
+                  {hasAmounts ? (
                     isBalanced ? (
-                      <span className="flex items-center gap-1 text-xs text-emerald-400">
-                        <Check size={12} /> Balanced
-                      </span>
+                      <Status kind="ready">Balanced</Status>
                     ) : (
-                      <span className="text-xs text-red-400">
-                        Off by {formatMoney(dollarsToCents(Math.abs(difference)))}
-                      </span>
+                      <Status kind="blocked">Off by {formatMoney(dollarsToCents(Math.abs(difference)))}</Status>
                     )
-                  ) : null}
+                  ) : (
+                    <span className="t-cap">Enter amounts</span>
+                  )}
                 </td>
               </tr>
             </tfoot>
@@ -458,61 +389,36 @@ export function JournalEntryForm({ onClose, onSuccess }: {
 
         {/* Error / Success */}
         {formError && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20">
-            <AlertCircle size={14} className="text-red-400 shrink-0" />
-            <p className="text-sm text-red-400">{formError}</p>
-          </div>
+          <InlineNotice tone="neg" title={formError}>
+            {mutationError ? mutationError : 'Fix the issue above, then post again.'}
+          </InlineNotice>
         )}
         {successMsg && (
-          <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-            <Check size={14} className="text-emerald-400 shrink-0" />
-            <p className="text-sm text-emerald-400">{successMsg}</p>
-          </div>
+          <InlineNotice title="Saved.">{successMsg}</InlineNotice>
         )}
 
         {/* Actions */}
-        <div className="flex items-center justify-between pt-2">
-          <label className="flex items-center gap-2 text-sm text-slate-400 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={postImmediately}
-              onChange={(e) => setPostImmediately(e.target.checked)}
-              className="rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/20"
-            />
-            Post immediately
-          </label>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
+        <div className={s.formFoot}>
+          <Check
+            label="Post immediately"
+            checked={postImmediately}
+            onChange={(e) => setPostImmediately(e.target.checked)}
+          />
+          <Keyhints hints={[{ chord: 'mod+enter', label: postImmediately ? 'Post' : 'Save' }]} />
+          <div className={s.formActs}>
+            <Button variant="quiet" onClick={onClose}>Cancel</Button>
+            <Button
+              variant="primary"
+              icon={postImmediately ? 'check' : undefined}
               onClick={handleSubmit}
-              disabled={submitting || !isBalanced || !locationId}
-              className={clsx(
-                'flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors',
-                submitting || !isBalanced || !locationId
-                  ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                  : postImmediately
-                    ? 'bg-emerald-600 text-white hover:bg-emerald-500'
-                    : 'bg-slate-700 text-white hover:bg-slate-600'
-              )}
+              disabled={!canSubmit}
+              aria-busy={submitting || undefined}
             >
-              {submitting ? (
-                <><Loader2 size={14} className="animate-spin" /> Posting...</>
-              ) : postImmediately ? (
-                <><Send size={14} /> Post Entry</>
-              ) : (
-                <><Save size={14} /> Save Draft</>
-              )}
-            </button>
+              {submitting ? (postImmediately ? 'Posting…' : 'Saving…') : postImmediately ? 'Post entry' : 'Save draft'}
+            </Button>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

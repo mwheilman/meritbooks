@@ -57,7 +57,9 @@ export const REPORT_GOVERNANCE_NIGHTLY_JOB: JobDefinition = {
   ownerCapability: 'close.package',
   owner: 'Number governance (FPB-tenant-model-consolidation-analytics §18)',
   postsToGl: false,
-  timeoutMs: 240_000,
+  // Under the 240 s tick budget: a job only starts when the tick has its full timeout left, so a
+  // timeout equal to the budget meant this job was deferred on every tick and never ran.
+  timeoutMs: 150_000,
   maxLatenessMinutes: 360,
   maxAttempts: 2,
   run: (ctx) => runReportGovernanceNightly(ctx),

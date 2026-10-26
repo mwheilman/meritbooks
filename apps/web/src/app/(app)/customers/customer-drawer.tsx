@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { FileText, Download, Send, Loader2, AlertTriangle, ShieldCheck, GitMerge, Sparkles } from 'lucide-react';
+import { Button, Field, Input, Note, Seg, Status, Tag, type StatusKind } from '@meritbooks/merit-ui';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
@@ -8,6 +8,7 @@ import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/compone
 import { EntityInvoiceSettings } from '@/components/entity-invoice-settings';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 import { CustomerPortalAccess } from '@/components/customer-portal-access';
+import s from './customers.module.css';
 
 type StatementMode = 'open' | 'activity';
 
@@ -73,52 +74,57 @@ function StatementActions({ customerId, hasEmail }: { customerId: string; hasEma
     }
   };
 
-  const toggle = 'px-2.5 py-1 rounded-md text-xs font-medium transition-colors';
-  const dateInput = 'px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50';
   const canAct = !rangeInvalid;
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button onClick={() => setMode('open')} className={`${toggle} ${mode === 'open' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Open items</button>
-        <button onClick={() => setMode('activity')} className={`${toggle} ${mode === 'activity' ? 'bg-emerald-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>Activity</button>
-        <div className="ml-auto flex items-center gap-1.5">
-          <span className="text-2xs text-slate-500 uppercase tracking-wider">As of</span>
-          <input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value || today)} className={dateInput} />
-        </div>
+    <div className={s.statement}>
+      <div className={s.dates}>
+        <Seg<StatementMode>
+          aria-label="Statement type"
+          value={mode}
+          onChange={setMode}
+          items={[
+            { value: 'open', label: 'Open items' },
+            { value: 'activity', label: 'Activity' },
+          ]}
+        />
+        <span className={s.grow} />
+        <Field label="As of" className={s.dateField}>
+          <Input type="date" value={asOf} max={today} onChange={(e) => setAsOf(e.target.value || today)} />
+        </Field>
       </div>
 
       {mode === 'open' ? (
-        <p className="text-2xs text-slate-500">Open-item statement: only invoices with a balance still outstanding, aged as of the date above.</p>
+        <p className="t-cap">Open-item statement: only invoices with a balance still outstanding, aged as of the date above.</p>
       ) : (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <span className="text-2xs text-slate-500 uppercase tracking-wider w-10">From</span>
-            <input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} className={dateInput} />
-            <span className="text-2xs text-slate-500 uppercase tracking-wider">To</span>
-            <input type="date" value={to} max={today} min={from || undefined} onChange={(e) => setTo(e.target.value)} className={dateInput} />
+        <div className={s.secBlock}>
+          <div className={s.dates}>
+            <Field label="From" className={s.dateField} error={rangeInvalid ? 'Must be on or before To.' : undefined}>
+              <Input type="date" value={from} max={to || today} onChange={(e) => setFrom(e.target.value)} />
+            </Field>
+            <Field label="To" className={s.dateField}>
+              <Input type="date" value={to} max={today} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+            </Field>
           </div>
-          <p className={`text-2xs ${rangeInvalid ? 'text-rose-400' : 'text-slate-500'}`}>
+          <p className="t-cap">
             {rangeInvalid ? 'The From date must be on or before the To date.' : 'Balance-forward statement: opening balance, every charge and payment in the range, and a running balance.'}
           </p>
         </div>
       )}
 
-      <div className="flex items-center gap-2">
-        <button onClick={() => preview(false)} disabled={!canAct} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          <FileText size={12} /> Preview
-        </button>
-        <button onClick={() => preview(true)} disabled={!canAct} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed">
-          <Download size={12} /> Download
-        </button>
-        <button onClick={send} disabled={sending || !hasEmail || !canAct}
+      <div className="btn-row">
+        <Button icon="file-text" onClick={() => preview(false)} disabled={!canAct}>Preview</Button>
+        <Button icon="down" onClick={() => preview(true)} disabled={!canAct}>Download</Button>
+        <Button
+          onClick={send}
+          disabled={sending || !hasEmail || !canAct}
+          aria-busy={sending || undefined}
           title={hasEmail ? 'Email this statement to the customer' : 'No customer email on file'}
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
-          {sending ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+        >
           {sending ? 'Sending…' : 'Send statement'}
-        </button>
+        </Button>
       </div>
       {!hasEmail && (
-        <p className="text-2xs text-slate-500">Add an email address to enable sending. Preview and download always work.</p>
+        <p className="t-cap">Add an email address to enable sending. Preview and download always work.</p>
       )}
     </div>
   );
@@ -154,10 +160,10 @@ interface Dossier {
   possibleDuplicates: Array<{ id: string; name: string; confidence: number; matchedFields: string[]; reason: string; amountAtRiskCents: number }>;
 }
 
-const RISK_STYLE: Record<RiskLevel, { badge: string; label: string }> = {
-  low: { badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30', label: 'Low risk' },
-  medium: { badge: 'bg-amber-500/15 text-amber-300 border-amber-500/30', label: 'Medium risk' },
-  high: { badge: 'bg-red-500/15 text-red-300 border-red-500/30', label: 'High risk' },
+const RISK_STYLE: Record<RiskLevel, { kind: StatusKind; label: string }> = {
+  low: { kind: 'ready', label: 'Low risk' },
+  medium: { kind: 'risk', label: 'Medium risk' },
+  high: { kind: 'overdue', label: 'High risk' },
 };
 
 const FLAG_LABEL: Record<RiskFlag, string> = {
@@ -166,7 +172,7 @@ const FLAG_LABEL: Record<RiskFlag, string> = {
 };
 
 function pct(n: number | null): string {
-  return n == null ? '--' : `${Math.round(n * 100)}%`;
+  return n == null ? '—' : `${Math.round(n * 100)}%`;
 }
 
 /** A single "possible duplicate" row with a guarded merge action (this customer = survivor). */
@@ -206,42 +212,39 @@ function DuplicateRow({
   };
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-200 truncate">{dup.name}</span>
-            <span className="text-2xs font-mono text-amber-300 shrink-0">{Math.round(dup.confidence * 100)}% match</span>
+    <div className={s.dup}>
+      <div className={s.dupRow}>
+        <div style={{ minWidth: 0 }}>
+          <div className="row" style={{ minWidth: 0 }}>
+            <span className="t-head mb-trunc">{dup.name}</span>
+            <span className="tnum ink-2" style={{ flex: 'none' }}>{Math.round(dup.confidence * 100)}% match</span>
           </div>
-          <p className="mt-0.5 text-2xs text-slate-500 line-clamp-2">{dup.reason}</p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {dup.matchedFields.map((f) => (
-              <span key={f} className="px-1.5 py-0.5 rounded bg-slate-800 text-2xs text-slate-400">{f.replace('_', ' ')}</span>
-            ))}
-            {dup.amountAtRiskCents > 0 && (
-              <span className="px-1.5 py-0.5 rounded bg-slate-800 text-2xs font-mono text-slate-400">{formatMoney(dup.amountAtRiskCents)} AR</span>
-            )}
+          <p className={`t-cap ${s.clamp}`} style={{ marginTop: 2 }}>{dup.reason}</p>
+          <div className={s.tags}>
+            {dup.matchedFields.map((f) => <Tag key={f}>{f.replace('_', ' ')}</Tag>)}
+            {dup.amountAtRiskCents > 0 && <Tag><span className="tnum">{formatMoney(dup.amountAtRiskCents)}</span> AR</Tag>}
           </div>
         </div>
-        <div className="shrink-0">
+        <div style={{ flex: 'none' }}>
           {confirming ? (
-            <div className="flex items-center gap-1.5">
-              <button onClick={merge} disabled={busy}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50">
-                {busy ? <Loader2 size={11} className="animate-spin" /> : <GitMerge size={11} />} Confirm
-              </button>
-              <button onClick={() => setConfirming(false)} disabled={busy}
-                className="px-2 py-1 rounded-md text-2xs font-medium bg-slate-800 text-slate-300 hover:bg-slate-700">Cancel</button>
+            <div className="btn-row" style={{ flexWrap: 'nowrap' }} role="group" aria-label={`Confirm merging ${dup.name}`}>
+              <Button variant="danger" onClick={merge} disabled={busy} aria-busy={busy || undefined}>
+                {busy ? 'Merging…' : 'Merge'}
+              </Button>
+              <Button variant="quiet" onClick={() => setConfirming(false)} disabled={busy}>Cancel</Button>
             </div>
           ) : (
-            <button onClick={() => setConfirming(true)}
-              title={`Merge "${dup.name}" into "${survivorName}"`}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-              <GitMerge size={11} /> Merge in
-            </button>
+            <Button onClick={() => setConfirming(true)} title={`Merge "${dup.name}" into "${survivorName}"`}>
+              Merge in
+            </Button>
           )}
         </div>
       </div>
+      {confirming && (
+        <p className="t-cap" style={{ marginTop: 8 }}>
+          “{dup.name}” will be retired and its invoices and payments moved onto “{survivorName}”.
+        </p>
+      )}
     </div>
   );
 }
@@ -251,81 +254,103 @@ function CustomerDossierSections({ customerId, survivorName }: { customerId: str
   const { data, isLoading, error, refetch } = useQuery<Dossier>(`/api/customers/${customerId}/dossier`, undefined, { enabled: !!customerId });
 
   if (isLoading) {
-    return <DetailSection title="Customer dossier"><div className="flex items-center gap-2 text-xs text-slate-500"><Loader2 size={13} className="animate-spin" /> Computing payment behavior…</div></DetailSection>;
+    return (
+      <DetailSection title="Customer dossier">
+        <div className="wg-loading mb-detail-row" aria-busy="true" style={{ display: 'grid', gap: 8, padding: '12px' }}>
+          <span className="bar-l" style={{ width: '60%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '40%' }} aria-hidden="true" />
+          <span className="t-cap" role="status">Working out payment behavior…</span>
+        </div>
+      </DetailSection>
+    );
   }
   if (error || !data) {
-    return <DetailSection title="Customer dossier"><p className="text-xs text-slate-500">Dossier unavailable.</p></DetailSection>;
+    return (
+      <DetailSection title="Customer dossier">
+        <div className="mb-detail-row">
+          <span className="ink-2">The dossier didn’t load.</span>
+          <Button variant="quiet" onClick={() => void refetch()}>Try again</Button>
+        </div>
+      </DetailSection>
+    );
   }
 
   const { behavior: b, credit, risk } = data;
   const rs = RISK_STYLE[risk.level];
   const util = credit.utilizationPct;
   const utilBar = util == null ? 0 : Math.min(100, Math.round(util * 100));
-  const utilColor = util != null && util >= 1 ? 'bg-red-500' : util != null && util >= 0.9 ? 'bg-amber-500' : 'bg-emerald-500';
+  const utilTone = util != null && util >= 1 ? 'var(--neg)' : util != null && util >= 0.9 ? 'var(--warn)' : 'var(--electric)';
 
   return (
     <>
-      <DetailSection title="Risk profile">
-        <div className="flex items-center gap-2 mb-2">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-2xs font-medium ${rs.badge}`}>
-            {risk.level === 'low' ? <ShieldCheck size={11} /> : <AlertTriangle size={11} />} {rs.label}
-          </span>
-          {risk.flags.map((f) => (
-            <span key={f} className="px-1.5 py-0.5 rounded bg-slate-800 text-2xs text-slate-300">{FLAG_LABEL[f]}</span>
-          ))}
+      <section className="panel-sec">
+        <div className="panel-sec-h">
+          <h3>Risk profile</h3>
         </div>
-        <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/[0.06] p-2.5">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Sparkles size={11} className="text-indigo-300" />
-            <span className="text-2xs uppercase tracking-wider text-indigo-300 font-semibold">Analyst summary</span>
+        <div className={s.secBlock}>
+          <div className={s.flags}>
+            <Status kind={rs.kind}>{rs.label}</Status>
+            {risk.flags.map((f) => <Tag key={f} tone="warn">{FLAG_LABEL[f]}</Tag>)}
           </div>
-          <p className="text-xs text-slate-300 leading-relaxed">{risk.aiSummary || risk.summary}</p>
+          <Note n={1} kind="Customer risk" title={rs.label} headingLevel={4}>
+            {risk.aiSummary || risk.summary}
+          </Note>
         </div>
-      </DetailSection>
+      </section>
 
       <DetailSection title="Payment behavior">
-        <DetailField label="Avg days to pay" value={b.avgDaysToPay != null ? `${b.avgDaysToPay} days` : 'No history'} />
-        <DetailField label="Median / worst" value={b.medianDaysToPay != null ? `${b.medianDaysToPay} / ${b.worstDaysToPay} days` : '--'} />
-        <DetailField label="On-time rate" value={pct(b.onTimeRate)} />
-        <DetailField label="Avg days beyond terms" value={b.avgDaysBeyondTerms != null ? `${b.avgDaysBeyondTerms} days` : '--'} />
-        <DetailField label="Last payment" value={b.lastPaymentDate ? `${b.lastPaymentDate}${b.lastDaysToPay != null ? ` (${b.lastDaysToPay}d)` : ''}` : '--'} />
+        <DetailField label="Avg days to pay" value={b.avgDaysToPay != null ? `${b.avgDaysToPay} days` : 'No history'} mono />
+        <DetailField label="Median / worst" value={b.medianDaysToPay != null ? `${b.medianDaysToPay} / ${b.worstDaysToPay} days` : '—'} mono />
+        <DetailField label="On-time rate" value={pct(b.onTimeRate)} mono />
+        <DetailField label="Avg days beyond terms" value={b.avgDaysBeyondTerms != null ? `${b.avgDaysBeyondTerms} days` : '—'} mono />
+        <DetailField label="Last payment" value={b.lastPaymentDate ? `${b.lastPaymentDate}${b.lastDaysToPay != null ? ` (${b.lastDaysToPay}d)` : ''}` : '—'} mono />
         <DetailField label="TTM revenue" value={formatMoney(b.ttmRevenueCents)} mono />
-        {data.concentrationPct != null && <DetailField label="Share of total revenue" value={pct(data.concentrationPct)} />}
+        {data.concentrationPct != null && <DetailField label="Share of total revenue" value={pct(data.concentrationPct)} mono />}
         <DetailField label="Overdue" value={b.overdueBalanceCents > 0 ? `${formatMoney(b.overdueBalanceCents)} · ${b.overdueInvoiceCount} inv · ${b.maxOverdueDays}d oldest` : 'None'} mono />
       </DetailSection>
 
       <DetailSection title="Credit">
         <DetailField label="Credit limit" value={credit.creditLimitCents != null ? formatMoney(credit.creditLimitCents) : 'Not set'} mono />
         <DetailField label="Open AR" value={formatMoney(credit.openArCents)} mono />
-        <DetailField label="Available" value={credit.availableCreditCents != null ? formatMoney(credit.availableCreditCents) : '--'} mono />
+        <DetailField label="Available" value={credit.availableCreditCents != null ? formatMoney(credit.availableCreditCents) : '—'} mono />
         {util != null && (
-          <div className="mt-1.5">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-2xs text-slate-500 uppercase tracking-wider">Utilization</span>
-              <span className={`text-2xs font-mono ${util >= 1 ? 'text-red-300' : util >= 0.9 ? 'text-amber-300' : 'text-slate-300'}`}>{pct(util)}</span>
+          <div className={s.util}>
+            <div className="row row--between">
+              <span className="ink-2">Utilization</span>
+              <span className="row" style={{ gap: 8 }}>
+                {util >= 1 ? <Status kind="overdue">Over limit</Status> : util >= 0.9 ? <Status kind="risk">Near limit</Status> : null}
+                <span className="tnum" style={{ fontWeight: 500 }}>{pct(util)}</span>
+              </span>
             </div>
-            <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
-              <div className={`h-full rounded-full ${utilColor}`} style={{ width: `${utilBar}%` }} />
+            <div className={s.utilTrack} role="img" aria-label={`Credit utilization ${pct(util)}`}>
+              <span className={s.utilFill} style={{ width: `${utilBar}%`, background: utilTone }} />
             </div>
           </div>
         )}
         {credit.creditLimitCents == null && (
-          <p className="mt-1 text-2xs text-slate-500">No credit limit configured — set one under Edit to enable utilization + over-limit alerts.</p>
-        )}
-      </DetailSection>
-
-      <DetailSection title={`Possible duplicates${data.possibleDuplicates.length ? ` (${data.possibleDuplicates.length})` : ''}`}>
-        {data.possibleDuplicates.length === 0 ? (
-          <p className="text-xs text-slate-500">No likely duplicate customers detected.</p>
-        ) : (
-          <div className="space-y-2">
-            <p className="text-2xs text-slate-500">Merging re-points the other record&apos;s invoices &amp; payments onto this customer, then retires it. Reconciled and reversible-safe; requires the customers permission.</p>
-            {data.possibleDuplicates.map((d) => (
-              <DuplicateRow key={d.id} survivorId={customerId} survivorName={survivorName} dup={d} onMerged={refetch} />
-            ))}
+          <div className="mb-detail-row">
+            <span className="t-cap">No credit limit set — set one under Edit to turn on utilization and over-limit alerts.</span>
           </div>
         )}
       </DetailSection>
+
+      <section className="panel-sec">
+        <div className="panel-sec-h">
+          <h3>{`Possible duplicates${data.possibleDuplicates.length ? ` (${data.possibleDuplicates.length})` : ''}`}</h3>
+        </div>
+        {data.possibleDuplicates.length === 0 ? (
+          <p className="t-cap">No likely duplicate customers found.</p>
+        ) : (
+          <div className={s.secBlock}>
+            <p className="t-cap">Merging moves the other record&apos;s invoices and payments onto this customer, then retires it. It is reconciled before it commits and needs the customers permission.</p>
+            <div>
+              {data.possibleDuplicates.map((d) => (
+                <DuplicateRow key={d.id} survivorId={customerId} survivorName={survivorName} dup={d} onMerged={refetch} />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </>
   );
 }
@@ -337,39 +362,39 @@ function CustomerDossierSections({ customerId, survivorName }: { customerId: str
  * exact, not a sample of recent rows.
  */
 function ArGlanceStrip({ ar }: { ar: CustDetail['ar'] }) {
-  const tiles: Array<{ label: string; value: string; sub: string; tone: string }> = [
+  const tiles: Array<{ label: string; value: string; sub: string; attn: boolean }> = [
     {
       label: 'Total open',
       value: formatMoney(ar.totalOutstanding),
       sub: ar.openInvoiceCount > 0 ? `${ar.openInvoiceCount} open invoice${ar.openInvoiceCount !== 1 ? 's' : ''}` : 'Zero balance',
-      tone: 'text-white',
+      attn: false,
     },
     {
       label: 'Overdue',
       value: formatMoney(ar.overdueOutstanding),
       sub: ar.overdueCount > 0 ? `${ar.overdueCount} invoice${ar.overdueCount !== 1 ? 's' : ''} past due` : 'Nothing past due',
-      tone: ar.overdueOutstanding > 0 ? 'text-rose-400' : 'text-slate-300',
+      attn: ar.overdueOutstanding > 0,
     },
     {
       label: 'Oldest invoice',
-      value: ar.oldestOpenInvoiceDays != null ? `${ar.oldestOpenInvoiceDays}d` : '--',
+      value: ar.oldestOpenInvoiceDays != null ? `${ar.oldestOpenInvoiceDays}d` : '—',
       sub: ar.oldestOpenInvoiceDays != null ? 'since invoiced' : 'None open',
-      tone: ar.oldestOpenInvoiceDays != null && ar.oldestOpenInvoiceDays > 60 ? 'text-amber-300' : 'text-slate-200',
+      attn: ar.oldestOpenInvoiceDays != null && ar.oldestOpenInvoiceDays > 60,
     },
     {
       label: 'Last payment',
-      value: ar.lastPaymentCents != null ? formatMoney(ar.lastPaymentCents) : '--',
+      value: ar.lastPaymentCents != null ? formatMoney(ar.lastPaymentCents) : '—',
       sub: ar.lastPaymentDate ?? 'No payments yet',
-      tone: 'text-slate-200',
+      attn: false,
     },
   ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+    <div className={s.tiles}>
       {tiles.map((t) => (
-        <div key={t.label} className="rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5">
-          <div className="text-2xs text-slate-500 uppercase tracking-wider mb-1">{t.label}</div>
-          <div className={`text-sm font-mono tabular-nums ${t.tone}`}>{t.value}</div>
-          <div className="text-2xs text-slate-500 mt-0.5 truncate">{t.sub}</div>
+        <div key={t.label} className={`${s.tile} ${t.attn ? s.tileAttn : ''}`}>
+          <span className="eyebrow">{t.label}</span>
+          <span className={`${s.tileValue} tnum`}>{t.value}</span>
+          <span className="t-cap mb-trunc">{t.attn ? <b className="ink-2">{t.sub}</b> : t.sub}</span>
         </div>
       ))}
     </div>
@@ -385,7 +410,7 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
       subtitle={data?.isPortfolioCompany ? 'Internal company' : 'External customer'}
       isLoading={isLoading} error={error}
       headerRight={data && onEdit ? (
-        <button onClick={onEdit} className="px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">Edit</button>
+        <Button onClick={onEdit}>Edit</Button>
       ) : undefined}
     >
       {data && (
@@ -393,48 +418,53 @@ export function CustomerDrawer({ customerId, onClose, onEdit }: { customerId: st
           <ArGlanceStrip ar={data.ar} />
           <DetailSection title="Contact">
             {data.contactName && <DetailField label="Contact" value={data.contactName} />}
-            <DetailField label="Email" value={data.email ?? '--'} />
-            <DetailField label="Phone" value={data.phone ?? '--'} />
+            <DetailField label="Email" value={data.email ?? '—'} />
+            <DetailField label="Phone" value={data.phone ?? '—'} />
             {data.addressLine && <DetailField label="Address" value={data.addressLine} />}
             {data.website && <DetailField label="Website" value={data.website} />}
           </DetailSection>
           <DetailSection title="Terms">
-            <DetailField label="Payment terms" value={data.paymentTermsDays != null ? `Net ${data.paymentTermsDays}` : '--'} />
-            <DetailField label="Credit limit" value={data.creditLimitCents != null ? formatMoney(data.creditLimitCents) : '--'} mono />
+            <DetailField label="Payment terms" value={data.paymentTermsDays != null ? `Net ${data.paymentTermsDays}` : '—'} />
+            <DetailField label="Credit limit" value={data.creditLimitCents != null ? formatMoney(data.creditLimitCents) : '—'} mono />
             <DetailField label="Tax exempt" value={data.taxExempt ? 'Yes' : 'No'} />
             <DetailField label="Status" value={data.isActive ? 'Active' : 'Inactive'} />
           </DetailSection>
           <CustomerDossierSections customerId={data.id} survivorName={data.name} />
 
-          <DetailSection title="Statement">
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Statement</h3></div>
             <StatementActions customerId={data.id} hasEmail={!!data.email} />
-          </DetailSection>
+          </section>
 
-          <DetailSection title="Portal access">
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Portal access</h3></div>
             <CustomerPortalAccess customerId={data.id} />
-          </DetailSection>
+          </section>
 
-          <DetailSection title="Invoice settings">
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Invoice settings</h3></div>
             <EntityInvoiceSettings scope="CUSTOMER" id={data.id} />
-          </DetailSection>
+          </section>
 
-          <DetailSection title="Customer-facing invoice text">
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Customer-facing invoice text</h3></div>
             <InvoiceTextOverrides scope="CUSTOMER" refId={data.id} />
-          </DetailSection>
+          </section>
+
           {data.recentInvoices.length > 0 && (
-            <>
-              <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Recent invoices</h3>
+            <section className="panel-sec">
+              <div className="panel-sec-h"><h3>Recent invoices</h3></div>
               <DetailTable columns={[{ key: 'n', label: 'Invoice' }, { key: 'd', label: 'Date' }, { key: 'b', label: 'Balance', align: 'right' }, { key: 's', label: 'Status', align: 'center' }]}>
                 {data.recentInvoices.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="px-3 py-2 text-sm font-mono text-slate-300">{inv.invoiceNumber}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400 font-mono">{inv.invoiceDate}</td>
-                    <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(inv.balanceCents)}</td>
-                    <td className="px-3 py-2 text-center"><StatusBadge status={inv.status} /></td>
+                  <tr key={inv.id} className="q-row">
+                    <td className="tnum">{inv.invoiceNumber}</td>
+                    <td className="tnum ink-2">{inv.invoiceDate}</td>
+                    <td className="n tnum">{formatMoney(inv.balanceCents)}</td>
+                    <td className="mb-c"><StatusBadge status={inv.status} /></td>
                   </tr>
                 ))}
               </DetailTable>
-            </>
+            </section>
           )}
         </>
       )}

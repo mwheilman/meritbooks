@@ -176,7 +176,9 @@ describe('legacy bridge — wiring', () => {
     expect(isPortedPath('/inbox?tab=exceptions')).toBe(true);
     expect(isPortedPath('/sign-in')).toBe(true);
     expect(isPortedPath('/sign-in/factor-one')).toBe(true);
-    expect(isPortedPath('/bills')).toBe(false);
+    expect(isPortedPath('/bills')).toBe(true); // port batch 1
+    expect(isPortedPath('/bills/policy')).toBe(false); // nested route still on the bridge
+    expect(isPortedPath('/agents')).toBe(false);
     expect(isPortedPath('/dashboard-old')).toBe(false);
     expect(isPortedPath('/')).toBe(false);
     expect(isPortedPath('/some/unknown/route')).toBe(false);

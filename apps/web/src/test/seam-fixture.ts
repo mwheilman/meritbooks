@@ -64,6 +64,11 @@ async function group(db: PGlite, org: string, type: string, subType: string): Pr
   return g.id;
 }
 
+/** Add one approved account to a tenant (seam part 2 tests need COGS / OPEX / accrual accounts too). */
+export async function addAccount(db: PGlite, org: string, number: string, name: string, type: string, subType: string): Promise<string> {
+  return account(db, org, number, name, type, subType);
+}
+
 async function account(db: PGlite, org: string, number: string, name: string, type: string, subType: string): Promise<string> {
   const id = crypto.randomUUID();
   await db.query(

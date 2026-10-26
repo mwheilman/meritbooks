@@ -19,12 +19,12 @@ export function formatMoney(cents: number | bigint, options?: {
   const value = Number(cents) / 100;
 
   if (compact && Math.abs(value) >= 1_000_000) {
-    const m = value / 1_000_000;
-    return `$${m.toFixed(1)}M`;
+    const m = Math.abs(value) / 1_000_000;
+    return `${value < 0 ? '\u2212' : ''}$${m.toFixed(1)}M`;
   }
   if (compact && Math.abs(value) >= 1_000) {
-    const k = value / 1_000;
-    return `$${k.toFixed(1)}K`;
+    const k = Math.abs(value) / 1_000;
+    return `${value < 0 ? '\u2212' : ''}$${k.toFixed(1)}K`;
   }
 
   const formatted = new Intl.NumberFormat('en-US', {

@@ -214,7 +214,7 @@ export function BrandSettings({ initialCompany }: { initialCompany: string | nul
               </Button>
             )}
             <span className="t-cap" style={{ marginLeft: 'auto' }}>
-              {!savable ? 'Fix the colours marked below to save.' : dirty ? 'Unsaved changes' : saved ? 'All changes saved' : 'Not saved yet'}
+              {!savable ? 'Fix the colours marked below to save.' : dirty ? 'Unsaved changes' : saved ? 'All changes saved' : kind === 'tenant' ? 'Using the Merit default — nothing to save' : 'Using the organization brand — nothing to save'}
             </span>
           </div>
         </div>

@@ -18,7 +18,7 @@ export function moneyCompact(cents: number | null | undefined): string {
   if (cents === null || cents === undefined || !Number.isFinite(cents)) return '—';
   const dollars = cents / 100;
   const abs = Math.abs(dollars);
-  const sign = dollars < 0 ? '-' : '';
+  const sign = dollars < 0 ? '−' : '';
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(abs >= 10_000_000 ? 1 : 2)}M`;
   if (abs >= 10_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
   return formatMoney(cents);

@@ -5,6 +5,7 @@ import { api, Button, ConfirmDialog, Drawer, Field, InlineNotice, KV, PanelSecti
 import { CELL_WORDS } from './calendar-grid';
 import { dayName, monthName, type CalendarCell, type CalendarRow, type PeriodDetail, type RestatementLogEntry } from './types';
 import s from './reporting-calendar.module.css';
+import { closeStatusLabel } from '@/lib/period/closed';
 
 interface Props {
   open: boolean;
@@ -23,7 +24,7 @@ const BLOCK_WORDS = {
   soft_close_below_minimum: 'The auto rule waits for a hard close; you can still release it by hand.',
 } as const;
 
-const STATUS_WORDS = { HARD_CLOSE: 'Closed', SOFT_CLOSE: 'Soft close', OPEN: 'Open', NO_PERIOD: 'No period' } as const;
+
 
 /** One company-month: status, what was reported, release / take back, its restatements. */
 export function PeriodPanel({ open, row, cell, canRelease, restatements, onClose, onChanged }: Props) {
@@ -84,13 +85,13 @@ export function PeriodPanel({ open, row, cell, canRelease, restatements, onClose
         onClose={onClose}
         eyebrow={['Reporting calendar', row.name]}
         title={monthName(cell.key)}
-        meta={`${w.long} · ${STATUS_WORDS[cell.closeStatus]}`}
+        meta={`${w.long} · ${closeStatusLabel(cell.closeStatus)}`}
         width={440}
       >
         <PanelSection title="Status">
           <KV
             items={[
-              { term: 'Period', value: STATUS_WORDS[cell.closeStatus] },
+              { term: 'Period', value: closeStatusLabel(cell.closeStatus) },
               {
                 term: 'Partners',
                 value: cell.release.released

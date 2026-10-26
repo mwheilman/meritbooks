@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Link2, Copy, Check, RefreshCw, Trash2, Loader2, ExternalLink, ShieldOff } from 'lucide-react';
+import { useState, type CSSProperties } from 'react';
+import { Button, Icon, Input, InlineNotice } from '@meritbooks/merit-ui';
 import { useQuery, addToast } from '@/hooks';
 
 /**
@@ -10,6 +10,8 @@ import { useQuery, addToast } from '@/hooks';
  * shareable /portal/customer/<token> URL once minted. Gated server-side on the
  * customers permission (the API 403s without customers:edit); this UI is a thin
  * client over that route and never trusts itself for authorization.
+ *
+ * Presentation: kit classes + inline layout only (renders inside bridged and ported pages).
  */
 
 interface TokenView {
@@ -29,6 +31,8 @@ interface PortalTokensResponse {
 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : null;
+
+const box: CSSProperties = { padding: '12px 16px', border: '1px solid var(--line)', background: 'var(--white)', display: 'grid', gap: 12 };
 
 export function CustomerPortalAccess({ customerId }: { customerId: string }) {
   const { data, isLoading, error, refetch } = useQuery<PortalTokensResponse>(
@@ -101,104 +105,90 @@ export function CustomerPortalAccess({ customerId }: { customerId: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 text-xs text-slate-500">
-        <Loader2 size={13} className="animate-spin" /> Loading portal access…
+      <div className="wg-loading" aria-busy="true" style={{ display: 'grid', gap: 10, padding: '8px 0' }}>
+        <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '45%' }} aria-hidden="true" />
+        <span className="t-cap" role="status">Loading portal access…</span>
       </div>
     );
   }
   if (error) {
-    return <p className="text-xs text-slate-500">Portal access unavailable.</p>;
+    return (
+      <InlineNotice tone="neg" title="Portal access didn’t load.">
+        <span>{error}</span>{' '}
+        <Button variant="quiet" onClick={() => refetch()}>Try again</Button>
+      </InlineNotice>
+    );
   }
 
   return (
-    <div className="space-y-3">
-      <p className="text-2xs text-slate-500 leading-relaxed">
+    <div style={{ display: 'grid', gap: 12 }}>
+      <p className="t-cap">
         A self-service link lets this customer view all their invoices, see their balance,
-        download a statement, and pay open invoices — no login. The link is a secret: anyone
-        with it can see this customer&apos;s account, so share it directly and revoke if it leaks.
+        download a statement and pay open invoices — no login. The link is a secret: anyone
+        with it can see this customer&apos;s account, so share it directly and revoke it if it leaks.
       </p>
 
       {active ? (
-        <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] p-3 space-y-2">
-          <div className="flex items-center gap-2">
-            <Link2 size={13} className="text-emerald-300" />
-            <span className="text-2xs uppercase tracking-wider text-emerald-300 font-semibold">Active portal link</span>
-            {active.expiresAt && (
-              <span className="ml-auto text-2xs text-slate-500">Expires {fmt(active.expiresAt)}</span>
-            )}
+        <div style={{ ...box, boxShadow: 'inset 3px 0 var(--electric)' }}>
+          <div className="row row--between">
+            <span className="mb-sev"><Icon name="plug" /> Active portal link</span>
+            {active.expiresAt && <span className="t-cap">Expires {fmt(active.expiresAt)}</span>}
           </div>
-          <div className="flex items-center gap-1.5">
-            <input
+          <div className="row">
+            <Input
               readOnly
               value={active.url ?? ''}
               onFocus={(e) => e.currentTarget.select()}
               aria-label="Portal link URL"
-              className="flex-1 min-w-0 px-2 py-1.5 rounded-md bg-slate-950 border border-slate-700 text-2xs font-mono text-slate-300 focus:outline-none focus:border-emerald-500/50"
+              style={{ flex: 1, minWidth: 0 }}
             />
-            <button
-              onClick={copy}
-              title="Copy link"
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
-            >
-              {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            <Button onClick={copy} title="Copy link" icon={copied ? 'check' : undefined}>
               {copied ? 'Copied' : 'Copy'}
-            </button>
+            </Button>
             {active.url && (
               <a
                 href={active.url}
                 target="_blank"
                 rel="noreferrer"
                 title="Open the portal as the customer sees it"
-                className="shrink-0 inline-flex items-center px-2 py-1.5 rounded-md text-2xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700"
+                aria-label="Open the portal as the customer sees it"
+                className="btn btn--quiet btn--icon"
               >
-                <ExternalLink size={12} />
+                <Icon name="right" />
               </a>
             )}
           </div>
-          <div className="flex items-center gap-2 text-2xs text-slate-500">
-            {active.lastUsedAt ? <span>Last opened {fmt(active.lastUsedAt)}</span> : <span>Not opened yet</span>}
-          </div>
-          <div className="flex items-center gap-2 pt-1">
-            <button
-              onClick={mint}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />} Regenerate
-            </button>
-            <button
-              onClick={revoke}
-              disabled={busy !== null}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-red-600/90 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {busy === 'revoke' ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />} Revoke
-            </button>
+          <span className="t-cap">{active.lastUsedAt ? `Last opened ${fmt(active.lastUsedAt)}` : 'Not opened yet'}</span>
+          <div className="btn-row">
+            <Button onClick={mint} disabled={busy !== null} icon="undo" aria-busy={busy === 'mint' || undefined}>
+              {busy === 'mint' ? 'Regenerating…' : 'Regenerate'}
+            </Button>
+            <Button variant="danger" onClick={revoke} disabled={busy !== null} aria-busy={busy === 'revoke' || undefined}>
+              {busy === 'revoke' ? 'Revoking…' : 'Revoke'}
+            </Button>
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3 space-y-2.5">
-          <div className="flex items-center gap-2 text-slate-400">
-            <ShieldOff size={13} />
-            <span className="text-xs">No active portal link.</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-2xs text-slate-500 uppercase tracking-wider">Expires (optional)</span>
-            <input
+        <div style={box}>
+          <span className="row ink-2"><Icon name="lock" /> No active portal link.</span>
+          <div className="row" style={{ flexWrap: 'wrap' }}>
+            <label className="field-label" htmlFor={`cp-expiry-${customerId}`}>Expires (optional)</label>
+            <Input
+              id={`cp-expiry-${customerId}`}
               type="date"
               min={today}
               value={expiry}
               onChange={(e) => setExpiry(e.target.value)}
               aria-label="Link expiration date (optional)"
-              className="px-2 py-1 rounded-md bg-slate-900 border border-slate-700 text-xs text-slate-200 focus:outline-none focus:border-emerald-500/50"
+              style={{ width: 168 }}
             />
           </div>
-          <button
-            onClick={mint}
-            disabled={busy !== null}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {busy === 'mint' ? <Loader2 size={12} className="animate-spin" /> : <Link2 size={12} />} Create portal link
-          </button>
+          <div>
+            <Button onClick={mint} disabled={busy !== null} icon="plug" aria-busy={busy === 'mint' || undefined}>
+              {busy === 'mint' ? 'Creating…' : 'Create portal link'}
+            </Button>
+          </div>
         </div>
       )}
     </div>

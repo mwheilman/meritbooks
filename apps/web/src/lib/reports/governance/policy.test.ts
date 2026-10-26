@@ -163,7 +163,7 @@ describe('audience visibility (enforcement)', () => {
     expect(d.shownPeriodKeys).toEqual(['2026-09']);
     expect(d.watermark).toBe('preliminary');
     expect(d.periods[0].unclosed).toBe(true);
-    expect(d.annotations.some((a) => a.kind === 'unclosed' && a.text === 'Sep 2026 is preliminary (soft close).')).toBe(true);
+    expect(d.annotations.some((a) => a.kind === 'unclosed' && a.text === 'Sep 2026 is preliminary (soft-closed).')).toBe(true);
   });
 
   it('restated months carry the "restated on" annotation', () => {

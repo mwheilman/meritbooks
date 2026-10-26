@@ -3,8 +3,9 @@
  */
 
 import type { StatusKind } from '@meritbooks/merit-ui';
-import { DOC_TYPE_LABEL, type DocumentRow } from '@/lib/documents/schema';
-import { DOC_CLASS_LABEL, STATUS_LABEL, type IntelligenceDto, type LinkDto, type ProposalSummaryDto } from '@/lib/documents/intelligence/types';
+import type { DocumentRow } from '@/lib/documents/schema';
+import { coarseTypeLabel, documentTypeLabel } from '@/lib/documents/catalog';
+import { STATUS_LABEL, type IntelligenceDto, type LinkDto, type ProposalSummaryDto } from '@/lib/documents/intelligence/types';
 
 export type Band = 'all' | 'review' | 'proposals' | 'unfiled';
 
@@ -18,6 +19,10 @@ export interface IntelSummary {
   proposals_pending: number;
   ai_deferred: number;
   not_analyzed: number;
+  /** Every stored file (the All tile). */
+  documents: number;
+  /** Files not linked to a record (the Unfiled tile; same rule as ?linked=unfiled). */
+  unfiled: number;
 }
 
 export interface IntelResponse {
@@ -47,9 +52,33 @@ export interface AnalyzeResponse {
   skipped: string | null;
 }
 
-export function typeLabel(r: CenterRow): string {
-  if (r.intel && (r.intel.doc_class !== 'other' || r.intel.status !== 'needs_review')) return DOC_CLASS_LABEL[r.intel.doc_class];
-  return DOC_TYPE_LABEL[r.doc.doc_type] ?? 'Other';
+/** The row's type in the catalog's words (lib/documents/catalog.ts) — read class first, else the stored bucket. */
+export function typeLabel(r: Pick<CenterRow, 'doc' | 'intel'>): string {
+  if (r.intel && (r.intel.doc_class !== 'other' || r.intel.status !== 'needs_review')) return documentTypeLabel(r.intel.doc_class);
+  return coarseTypeLabel(r.doc.doc_type);
+}
+
+/**
+ * A band tile's count: the live list total when that band is showing (it honours the filters),
+ * else the org-wide summary figure; '—' only while the summary has not loaded.
+ */
+export function bandCount(band: Band, active: Band, listTotal: number, summary: IntelSummary | undefined): number | string {
+  if (band === active && (band === 'all' || band === 'unfiled')) return listTotal;
+  if (!summary) return '—';
+  switch (band) {
+    case 'all':
+      return summary.documents;
+    case 'unfiled':
+      return summary.unfiled;
+    case 'review':
+      return summary.needs_review;
+    case 'proposals':
+      return summary.proposals_pending;
+    default: {
+      const never: never = band;
+      return never;
+    }
+  }
 }
 
 export function statusOf(r: CenterRow): { kind: StatusKind; word: string } {
@@ -74,6 +103,14 @@ export function statusOf(r: CenterRow): { kind: StatusKind; word: string } {
     default:
       return { kind: 'track', word: `${STATUS_LABEL[i.status]}${later}` };
   }
+}
+
+/** Table columns, in order. All of them with the panel closed; the identifying ones with it open. */
+export const ALL_COLUMN_IDS = ['doc', 'type', 'conf', 'company', 'linked', 'status'] as const;
+export const PANEL_COLUMN_IDS = ['doc', 'type', 'status'] as const;
+
+export function visibleColumnIds(panelOpen: boolean): readonly string[] {
+  return panelOpen ? PANEL_COLUMN_IDS : ALL_COLUMN_IDS;
 }
 
 export function fmtDate(iso: string | null | undefined): string {

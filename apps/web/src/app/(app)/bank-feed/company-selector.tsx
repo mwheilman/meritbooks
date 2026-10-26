@@ -1,7 +1,13 @@
 'use client';
 
-import { Building2, ChevronDown } from 'lucide-react';
-import { useState, useRef, useEffect } from 'react';
+/**
+ * Company filter (retired from the bank feed — the shell's ⌘J context chip now owns
+ * company scope; kept for any caller that still wants an in-page picker). Kit button +
+ * kit popover listbox.
+ */
+
+import { useRef, useState, type KeyboardEvent } from 'react';
+import { Button, Popover, PopoverItem, PopoverList } from '@meritbooks/merit-ui';
 import { useQuery } from '@/hooks';
 import type { Location } from '@meritbooks/shared';
 
@@ -12,78 +18,58 @@ interface CompanySelectorProps {
 
 export function CompanySelector({ selectedId, onChange }: CompanySelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const anchorRef = useRef<HTMLButtonElement>(null);
 
   const { data: locations, isLoading } = useQuery<Location[]>('/api/locations');
 
-  // Close on click outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
   const selected = locations?.find((l) => l.id === selectedId);
-  const label = selected
-    ? `${selected.short_code} · ${selected.name}`
-    : 'All Companies';
+  const label = selected ? `${selected.short_code} · ${selected.name}` : 'All companies';
+
+  const choose = (id: string | null) => {
+    onChange(id);
+    setIsOpen(false);
+  };
+  const onKey = (id: string | null) => (e: KeyboardEvent<HTMLLIElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      choose(id);
+    }
+  };
 
   return (
-    <div ref={dropdownRef} className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
+    <>
+      <Button
+        ref={anchorRef}
+        iconAfter="down"
+        onClick={() => setIsOpen((o) => !o)}
         disabled={isLoading}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
         aria-label={`Filter by company: ${label}`}
-        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-900 border border-slate-800 text-sm text-slate-200 hover:border-slate-700 hover:bg-white/[0.02] transition-colors"
       >
-        <Building2 size={14} className="text-slate-500" />
-        <span className="max-w-[200px] truncate">{label}</span>
-        <ChevronDown size={14} className={`text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
+        <span className="mb-trunc" style={{ maxWidth: 200 }}>{label}</span>
+      </Button>
 
-      {isOpen && locations && (
-        <div className="absolute top-full left-0 mt-1 w-72 max-h-80 overflow-y-auto rounded-lg bg-surface-900 border border-slate-800 shadow-xl z-50">
-          {/* All companies option */}
-          <button
-            onClick={() => { onChange(null); setIsOpen(false); }}
-            className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
-              !selectedId
-                ? 'bg-brand-500/10 text-brand-400'
-                : 'text-slate-300 hover:bg-white/[0.04]'
-            }`}
-          >
-            <Building2 size={14} className="text-slate-500 shrink-0" />
-            <span>All Companies</span>
-            <span className="ml-auto text-xs text-slate-600">{locations.length}</span>
-          </button>
-
-          <div className="h-px bg-slate-800" />
-
-          {locations.map((loc) => (
-            <button
+      <Popover open={isOpen && !!locations} onClose={() => setIsOpen(false)} anchorRef={anchorRef} width={320} role="listbox" aria-label="Companies">
+        <PopoverList style={{ maxHeight: 320 }}>
+          <PopoverItem active={!selectedId} onClick={() => choose(null)} onKeyDown={onKey(null)} right={<span className="tnum">{locations?.length ?? 0}</span>} tabIndex={0}>
+            All companies
+          </PopoverItem>
+          {(locations ?? []).map((loc) => (
+            <PopoverItem
               key={loc.id}
-              onClick={() => { onChange(loc.id); setIsOpen(false); }}
-              className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors ${
-                selectedId === loc.id
-                  ? 'bg-brand-500/10 text-brand-400'
-                  : 'text-slate-300 hover:bg-white/[0.04]'
-              }`}
+              active={selectedId === loc.id}
+              onClick={() => choose(loc.id)}
+              onKeyDown={onKey(loc.id)}
+              right={loc.industry ? <span>{loc.industry}</span> : undefined}
+              tabIndex={0}
             >
-              <span className="font-mono text-xs text-slate-500 w-8 shrink-0">{loc.short_code}</span>
-              <span className="truncate">{loc.name}</span>
-              {loc.industry && (
-                <span className="ml-auto text-2xs text-slate-600 shrink-0">{loc.industry}</span>
-              )}
-            </button>
+              <span className="code">{loc.short_code}</span>
+              <span className="mb-trunc">{loc.name}</span>
+            </PopoverItem>
           ))}
-        </div>
-      )}
-    </div>
+        </PopoverList>
+      </Popover>
+    </>
   );
 }

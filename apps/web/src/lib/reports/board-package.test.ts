@@ -326,6 +326,6 @@ describe('deterministicExecutiveSummary', () => {
     expect(text).toContain('Acme Holdings');
     expect(text).toContain('$10,000.00'); // revenue 1,000,000 cents
     expect(text).toContain('60% margin');
-    expect(text).toContain('2.00x'); // current ratio
+    expect(text).toContain('2.00×'); // current ratio
   });
 });

@@ -1,12 +1,26 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { EmptyState } from '@/components/ui';
 import {
-  Plus, X, Loader2, Repeat, AlertCircle, Play, Pause, Zap, Send, Trash2, Pencil, CalendarClock,
-} from 'lucide-react';
+  Button,
+  ConfirmDialog,
+  Dialog,
+  Field,
+  InlineNotice,
+  Input,
+  Keyhints,
+  MoneyInput,
+  Seg,
+  Select,
+  Status,
+  Tag,
+  cx,
+  useListKeynav,
+} from '@meritbooks/merit-ui';
+import { EmptyState, TableSkeleton } from '@/components/ui';
+import s from './invoices.module.css';
 
 // ─── Types ────────────────────────────────────────────────────────────
 type Frequency = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'SEMIANNUAL' | 'ANNUAL';
@@ -54,6 +68,12 @@ function cadenceLabel(freq: Frequency, interval: number): string {
   return `Every ${interval} ${FREQ_UNIT[freq]}${interval > 1 && !FREQ_UNIT[freq].endsWith('s') ? 's' : ''}`;
 }
 
+
+type Filter = 'ALL' | 'DUE' | 'ACTIVE' | 'PAUSED';
+
+const modeOf = (t: { generateMode?: GenerateMode; autoSend: boolean }): GenerateMode =>
+  t.generateMode ?? (t.autoSend ? 'POST_AND_SEND' : 'POST');
+
 // ─── Panel ────────────────────────────────────────────────────────────
 export function RecurringPanel() {
   const [showCreate, setShowCreate] = useState(false);
@@ -61,15 +81,31 @@ export function RecurringPanel() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [generating, setGenerating] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [filter, setFilter] = useState<Filter>('ALL');
+  const [confirmDelete, setConfirmDelete] = useState<TemplateRow | null>(null);
 
-  const { data, isLoading, error } = useQuery<{
+  const { data, isLoading, error, refetch } = useQuery<{
     data: TemplateRow[];
     counts: { ALL: number; ACTIVE: number; PAUSED: number; DUE: number };
   }>(`/api/recurring-invoices?_k=${refreshKey}`);
 
-  const templates = data?.data ?? [];
   const counts = data?.counts ?? { ALL: 0, ACTIVE: 0, PAUSED: 0, DUE: 0 };
+  const templates = useMemo(() => {
+    const all = data?.data ?? [];
+    if (filter === 'DUE') return all.filter((t) => t.isDue);
+    if (filter === 'ACTIVE') return all.filter((t) => t.isActive);
+    if (filter === 'PAUSED') return all.filter((t) => !t.isActive);
+    return all;
+  }, [data, filter]);
   const refresh = () => { setRefreshKey((k) => k + 1); setShowCreate(false); setEditId(null); };
+
+  const modalOpen = showCreate || !!editId || !!confirmDelete;
+  const { activeIndex, setActiveIndex, rowProps } = useListKeynav({
+    count: templates.length,
+    onOpen: (i) => { const t = templates[i]; if (t) setEditId(t.id); },
+    enabled: !modalOpen,
+    owner: 'Recurring schedules',
+  });
 
   async function generateDue() {
     setGenerating(true);
@@ -117,7 +153,7 @@ export function RecurringPanel() {
       const result = await res.json().catch(() => ({}));
       if (!res.ok) { addToast('error', result.error ?? 'Generation failed'); return; }
       const created = result.invoices_created ?? 0;
-      addToast(created > 0 ? 'success' : 'success', created > 0 ? `Generated ${created} invoice${created === 1 ? '' : 's'}` : 'Nothing due for this schedule');
+      addToast('success', created > 0 ? `Generated ${created} invoice${created === 1 ? '' : 's'}` : 'Nothing due for this schedule');
       refresh();
     } catch {
       addToast('error', 'Network error');
@@ -126,8 +162,8 @@ export function RecurringPanel() {
     }
   }
 
+  // Confirmed through the kit ConfirmDialog (was a browser confirm()).
   async function remove(t: TemplateRow) {
-    if (!confirm(`Delete recurring schedule "${t.name}"? Invoices already generated are unaffected.`)) return;
     setBusyId(t.id);
     try {
       const res = await fetch(`/api/recurring-invoices/${t.id}`, { method: 'DELETE' });
@@ -143,124 +179,158 @@ export function RecurringPanel() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className={s.sectionHead}>
         <div>
-          <h2 className="text-lg font-semibold text-white">Recurring Invoices</h2>
-          <p className="text-sm text-gray-400 mt-1">Bill customers automatically on a schedule — Books mints each invoice when it&apos;s due</p>
+          <h2 className="t-section">Recurring invoices</h2>
+          <p>Bill customers automatically on a schedule. Books creates each invoice when it&apos;s due.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={generateDue}
-            disabled={generating}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4 text-amber-400" />}
-            Generate due now
-          </button>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> New Schedule
-          </button>
+        <div className="btn-row">
+          <Button onClick={() => void generateDue()} disabled={generating} aria-busy={generating || undefined}>
+            {generating ? 'Generating…' : 'Generate due now'}
+          </Button>
+          <Button variant="primary" icon="plus" onClick={() => setShowCreate(true)}>New schedule</Button>
         </div>
       </div>
 
-      {/* Summary tiles */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        {[
-          { label: 'Active', value: String(counts.ACTIVE), sub: 'running schedules' },
-          { label: 'Due now', value: String(counts.DUE), sub: 'awaiting generation' },
-          { label: 'Paused', value: String(counts.PAUSED), sub: 'not billing' },
-          { label: 'Total', value: String(counts.ALL), sub: 'all schedules' },
-        ].map((c) => (
-          <div key={c.label} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <span className="text-sm text-gray-400">{c.label}</span>
-            <p className="text-xl font-mono font-semibold text-white mt-2">{c.value}</p>
-            <p className="text-xs text-gray-500 mt-1">{c.sub}</p>
-          </div>
-        ))}
+      <div className={s.toolbar}>
+        <Seg<Filter>
+          aria-label="Schedule status"
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { value: 'ALL', label: 'All', count: counts.ALL },
+            { value: 'DUE', label: 'Due now', count: counts.DUE },
+            { value: 'ACTIVE', label: 'Active', count: counts.ACTIVE },
+            { value: 'PAUSED', label: 'Paused', count: counts.PAUSED },
+          ]}
+        />
+        <span className={s.toolbarSp} />
+        {counts.DUE > 0 && <span className="t-cap tnum">{counts.DUE} waiting to be generated</span>}
       </div>
 
       {error ? (
-        <div className="p-8 text-center">
-          <AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" />
-          <p className="text-red-400">Failed to load recurring schedules</p>
-          <p className="text-sm text-gray-500 mt-1">{error}</p>
+        <div className={cx('surface', s.state)}>
+          <div className="wg-state" role="alert">
+            <Tag tone="neg">Not loaded</Tag>
+            <span className="t-head">Recurring schedules didn&apos;t load</span>
+            <p>{error}</p>
+            <Button onClick={() => void refetch()}>Try again</Button>
+          </div>
         </div>
-      ) : isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+      ) : isLoading && !data ? (
+        <TableSkeleton rows={5} cols={6} />
       ) : templates.length === 0 ? (
-        <EmptyState
-          icon={Repeat}
-          title="No recurring schedules"
-          description="Create a schedule to bill a customer automatically each period."
-          action={{ label: 'New Schedule', onClick: () => setShowCreate(true) }}
-        />
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[820px]">
-            <thead>
-              <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-700/50">
-                <th className="pb-3 pr-4">Schedule</th>
-                <th className="pb-3 pr-4">Customer</th>
-                <th className="pb-3 pr-4">Cadence</th>
-                <th className="pb-3 pr-4">Next run</th>
-                <th className="pb-3 pr-4 text-right">Amount</th>
-                <th className="pb-3 pr-4">Status</th>
-                <th className="pb-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {templates.map((t) => (
-                <tr key={t.id} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                  <td className="py-3 pr-4">
-                    <div className="text-white font-medium">{t.name}</div>
-                    <div className="text-xs text-gray-500">
-                      {t.location?.name ?? '—'}
-                      <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-slate-700/40 text-slate-300 rounded">{GENERATE_MODES.find((m) => m.value === (t.generateMode ?? (t.autoSend ? 'POST_AND_SEND' : 'POST')))?.short}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 pr-4 text-gray-300">{t.customer?.name ?? '—'}</td>
-                  <td className="py-3 pr-4 text-gray-400 text-xs">{cadenceLabel(t.frequency, t.intervalCount)}</td>
-                  <td className="py-3 pr-4">
-                    <span className={`font-mono text-xs ${t.isDue ? 'text-amber-400' : 'text-gray-400'}`}>{t.nextRunDate ?? '—'}</span>
-                    {t.isDue && <span className="ml-1 text-[10px] text-amber-400">due</span>}
-                    {t.occurrencesRemaining != null && (
-                      <div className="text-[10px] text-gray-500">{t.occurrencesRemaining} left</div>
-                    )}
-                  </td>
-                  <td className="py-3 pr-4 text-right font-mono text-white">{formatMoney(t.amountCents)}</td>
-                  <td className="py-3 pr-4">
-                    <span className={`px-2 py-0.5 text-xs rounded-full ${t.isActive ? 'bg-emerald-500/20 text-emerald-300' : 'bg-gray-500/20 text-gray-400'}`}>
-                      {t.isActive ? 'Active' : 'Paused'}
-                    </span>
-                  </td>
-                  <td className="py-3 text-right whitespace-nowrap">
-                    {busyId === t.id ? (
-                      <Loader2 className="w-4 h-4 animate-spin text-emerald-400 inline" />
-                    ) : (
-                      <div className="inline-flex items-center gap-1">
-                        {t.isActive && t.isDue && (
-                          <button onClick={() => runOne(t)} title="Generate now" aria-label={`Generate ${t.name} now`} className="p-1.5 text-gray-400 hover:text-amber-400 hover:bg-gray-700/50 rounded"><Send className="w-4 h-4" /></button>
-                        )}
-                        <button onClick={() => toggleActive(t)} title={t.isActive ? 'Pause' : 'Resume'} aria-label={`${t.isActive ? 'Pause' : 'Resume'} ${t.name}`} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded">
-                          {t.isActive ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                        </button>
-                        <button onClick={() => setEditId(t.id)} title="Edit" aria-label={`Edit ${t.name}`} className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700/50 rounded"><Pencil className="w-4 h-4" /></button>
-                        <button onClick={() => remove(t)} title="Delete" aria-label={`Delete ${t.name}`} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-gray-700/50 rounded"><Trash2 className="w-4 h-4" /></button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="surface">
+          {filter !== 'ALL' && counts.ALL > 0 ? (
+            <EmptyState
+              title="No schedules in this view"
+              description="Nothing matches this status. Show every schedule to see the rest."
+              action={{ label: 'Show all', onClick: () => setFilter('ALL') }}
+            />
+          ) : (
+            <EmptyState
+              title="No recurring schedules"
+              description="Create a schedule to bill a customer automatically each period."
+              action={{ label: 'New schedule', onClick: () => setShowCreate(true) }}
+            />
+          )}
         </div>
+      ) : (
+        <>
+          <div className={s.tableWrap}>
+            <table className={cx('tbl', 'tbl-q', s.table)} aria-label="Recurring schedules">
+              <colgroup>
+                <col />
+                <col style={{ width: 200 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 132 }} />
+                <col style={{ width: 112 }} />
+                <col style={{ width: 312 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Schedule</th>
+                  <th scope="col">Customer</th>
+                  <th scope="col">Cadence</th>
+                  <th scope="col">Next run</th>
+                  <th scope="col" className="n">Amount</th>
+                  <th scope="col">Status</th>
+                  <th scope="col" className="n"><span className="sr">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {templates.map((t, i) => (
+                  <tr
+                    key={t.id}
+                    {...rowProps(i)}
+                    onClick={() => setActiveIndex(i)}
+                    onDoubleClick={() => setEditId(t.id)}
+                    className={cx('q-row', i === activeIndex && 'is-cursor', t.isActive && t.isDue && 'is-attn')}
+                    aria-current={i === activeIndex || undefined}
+                  >
+                    <td>
+                      <div className={s.cellStack}>
+                        <span style={{ fontWeight: 600 }}>{t.name}</span>
+                        <span className="t-cap">
+                          {t.location?.name ?? '—'} · {GENERATE_MODES.find((m) => m.value === modeOf(t))?.short}
+                        </span>
+                      </div>
+                    </td>
+                    <td>{t.customer?.name ?? '—'}</td>
+                    <td className="ink-2">{cadenceLabel(t.frequency, t.intervalCount)}</td>
+                    <td>
+                      <div className={s.cellStack}>
+                        <span className={s.inline}>
+                          <span className="tnum">{t.nextRunDate ?? '—'}</span>
+                          {t.isDue && <Tag tone="warn">Due</Tag>}
+                        </span>
+                        {t.occurrencesRemaining != null && <span className="t-cap tnum">{t.occurrencesRemaining} left</span>}
+                      </div>
+                    </td>
+                    <td className="n">{formatMoney(t.amountCents)}</td>
+                    <td>
+                      {t.isActive ? <Status kind="ready">Active</Status> : <Status kind="track" pip="closed">Paused</Status>}
+                    </td>
+                    <td className="n">
+                      {busyId === t.id ? (
+                        <span className="t-cap" role="status">Working…</span>
+                      ) : (
+                        <span className="mb-row-acts">
+                          {t.isActive && t.isDue && (
+                            <Button variant="quiet" onClick={() => void runOne(t)} aria-label={`Generate ${t.name} now`}>Generate</Button>
+                          )}
+                          <Button variant="quiet" onClick={() => void toggleActive(t)} aria-label={`${t.isActive ? 'Pause' : 'Resume'} ${t.name}`}>
+                            {t.isActive ? 'Pause' : 'Resume'}
+                          </Button>
+                          <Button variant="quiet" onClick={() => setEditId(t.id)} aria-label={`Edit ${t.name}`}>Edit</Button>
+                          <Button variant="quiet" onClick={() => setConfirmDelete(t)} aria-label={`Delete ${t.name}`}>Delete</Button>
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className={s.tableFoot}>
+            <Keyhints hints={[{ chord: 'j k', label: 'move' }, { chord: 'enter', label: 'edit schedule' }]} />
+          </div>
+        </>
       )}
 
       {showCreate && <TemplateModal onClose={() => setShowCreate(false)} onSaved={refresh} />}
       {editId && <TemplateModal templateId={editId} onClose={() => setEditId(null)} onSaved={refresh} />}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={async () => { if (confirmDelete) await remove(confirmDelete); }}
+        title={confirmDelete ? `Delete “${confirmDelete.name}”?` : 'Delete schedule?'}
+        confirmLabel="Delete schedule"
+        tone="danger"
+      >
+        Invoices already generated are unaffected. Future invoices from this schedule stop.
+      </ConfirmDialog>
     </div>
   );
 }
@@ -278,9 +348,10 @@ interface TemplateDetail {
   location: { id: string; name: string; shortCode: string } | null;
 }
 
+
 function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; onClose: () => void; onSaved: () => void }) {
   const isEdit = !!templateId;
-  const { data: detail } = useQuery<TemplateDetail>(templateId ? `/api/recurring-invoices/${templateId}` : '', undefined, { enabled: isEdit });
+  const { data: detail, error: detailError, refetch: refetchDetail } = useQuery<TemplateDetail>(templateId ? `/api/recurring-invoices/${templateId}` : '', undefined, { enabled: isEdit });
 
   const [name, setName] = useState('');
   const [locationId, setLocationId] = useState('');
@@ -306,12 +377,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
   const customers = custData?.data ?? [];
   const accounts = acctData?.data ?? [];
 
-  // Close on Escape (modal a11y).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Esc closes through the kit Dialog (focus-trapped, modal).
 
   // Hydrate the form from the loaded template when editing.
   useEffect(() => {
@@ -331,7 +397,7 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
     setLines(detail.lines.length ? detail.lines.map((l) => ({ description: l.description, account_id: l.accountId, quantity: l.quantity, unit_price_cents: l.unitPriceCents })) : [{ description: '', account_id: '', quantity: 1, unit_price_cents: 0 }]);
   }, [detail]);
 
-  const subtotal = lines.reduce((s, l) => s + Math.round(l.quantity * l.unit_price_cents), 0);
+  const subtotal = lines.reduce((sum, l) => sum + Math.round(l.quantity * l.unit_price_cents), 0);
   const total = subtotal + taxCents;
 
   const updateLine = (i: number, patch: Partial<TLine>) => setLines((p) => p.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -378,133 +444,151 @@ function TemplateModal({ templateId, onClose, onSaved }: { templateId?: string; 
     }
   }
 
+  const loadingDetail = isEdit && !detail && !detailError;
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-start justify-center pt-8 overflow-y-auto">
-      <div role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit recurring schedule' : 'New recurring schedule'} className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-3xl mb-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-700/50">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2"><CalendarClock className="w-5 h-5 text-emerald-400" /> {isEdit ? 'Edit Recurring Schedule' : 'New Recurring Schedule'}</h2>
-          <button onClick={onClose} aria-label="Close" className="p-1 text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
+    <Dialog
+      open
+      onClose={() => { if (!submitting) onClose(); }}
+      title={isEdit ? 'Edit recurring schedule' : 'New recurring schedule'}
+      width={820}
+      className={s.tallDialog}
+      dismissOnScrim={!submitting}
+      footNote={<span className="tnum">Per invoice {formatMoney(total)}</span>}
+      actions={
+        <>
+          <Button onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={submitting || loadingDetail || !!detailError} aria-busy={submitting || undefined}>
+            {submitting ? 'Saving…' : isEdit ? 'Save schedule' : 'Create schedule'}
+          </Button>
+        </>
+      }
+    >
+      {detailError ? (
+        <InlineNotice tone="neg" title="Couldn't load this schedule.">
+          {detailError} <Button variant="quiet" onClick={() => void refetchDetail()}>Try again</Button>
+        </InlineNotice>
+      ) : loadingDetail ? (
+        <div className="wg-loading" style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }} aria-busy="true">
+          <span className="bar-l" style={{ width: '60%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '80%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '50%' }} aria-hidden="true" />
+          <span className="t-cap" role="status">Loading the schedule…</span>
         </div>
+      ) : (
+        <div className={s.form}>
+          {formError && <InlineNotice tone="neg" title="Not saved.">{formError}</InlineNotice>}
 
-        <div className="p-6 space-y-5">
-          {formError && <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">{formError}</div>}
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Schedule name *</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Monthly retainer — Acme" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Company *</label>
-              <select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={isEdit} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white disabled:opacity-60">
+          <div className={s.grid2}>
+            <Field label="Schedule name *">
+              <Input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Monthly retainer — Acme" data-autofocus />
+            </Field>
+            <Field label="Company *" help={isEdit ? 'Fixed once the schedule exists.' : undefined}>
+              <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={isEdit}>
                 <option value="">Select company</option>
                 {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-              </select>
-            </div>
+              </Select>
+            </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Customer *</label>
-              <select value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={isEdit} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white disabled:opacity-60">
+          <div className={s.grid2}>
+            <Field label="Customer *">
+              <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)} disabled={isEdit}>
                 <option value="">Select customer</option>
                 {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Frequency *</label>
-                <select value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
+              </Select>
+            </Field>
+            <div className={s.grid2}>
+              <Field label="Frequency *">
+                <Select value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)}>
                   <option value="WEEKLY">Weekly</option>
                   <option value="BIWEEKLY">Biweekly</option>
                   <option value="MONTHLY">Monthly</option>
                   <option value="QUARTERLY">Quarterly</option>
                   <option value="SEMIANNUAL">Semiannual</option>
                   <option value="ANNUAL">Annual</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Every</label>
-                <input type="number" min={1} max={52} value={intervalCount} onChange={(e) => setIntervalCount(Math.max(1, parseInt(e.target.value, 10) || 1))} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white text-right font-mono" />
-              </div>
+                </Select>
+              </Field>
+              <Field label="Every">
+                <Input type="number" min={1} max={52} value={intervalCount} className={s.num} onChange={(e) => setIntervalCount(Math.max(1, parseInt(e.target.value, 10) || 1))} />
+              </Field>
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-4">
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Start date *</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={isEdit} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white disabled:opacity-60" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">End date</label>
-              <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1"># Occurrences</label>
-              <input type="number" min={1} value={occurrences} onChange={(e) => setOccurrences(e.target.value)} placeholder="∞" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600 text-right font-mono" />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Net terms (days)</label>
-              <input type="number" min={0} value={terms} onChange={(e) => setTerms(Math.max(0, parseInt(e.target.value, 10) || 0))} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white text-right font-mono" />
-            </div>
+          <div className={s.grid4}>
+            <Field label="Start date *">
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={isEdit} />
+            </Field>
+            <Field label="End date">
+              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </Field>
+            <Field label="Occurrences" help="Blank = no limit">
+              <Input type="number" min={1} value={occurrences} onChange={(e) => setOccurrences(e.target.value)} placeholder="∞" className={s.num} />
+            </Field>
+            <Field label="Net terms (days)">
+              <Input type="number" min={0} value={terms} className={s.num} onChange={(e) => setTerms(Math.max(0, parseInt(e.target.value, 10) || 0))} />
+            </Field>
           </div>
 
           {/* Line items */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs text-gray-400 uppercase tracking-wider">Line items</label>
-              <button onClick={() => setLines((p) => [...p, { description: '', account_id: '', quantity: 1, unit_price_cents: 0 }])} className="text-xs text-emerald-400 hover:text-emerald-300">+ Add line</button>
+            <div className={s.linesHead}>
+              <span className="eyebrow">Lines</span>
+              <Button variant="quiet" icon="plus" onClick={() => setLines((p) => [...p, { description: '', account_id: '', quantity: 1, unit_price_cents: 0 }])}>Add line</Button>
             </div>
-            <div className="space-y-2">
+            <div className={s.lineRows}>
+              <div className={s.lineGrid} aria-hidden="true">
+                <span className="field-label">Description</span>
+                <span className="field-label">GL account</span>
+                <span className={cx('field-label', s.num)}>Qty</span>
+                <span className={cx('field-label', s.num)}>Unit price</span>
+                <span className={cx('field-label', s.num)}>Amount</span>
+                <span />
+              </div>
               {lines.map((l, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-center">
-                  <input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" className="col-span-4 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white placeholder:text-gray-600" />
-                  <select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} className="col-span-3 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white">
-                    <option value="">GL account…</option>
+                <div key={i} className={s.lineGrid}>
+                  <Input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })} placeholder="Description" aria-label={`Line ${i + 1} description`} />
+                  <Select value={l.account_id} onChange={(e) => updateLine(i, { account_id: e.target.value })} aria-label={`Line ${i + 1} GL account`}>
+                    <option value="">{locationId ? 'GL account…' : 'Pick a company first'}</option>
                     {accounts.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
-                  </select>
-                  <input type="number" min={0} step={0.01} value={l.quantity} onChange={(e) => updateLine(i, { quantity: parseFloat(e.target.value) || 0 })} className="col-span-1 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
-                  <input type="number" min={0} step={0.01} value={(l.unit_price_cents / 100).toFixed(2)} onChange={(e) => updateLine(i, { unit_price_cents: Math.round((parseFloat(e.target.value) || 0) * 100) })} className="col-span-2 px-2 py-1.5 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
-                  <div className="col-span-1 text-right font-mono text-sm text-white">{formatMoney(Math.round(l.quantity * l.unit_price_cents))}</div>
-                  <button onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p))} className="col-span-1 p-1 text-gray-500 hover:text-red-400"><X className="w-4 h-4" /></button>
+                  </Select>
+                  <Input type="number" min={0} step={0.01} value={l.quantity} className={s.num} onChange={(e) => updateLine(i, { quantity: parseFloat(e.target.value) || 0 })} aria-label={`Line ${i + 1} quantity`} />
+                  <MoneyInput valueCents={l.unit_price_cents} onChangeCents={(c) => updateLine(i, { unit_price_cents: c ?? 0 })} aria-label={`Line ${i + 1} unit price`} />
+                  <span className={s.amount}>{formatMoney(Math.round(l.quantity * l.unit_price_cents))}</span>
+                  {lines.length > 1 ? (
+                    <Button variant="quiet" iconOnly icon="x" onClick={() => setLines((p) => (p.length > 1 ? p.filter((_, j) => j !== i) : p))} aria-label={`Remove line ${i + 1}`} />
+                  ) : <span />}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Totals + memo + auto-send */}
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Memo (prints on each invoice)</label>
-                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white placeholder:text-gray-600" />
-              </div>
-              <div>
-                <label htmlFor="recurring-generate-mode" className="block text-xs text-gray-400 mb-1">When an invoice comes due</label>
-                <select id="recurring-generate-mode" value={generateMode} onChange={(e) => setGenerateMode(e.target.value as GenerateMode)} className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm text-white">
+          {/* Memo + generate mode · totals */}
+          <div className={s.grid2}>
+            <div className={s.form}>
+              <Field label="Memo" help="Prints on each invoice.">
+                <Input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="Optional" />
+              </Field>
+              <Field
+                label="When an invoice comes due"
+                help={`${GENERATE_MODES.find((m) => m.value === generateMode)?.help ?? ''} The nightly run only posts or emails when Settings → Autonomy → Scheduled recurring invoices allows it; otherwise it drafts.`}
+              >
+                <Select id="recurring-generate-mode" value={generateMode} onChange={(e) => setGenerateMode(e.target.value as GenerateMode)}>
                   {GENERATE_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
-                </select>
-                <p className="text-[11px] text-gray-500 mt-1">{GENERATE_MODES.find((m) => m.value === generateMode)?.help} The nightly run only posts or emails when Settings → Autonomy → Scheduled recurring invoices allows it; otherwise it drafts.</p>
-              </div>
+                </Select>
+              </Field>
             </div>
-            <div className="border-t border-gray-700/50 pt-2 space-y-2 self-end">
-              <div className="flex justify-between text-sm"><span className="text-gray-400">Subtotal</span><span className="font-mono text-white">{formatMoney(subtotal)}</span></div>
-              <div className="flex justify-between text-sm items-center">
-                <span className="text-gray-400">Tax</span>
-                <input type="number" min={0} step={0.01} value={(taxCents / 100).toFixed(2)} onChange={(e) => setTaxCents(Math.round((parseFloat(e.target.value) || 0) * 100))} className="w-24 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-sm text-white text-right font-mono" />
+            <div className={s.totals} style={{ alignSelf: 'end' }}>
+              <div className={s.totRow}><span>Subtotal</span><span>{formatMoney(subtotal)}</span></div>
+              <div className={s.totRow}>
+                <span>Tax</span>
+                <MoneyInput className={s.taxInput} valueCents={taxCents} onChangeCents={(c) => setTaxCents(c ?? 0)} aria-label="Tax amount" />
               </div>
-              <div className="flex justify-between text-base font-semibold border-t border-gray-700/50 pt-2"><span className="text-white">Per invoice</span><span className="font-mono text-emerald-400">{formatMoney(total)}</span></div>
+              <div className={cx(s.totRow, s.totGrand)}><span>Per invoice</span><span>{formatMoney(total)}</span></div>
             </div>
           </div>
         </div>
-
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-700/50">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white">Cancel</button>
-          <button onClick={submit} disabled={submitting} className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg text-sm font-medium">
-            {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />} {isEdit ? 'Save Schedule' : 'Create Schedule'}
-          </button>
-        </div>
-      </div>
-    </div>
+      )}
+    </Dialog>
   );
 }

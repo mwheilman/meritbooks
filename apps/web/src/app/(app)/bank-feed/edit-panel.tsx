@@ -1,16 +1,32 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { X, Search, Check, Loader2, Bot, ChevronRight, Briefcase, AlertCircle, Layers, Building2, Sparkles, Zap } from 'lucide-react';
-import { clsx } from 'clsx';
-import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
+import { useState, useEffect, useRef, useCallback, useMemo, useId, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import {
+  Button,
+  ConfirmDialog,
+  Eyebrow,
+  Field,
+  Icon,
+  Input,
+  NotePanel,
+  Panel,
+  PanelSection,
+  Search,
+  Select,
+  Tag,
+  Textarea,
+  useFocusTrap,
+} from '@meritbooks/merit-ui';
+import { useQuery, useDebounce, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { ConfidenceBar } from '@/components/ui';
+import { StatusBadge } from '@/components/ui';
 import { ExplainPanel } from '@/components/explain-panel';
 import type { BankFeedRow, JobSearchResult } from '@meritbooks/shared';
 import type { ApproveBankTransactionInput } from '@/lib/validations/transactions';
 import type { SplitSummary } from '@/lib/bank/splits/types';
 import { SplitGrid } from './split-grid';
+import { AutoApproveSection, MatchScoreSection, type AutoApproveInsight, type MatchBreakdownInsight } from './insight-parts';
+import s from './bank-feed-panels.module.css';
 
 interface EditPanelProps {
   transaction: BankFeedRow;
@@ -54,29 +70,6 @@ interface VendorMemoryResponse {
 }
 
 /** Auto-match insight (from /api/bank-feed/[id]/insight). */
-interface AutoApproveInsight {
-  eligible: boolean;
-  tier: 'auto' | 'review' | 'escalate';
-  reason: string;
-  confidence: number | null;
-  amountCents: number;
-  autoThreshold: number;
-  autoMaxCents: number | null;
-  trustedVendor: boolean | null;
-  checks: { confidenceOk: boolean; amountOk: boolean; vendorTrusted: boolean };
-}
-interface MatchBreakdownInsight {
-  breakdown: {
-    score: number;
-    vendorScore: number;
-    amountScore: number;
-    dateScore: number;
-    explanation: string;
-  } | null;
-  candidateLabel: string | null;
-  matchType: string | null;
-  matchConfidence: number | null;
-}
 interface InsightResponse {
   autoApprove: AutoApproveInsight;
   match: MatchBreakdownInsight;
@@ -115,12 +108,6 @@ interface EntityFlags {
   require_item?: boolean;
 }
 
-interface ApproveResult {
-  success: boolean;
-  entry_number: string;
-  transaction_id: string;
-}
-
 // Display order for grouping the GL list by account type.
 const TYPE_ORDER = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'OPEX', 'OTHER'] as const;
 const TYPE_LABEL: Record<string, string> = {
@@ -154,15 +141,24 @@ function groupByType(accounts: AccountOption[]): Array<{ type: string; rows: Acc
   return ordered;
 }
 
+/**
+ * The edit side panel (board S3 grammar): head with payee + amount, the AI's
+ * suggestion as a note, then account → dimensions → job → notes, and a sticky
+ * foot with the one primary verb. It slides over the list on a scrim and is
+ * rendered in place (no portal) so the split grid it mounts keeps the page's styles.
+ *
+ * Esc closes the innermost thing first: an open picker list, then (via the kit
+ * dialog) the reversal confirmation, then the panel.
+ */
 export function EditPanel({ transaction, locationId, onClose, onSave }: EditPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useFocusTrap(panelRef, true);
   // Split mode (FPB-bank-feed-splits): opens straight into the grid when the line
   // already carries a draft or posted split.
   const existingSplit = (transaction as BankFeedRow & { split?: SplitSummary | null }).split ?? null;
   const [splitMode, setSplitMode] = useState<boolean>(!!existingSplit);
   const [reverseOpen, setReverseOpen] = useState(false);
-  const [reverseReason, setReverseReason] = useState('');
-  const [isReversing, setIsReversing] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Form state
@@ -188,9 +184,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
 
   // Department + class state
   const [selectedDept, setSelectedDept] = useState<DeptOption | null>(null);
-  const [showDeptDropdown, setShowDeptDropdown] = useState(false);
   const [selectedClass, setSelectedClass] = useState<ClassOption | null>(null);
-  const [showClassDropdown, setShowClassDropdown] = useState(false);
 
   // Resolve the location for job/dimension scoping.
   const effectiveLocationId = locationId ?? transaction.location?.id ?? null;
@@ -242,7 +236,7 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   const memoryTop =
     vendorMemory?.top && vendorMemory.top.count >= 2 ? vendorMemory.top : null;
   // Top-N (up to 3) accounts this vendor is usually coded to.
-  const topAccounts = (vendorMemory?.suggestions ?? []).filter((s) => s.count >= 1).slice(0, 3);
+  const topAccounts = (vendorMemory?.suggestions ?? []).filter((x) => x.count >= 1).slice(0, 3);
 
   // Auto-match insight: the "why did/didn't this auto-approve" + composite match
   // breakdown, computed server-side against the org's real policy. Read-only.
@@ -250,12 +244,12 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
     `/api/bank-feed/${transaction.id}/insight`,
   );
 
-  const applyMemory = useCallback((s: VendorMemorySuggestion) => {
+  const applyMemory = useCallback((m: VendorMemorySuggestion) => {
     setSelectedAccount({
-      id: s.accountId,
-      account_number: s.accountNumber ?? '',
-      name: s.accountName ?? '',
-      account_type: s.accountType ?? undefined,
+      id: m.accountId,
+      account_number: m.accountNumber ?? '',
+      name: m.accountName ?? '',
+      account_type: m.accountType ?? undefined,
     });
     setShowAccountDropdown(false);
     setAccountSearch('');
@@ -285,27 +279,24 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   // toast. The useMutation hook swallows the message behind a null return.
   const [isSaving, setIsSaving] = useState(false);
 
-  // Close on Escape
+  // Esc: an open picker list closes first, then the panel. The reversal dialog
+  // and the split grid handle their own Esc (they mark it defaultPrevented).
+  const anyListOpen = showAccountDropdown || showJobDropdown;
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Escape' || e.defaultPrevented || reverseOpen) return;
+      if (anyListOpen) {
+        setShowAccountDropdown(false);
+        setShowJobDropdown(false);
+        return;
+      }
+      onClose();
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [onClose, reverseOpen, anyListOpen]);
 
-  // Close on click outside
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [onClose]);
-
-  // Close inline dropdowns on click outside their containers
+  // Close the inline picker lists on a click outside their containers
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       const t = e.target as Node;
@@ -315,8 +306,6 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
       if (jobSearchRef.current && !jobSearchRef.current.closest('.job-search-container')?.contains(t)) {
         setShowJobDropdown(false);
       }
-      if (!(t as HTMLElement).closest?.('.dept-search-container')) setShowDeptDropdown(false);
-      if (!(t as HTMLElement).closest?.('.class-search-container')) setShowClassDropdown(false);
     }
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
@@ -372,622 +361,479 @@ export function EditPanel({ transaction, locationId, onClose, onSave }: EditPane
   }, [selectedAccount, transaction, onSave, selectedJob, selectedDept, selectedClass, jobMissing, deptMissing, classMissing, entity, vendorName, notes]);
 
   // Reversal-on-edit (Spec Part G; posted-GL immutability, migration 153): voids the
-  // posting and returns the line to review — nothing is silently changed.
-  const handleReverse = useCallback(async () => {
-    if (reverseReason.trim().length < 3) {
+  // posting and returns the line to review — nothing is silently changed. Runs from
+  // the kit ConfirmDialog; a thrown error keeps the dialog open with the reason typed.
+  const handleReverse = useCallback(async (reason: string) => {
+    if (reason.trim().length < 3) {
       addToast('error', 'Say why the posting is being reversed');
-      return;
+      throw new Error('Say why the posting is being reversed.');
     }
-    setIsReversing(true);
+    let res: Response;
     try {
-      const res = await fetch('/api/bank-feed/reverse', {
+      res = await fetch('/api/bank-feed/reverse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transaction_id: transaction.id, reason: reverseReason.trim() }),
+        body: JSON.stringify({ transaction_id: transaction.id, reason: reason.trim() }),
       });
-      const result = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; voided?: string[] };
-      if (res.ok && result.success) {
-        addToast('success', `Reversed ${result.voided?.join(', ') ?? ''} — the line is back in review`);
-        onSave();
-      } else {
-        addToast('error', result.error ?? 'Could not reverse the posting');
-      }
     } catch {
       addToast('error', 'Network error while reversing');
-    } finally {
-      setIsReversing(false);
+      throw new Error('Network error while reversing. Try again.');
     }
-  }, [reverseReason, transaction.id, onSave]);
+    const result = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; voided?: string[] };
+    if (res.ok && result.success) {
+      addToast('success', `Reversed ${result.voided?.join(', ') ?? ''} — the line is back in review`);
+      onSave();
+      return;
+    }
+    const msg = result.error ?? 'Could not reverse the posting';
+    addToast('error', msg);
+    throw new Error(msg);
+  }, [transaction.id, onSave]);
 
   const isAlreadyPosted = transaction.status === 'POSTED' || transaction.status === 'APPROVED';
+  const canSave = !!selectedAccount && !isSaving && !isAlreadyPosted && !blockingMissing;
   const groupedAccounts = useMemo(
     () => groupByType(accountResults?.accounts ?? []),
     [accountResults]
   );
 
-  return (
-    <>
-      {/* Backdrop */}
-      <div className="fixed inset-0 bg-black/40 z-40" aria-hidden="true" />
+  // ⌘↵ / Ctrl+↵ anywhere in the panel = Save & approve (same guard as the button).
+  const onPanelKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !splitMode && transaction.status !== 'POSTED' && canSave) {
+      e.preventDefault();
+      void handleSaveApprove();
+    }
+  };
 
-      {/* Panel */}
+  const vendorDisplay = transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? null;
+  const aiPct = transaction.ai_confidence == null ? null : Math.round(transaction.ai_confidence * 100);
+  const pickAccount = (acct: AccountOption) => {
+    setSelectedAccount(acct);
+    setShowAccountDropdown(false);
+    setAccountSearch('');
+  };
+
+  const head = (
+    <div className="panel-head">
+      <div className="row row--between">
+        <Eyebrow as="span">{['Edit transaction', transaction.transaction_date]}</Eyebrow>
+        <Button variant="quiet" iconOnly icon="x" aria-label="Close" onClick={onClose} />
+      </div>
+      <div className={s.headRow}>
+        <h2 className="t-head" id={titleId} title={vendorDisplay ?? transaction.description}>
+          {vendorDisplay ?? transaction.description}
+        </h2>
+        <span className={s.headAmt}>{formatMoney(transaction.amount_cents)}</span>
+      </div>
+      <div className={s.headMeta}>
+        <StatusBadge status={transaction.status} />
+        {entity && <span className="t-cap">{entity.name}</span>}
+      </div>
+      {vendorDisplay && <p className={`t-cap ${s.desc}`}>{transaction.description}</p>}
+    </div>
+  );
+
+  const foot = (
+    <div className={s.foot}>
+      {transaction.status === 'POSTED' ? (
+        <Button
+          variant="danger"
+          onClick={() => setReverseOpen(true)}
+          title="Voids the posted journal entries and returns this line to review"
+        >
+          Reverse &amp; edit
+        </Button>
+      ) : splitMode ? (
+        <span className="t-cap">Approve from the split above</span>
+      ) : (
+        <Button
+          variant="primary"
+          icon={isSaving ? undefined : 'check'}
+          onClick={() => void handleSaveApprove()}
+          disabled={!canSave}
+          aria-busy={isSaving || undefined}
+          chord={isAlreadyPosted ? undefined : 'mod+enter'}
+        >
+          {isAlreadyPosted ? 'Already posted' : isSaving ? 'Approving…' : 'Save & approve'}
+        </Button>
+      )}
+      <span className="sp" />
+      <Button variant="quiet" onClick={onClose} chord="escape">
+        Cancel
+      </Button>
+    </div>
+  );
+
+  return (
+    <div
+      className="scrim scrim--fixed mb-side-scrim"
+      onMouseDown={(e) => {
+        // A click on the scrim (outside the panel) closes it, as before.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="edit-panel-title"
-        className="fixed top-0 right-0 h-full w-[480px] max-w-full bg-surface-900 border-l border-slate-800 z-50 flex flex-col animate-in slide-in-from-right duration-200"
-        style={splitMode ? { width: 780 } : undefined}
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        data-hotkeys="off"
+        className={s.drawer}
+        style={{ width: splitMode ? 780 : 480 }}
+        onKeyDown={onPanelKeyDown}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <h2 id="edit-panel-title" className="text-lg font-semibold text-white">Edit Transaction</h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-          {/* Transaction summary */}
-          <div className="rounded-lg bg-slate-800/40 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Transaction</span>
-              <span className="text-sm font-mono tabular-nums text-slate-400">{transaction.transaction_date}</span>
-            </div>
-            <p className="text-sm text-slate-200 leading-relaxed">{transaction.description}</p>
-            <div className="flex items-center justify-between pt-1">
-              <span className={clsx(
-                'text-lg font-mono tabular-nums font-semibold',
-                transaction.amount_cents >= 0 ? 'text-emerald-400' : 'text-white'
-              )}>
-                {formatMoney(transaction.amount_cents)}
-              </span>
-              {transaction.ai_confidence != null && (
-                <div className="flex items-center gap-2">
-                  <span className="text-2xs text-slate-500">Confidence</span>
-                  <ConfidenceBar value={transaction.ai_confidence} />
-                </div>
-              )}
-            </div>
-            {entity && (
-              <div className="flex items-center gap-1.5 pt-1 text-2xs text-slate-500">
-                <Building2 size={11} />
-                <span>{entity.name}</span>
-              </div>
-            )}
-          </div>
+        <Panel head={head} foot={foot} aria-label="Edit transaction">
+          {/* The AI's suggestion, as a note: account, confidence, reasoning. */}
+          {(aiPct != null || transaction.ai_reasoning) && (
+            <PanelSection>
+              <NotePanel
+                tag="AI suggestion"
+                confidence={aiPct ?? undefined}
+                title={
+                  transaction.ai_account ? (
+                    <>
+                      <span className="code">{transaction.ai_account.account_number}</span>
+                      {transaction.ai_account.name}
+                    </>
+                  ) : (
+                    'No account suggested yet'
+                  )
+                }
+                basis={['Nothing posts until you approve']}
+              >
+                {transaction.ai_reasoning}
+              </NotePanel>
+            </PanelSection>
+          )}
 
           {/* Auto-approve eligibility — confidence ≥ threshold AND amount ≤ cap AND trusted vendor */}
-          {insight?.autoApprove && (
-            <div
-              className={clsx(
-                'rounded-lg border p-3',
-                insight.autoApprove.eligible
-                  ? 'border-emerald-500/20 bg-emerald-500/[0.05]'
-                  : 'border-slate-700 bg-slate-800/40'
-              )}
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Zap size={13} className={insight.autoApprove.eligible ? 'text-emerald-400' : 'text-slate-500'} />
-                <span className="text-2xs uppercase tracking-wider font-semibold text-slate-400">
-                  Auto-approve
-                </span>
-                <span
-                  className={clsx(
-                    'ml-auto text-2xs font-medium px-2 py-0.5 rounded-full',
-                    insight.autoApprove.eligible
-                      ? 'text-emerald-400 bg-emerald-500/10'
-                      : 'text-amber-400 bg-amber-500/10'
-                  )}
-                >
-                  {insight.autoApprove.eligible ? 'Eligible' : 'Needs review'}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <AutoCheck
-                  ok={insight.autoApprove.checks.confidenceOk}
-                  label={`Confidence ${insight.autoApprove.confidence == null ? '—' : `${Math.round(insight.autoApprove.confidence * 100)}%`} ≥ ${Math.round(insight.autoApprove.autoThreshold * 100)}%`}
-                />
-                <AutoCheck
-                  ok={insight.autoApprove.checks.amountOk}
-                  label={`Amount ${formatMoney(insight.autoApprove.amountCents)} ≤ ${insight.autoApprove.autoMaxCents == null ? 'no cap' : formatMoney(insight.autoApprove.autoMaxCents)}`}
-                />
-                <AutoCheck
-                  ok={insight.autoApprove.checks.vendorTrusted}
-                  label={
-                    insight.autoApprove.trustedVendor == null
-                      ? 'Trusted vendor (no vendor identified)'
-                      : insight.autoApprove.trustedVendor
-                        ? 'Trusted vendor'
-                        : 'Trusted vendor (not marked trusted)'
-                  }
-                />
-              </div>
-              <p className="text-2xs text-slate-500 mt-2 leading-relaxed">{insight.autoApprove.reason}</p>
-            </div>
-          )}
+          {insight?.autoApprove && <AutoApproveSection insight={insight.autoApprove} />}
 
           {/* Composite match breakdown — Vendor 40% + Amount 40% + Date 20% */}
-          {insight?.match?.breakdown && (
-            <div className="rounded-lg border border-blue-500/15 bg-blue-500/[0.04] p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles size={13} className="text-blue-400" />
-                <span className="text-2xs uppercase tracking-wider font-semibold text-slate-400">
-                  Match score
-                </span>
-                {insight.match.candidateLabel && (
-                  <span className="text-2xs text-slate-500">vs {insight.match.candidateLabel}</span>
-                )}
-                <span className="ml-auto text-sm font-mono tabular-nums text-blue-300 font-semibold">
-                  {Math.round(insight.match.breakdown.score * 100)}%
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                <ScoreBar label="Vendor" weight="40%" value={insight.match.breakdown.vendorScore} />
-                <ScoreBar label="Amount" weight="40%" value={insight.match.breakdown.amountScore} />
-                <ScoreBar label="Date" weight="20%" value={insight.match.breakdown.dateScore} />
-              </div>
-            </div>
-          )}
-
-          {/* AI Reasoning */}
-          {transaction.ai_reasoning && (
-            <div>
-              <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                <Bot size={12} className="inline mr-1 -mt-0.5" />
-                AI Reasoning
-              </label>
-              <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/10 p-3">
-                <p className="text-sm text-slate-300 leading-relaxed">{transaction.ai_reasoning}</p>
-              </div>
-            </div>
-          )}
+          {insight?.match?.breakdown && <MatchScoreSection match={insight.match} />}
 
           {/* Ledger-grounded "why was this categorized/posted this way" */}
-          <ExplainPanel kind="BANK_TRANSACTION" id={transaction.id} />
+          <PanelSection>
+            <ExplainPanel kind="BANK_TRANSACTION" id={transaction.id} />
+          </PanelSection>
 
           {/* Vendor name */}
-          <div>
-            <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-              Vendor
-            </label>
-            <input
-              type="text"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-              placeholder="Vendor name..."
-              aria-label="Vendor name"
-              className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40"
-            />
-          </div>
+          <PanelSection>
+            <Field label="Vendor">
+              <Input
+                type="text"
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+                placeholder="Vendor name"
+                aria-label="Vendor name"
+              />
+            </Field>
+          </PanelSection>
 
           {/* Split toggle (FPB-bank-feed-splits) — card lines use the same grid. */}
           {!splitMode && transaction.status !== 'POSTED' && (
-            <div className="flex items-center justify-between">
-              <span className="text-2xs text-slate-500">One account for the whole amount, or split it across accounts, companies and jobs.</span>
-              <button
-                type="button"
-                onClick={() => setSplitMode(true)}
-                className="px-3 py-1.5 rounded-md text-xs font-medium border border-slate-700 text-slate-300 hover:border-brand-500/40 hover:text-brand-400"
-              >
-                Split
-              </button>
-            </div>
+            <PanelSection>
+              <div className={s.splitRow}>
+                <span className="t-cap">One account for the whole amount, or split it across accounts, companies and jobs.</span>
+                <Button icon="layers" onClick={() => setSplitMode(true)}>
+                  Split
+                </Button>
+              </div>
+            </PanelSection>
           )}
 
           {splitMode ? (
-            <SplitGrid
-              transaction={{
-                id: transaction.id,
-                amount_cents: transaction.amount_cents,
-                status: transaction.status,
-                location_id: effectiveLocationId,
-                vendor_id: transaction.ai_vendor?.id ?? null,
-                vendor_name: transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? null,
-                description: transaction.description,
-              }}
-              seedAccount={selectedAccount ?? null}
-              vendorName={vendorName}
-              notes={notes}
-              onUnsplit={() => setSplitMode(false)}
-              onDone={() => onSave()}
-            />
+            <PanelSection title="Split">
+              <SplitGrid
+                transaction={{
+                  id: transaction.id,
+                  amount_cents: transaction.amount_cents,
+                  status: transaction.status,
+                  location_id: effectiveLocationId,
+                  vendor_id: transaction.ai_vendor?.id ?? null,
+                  vendor_name: transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? null,
+                  description: transaction.description,
+                }}
+                seedAccount={selectedAccount ?? null}
+                vendorName={vendorName}
+                notes={notes}
+                onUnsplit={() => setSplitMode(false)}
+                onDone={() => onSave()}
+              />
+            </PanelSection>
           ) : (
-          <>
-          {/* GL Account (grouped by type) */}
-          <div className="account-search-container">
-            <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-              GL Account
-            </label>
+            <>
+              {/* GL Account (grouped by type) */}
+              <PanelSection title="GL account">
+                <div className="account-search-container">
+                  {/* M14 learning hint: "You usually code {vendor} to {account}". Proposes
+                      only — a human still approves. Shown when we have enough history. */}
+                  {transaction.ai_vendor?.id && memoryLoading && !memoryTop && (
+                    <div className={`wg-loading ${s.memory}`} aria-busy="true">
+                      <span className="bar-l" style={{ width: '64%' }} aria-hidden="true" />
+                      <span className="t-cap" role="status">Checking how you usually code this vendor…</span>
+                    </div>
+                  )}
+                  {memoryTop && (
+                    <div className={s.memory}>
+                      <NotePanel
+                        tag="From your history"
+                        title={
+                          <>
+                            You usually code {vendorMemory?.vendorName ?? vendorDisplay ?? 'this vendor'} to{' '}
+                            <span className="code">{memoryTop.accountNumber}</span>
+                            {memoryTop.accountName}
+                          </>
+                        }
+                        basis={[`${memoryTop.count} of ${memoryTop.total} times`]}
+                        actions={
+                          selectedAccount?.id === memoryTop.accountId ? (
+                            <Tag tone="pos">Applied</Tag>
+                          ) : (
+                            <Button variant="quiet" icon="check" onClick={() => applyMemory(memoryTop)}>
+                              Use this account
+                            </Button>
+                          )
+                        }
+                      />
+                    </div>
+                  )}
 
-            {/* M14 learning hint: "You usually code {vendor} to {account}". Proposes
-                only — a human still approves. Shown when we have enough history. */}
-            {transaction.ai_vendor?.id && memoryLoading && !memoryTop && (
-              <div className="mb-2 flex items-center gap-2 rounded-lg bg-indigo-500/5 border border-indigo-500/10 px-3 py-2 text-xs text-slate-500">
-                <Loader2 size={12} className="animate-spin text-indigo-400" />
-                Checking how you usually code this vendor…
-              </div>
-            )}
-            {memoryTop && (
-              <div className="mb-2 rounded-lg bg-indigo-500/5 border border-indigo-500/15 px-3 py-2.5">
-                <div className="flex items-start gap-2">
-                  <Sparkles size={13} className="text-indigo-400 mt-0.5 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      You usually code{' '}
-                      <span className="text-slate-100 font-medium">
-                        {vendorMemory?.vendorName ?? transaction.ai_vendor?.display_name ?? transaction.ai_vendor?.name ?? 'this vendor'}
-                      </span>{' '}
-                      to{' '}
-                      <span className="text-indigo-300 font-medium">
-                        <span className="font-mono text-2xs text-slate-400">{memoryTop.accountNumber}</span>
-                        {' · '}
-                        {memoryTop.accountName}
-                      </span>
-                      <span className="text-slate-500"> ({memoryTop.count} of {memoryTop.total} times).</span>
-                    </p>
-                    {selectedAccount?.id === memoryTop.accountId ? (
-                      <span className="mt-1.5 inline-flex items-center gap-1 text-2xs text-emerald-400 font-medium">
-                        <Check size={11} /> Applied
-                      </span>
-                    ) : (
+                  {/* Top-N GL accounts this vendor is usually coded to (quick picks). */}
+                  {topAccounts.length > 1 && (
+                    <div className={s.memory}>
+                      <span className="t-cap">Most-used accounts for this vendor</span>
+                      <div className={s.recents}>
+                        {topAccounts.map((m) => (
+                          <button
+                            key={m.accountId}
+                            type="button"
+                            className={s.recent}
+                            aria-pressed={selectedAccount?.id === m.accountId}
+                            onClick={() => applyMemory(m)}
+                            title={`${m.count} of ${m.total} past codings`}
+                          >
+                            <span>
+                              <span className="code">{m.accountNumber}</span>
+                              {m.accountName}
+                            </span>
+                            <span className={`${s.recentCt} tnum`}>{Math.round(m.share * 100)}%</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {selectedAccount && !showAccountDropdown && (
+                    <div className={s.pickTrigger}>
                       <button
-                        onClick={() => applyMemory(memoryTop)}
-                        className="mt-1.5 inline-flex items-center gap-1 rounded-md bg-indigo-500/15 px-2 py-1 text-2xs font-medium text-indigo-300 hover:bg-indigo-500/25 transition-colors"
+                        type="button"
+                        className={s.pickMain}
+                        onClick={() => {
+                          setShowAccountDropdown(true);
+                          setAccountSearch('');
+                          setTimeout(() => searchInputRef.current?.focus(), 50);
+                        }}
+                        aria-label={`GL account ${selectedAccount.account_number} ${selectedAccount.name}. Change`}
                       >
-                        <Check size={11} /> Use this account
+                        <span>
+                          <span className="code">{selectedAccount.account_number}</span>
+                          {selectedAccount.name}
+                        </span>
+                        <Icon name="down" />
                       </button>
+                    </div>
+                  )}
+
+                  {(!selectedAccount || showAccountDropdown) && (
+                    <Search
+                      ref={searchInputRef}
+                      value={accountSearch}
+                      onChange={(e) => setAccountSearch(e.target.value)}
+                      onFocus={() => setShowAccountDropdown(true)}
+                      placeholder="Search by account number or name"
+                      aria-label="Search GL accounts"
+                      data-autofocus={!selectedAccount ? true : undefined}
+                    />
+                  )}
+
+                  {showAccountDropdown && accountResults && (
+                    <div className={s.pickList}>
+                      {accountResults.recent.length > 0 && (
+                        <>
+                          <div className={`${s.pickGroup} ${s.pickGroupAi}`}>Recent for this vendor</div>
+                          {accountResults.recent.map((acct) => (
+                            <AccountRow
+                              key={acct.id}
+                              account={acct}
+                              isSelected={selectedAccount?.id === acct.id}
+                              onSelect={() => pickAccount(acct)}
+                            />
+                          ))}
+                        </>
+                      )}
+
+                      {groupedAccounts.map((group) => (
+                        <div key={group.type}>
+                          <div className={s.pickGroup}>{TYPE_LABEL[group.type] ?? group.type}</div>
+                          {group.rows.map((acct) => (
+                            <AccountRow
+                              key={acct.id}
+                              account={acct}
+                              isSelected={selectedAccount?.id === acct.id}
+                              onSelect={() => pickAccount(acct)}
+                            />
+                          ))}
+                        </div>
+                      ))}
+
+                      {accountResults.recent.length === 0 && groupedAccounts.length === 0 && (
+                        <div className={s.pickEmpty}>No accounts match. Try the account number or part of the name.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </PanelSection>
+
+              <PanelSection title="Dimensions">
+                <div className={s.fields}>
+                  {/* Department */}
+                  <DimensionSelect
+                    label="Department"
+                    required={requireDept}
+                    value={selectedDept?.id ?? ''}
+                    emptyHint={departments.length === 0 ? 'No departments for this company' : 'Select a department'}
+                    options={departments.map((d) => ({ id: d.id, label: `${d.code} · ${d.name}` }))}
+                    onChange={(id) => setSelectedDept(departments.find((d) => d.id === id) ?? null)}
+                    missing={deptMissing}
+                    missingMsg="This company requires a department on every entry"
+                  />
+
+                  {/* Class */}
+                  <DimensionSelect
+                    label="Class"
+                    required={requireClass}
+                    value={selectedClass?.id ?? ''}
+                    emptyHint={classes.length === 0 ? 'No classes defined' : 'Select a class'}
+                    options={classes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}` }))}
+                    onChange={(id) => setSelectedClass(classes.find((c) => c.id === id) ?? null)}
+                    missing={classMissing}
+                    missingMsg="This company requires a class on every entry"
+                  />
+
+                  {/* Job / Project */}
+                  <div className="job-search-container field">
+                    <span className="field-label">
+                      Job / project
+                      {jobRequired ? <span className={s.req} aria-label="required">*</span> : <span className={s.opt}>(optional)</span>}
+                    </span>
+
+                    {selectedJob && !showJobDropdown && (
+                      <div className={s.pickTrigger}>
+                        <button
+                          type="button"
+                          className={s.pickMain}
+                          onClick={() => {
+                            setShowJobDropdown(true);
+                            setJobSearch('');
+                            setTimeout(() => jobSearchRef.current?.focus(), 50);
+                          }}
+                          aria-label={`Job ${selectedJob.job_number} ${selectedJob.name}. Change`}
+                        >
+                          <span>
+                            <span className="code">{selectedJob.job_number}</span>
+                            {selectedJob.name}
+                            {selectedJob.customer_name && <span className="ink-3"> ({selectedJob.customer_name})</span>}
+                          </span>
+                          <Icon name="down" />
+                        </button>
+                        <Button variant="quiet" iconOnly icon="x" aria-label="Clear job" onClick={() => setSelectedJob(null)} />
+                      </div>
+                    )}
+
+                    {(!selectedJob || showJobDropdown) && (
+                      <Search
+                        ref={jobSearchRef}
+                        value={jobSearch}
+                        onChange={(e) => setJobSearch(e.target.value)}
+                        onFocus={() => setShowJobDropdown(true)}
+                        placeholder={effectiveLocationId ? 'Search by job number or name' : 'Select a company first'}
+                        aria-label="Search jobs"
+                        disabled={!effectiveLocationId}
+                      />
+                    )}
+
+                    {showJobDropdown && effectiveLocationId && jobResults && (
+                      <div className={`${s.pickList} ${s.pickListShort}`}>
+                        {jobResults.length > 0 ? (
+                          jobResults.map((job) => (
+                            <button
+                              key={job.id}
+                              type="button"
+                              className={s.pickItem}
+                              aria-pressed={selectedJob?.id === job.id}
+                              onClick={() => { setSelectedJob(job); setShowJobDropdown(false); setJobSearch(''); }}
+                            >
+                              <span>
+                                <span className="code">{job.job_number}</span>
+                                {job.name}
+                                {job.customer_name && <span className="ink-3"> ({job.customer_name})</span>}
+                              </span>
+                              <span className="t-cap">{job.status}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className={s.pickEmpty}>No jobs match. Try the job number or part of the name.</div>
+                        )}
+                      </div>
+                    )}
+
+                    {jobMissing && (
+                      <span className="field-error" role="alert">
+                        COGS account — a job is required for cost tracking
+                      </span>
                     )}
                   </div>
                 </div>
-              </div>
-            )}
-
-            {/* Top-N GL accounts this vendor is usually coded to (quick-pick chips). */}
-            {topAccounts.length > 1 && (
-              <div className="mb-2">
-                <p className="text-2xs text-slate-500 mb-1.5">Most-used accounts for this vendor</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {topAccounts.map((s) => (
-                    <button
-                      key={s.accountId}
-                      onClick={() => applyMemory(s)}
-                      className={clsx(
-                        'inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-2xs font-medium transition-colors',
-                        selectedAccount?.id === s.accountId
-                          ? 'bg-brand-500/15 text-brand-300 ring-1 ring-brand-500/30'
-                          : 'bg-slate-800/70 text-slate-300 hover:bg-slate-700/70'
-                      )}
-                      title={`${s.count} of ${s.total} past codings`}
-                    >
-                      <span className="font-mono text-slate-400">{s.accountNumber}</span>
-                      <span className="truncate max-w-[120px]">{s.accountName}</span>
-                      <span className="text-slate-500">{Math.round(s.share * 100)}%</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {selectedAccount && !showAccountDropdown && (
-              <button
-                onClick={() => {
-                  setShowAccountDropdown(true);
-                  setAccountSearch('');
-                  setTimeout(() => searchInputRef.current?.focus(), 50);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-left hover:border-slate-600 transition-colors group"
-              >
-                <span className="text-sm text-slate-200">
-                  <span className="font-mono text-xs text-slate-400">{selectedAccount.account_number}</span>
-                  {' · '}
-                  {selectedAccount.name}
-                </span>
-                <ChevronRight size={14} className="text-slate-600 group-hover:text-slate-400" />
-              </button>
-            )}
-
-            {(!selectedAccount || showAccountDropdown) && (
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  value={accountSearch}
-                  onChange={(e) => setAccountSearch(e.target.value)}
-                  onFocus={() => setShowAccountDropdown(true)}
-                  placeholder="Search by account number or name..."
-                  aria-label="Search GL accounts"
-                  className="w-full pl-9 pr-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40"
-                  autoFocus={!selectedAccount}
-                />
-              </div>
-            )}
-
-            {showAccountDropdown && accountResults && (
-              <div className="mt-1 max-h-72 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
-                {accountResults.recent.length > 0 && (
-                  <>
-                    <div className="px-3 py-1.5 text-2xs text-indigo-400 uppercase tracking-wider font-semibold bg-slate-800/90 sticky top-0">
-                      Recent for this vendor
-                    </div>
-                    {accountResults.recent.map((acct) => (
-                      <AccountRow
-                        key={acct.id}
-                        account={acct}
-                        isSelected={selectedAccount?.id === acct.id}
-                        onSelect={() => { setSelectedAccount(acct); setShowAccountDropdown(false); setAccountSearch(''); }}
-                      />
-                    ))}
-                  </>
-                )}
-
-                {groupedAccounts.map((group) => (
-                  <div key={group.type}>
-                    <div className="px-3 py-1.5 text-2xs text-slate-500 uppercase tracking-wider font-semibold bg-slate-800/90 sticky top-0">
-                      {TYPE_LABEL[group.type] ?? group.type}
-                    </div>
-                    {group.rows.map((acct) => (
-                      <AccountRow
-                        key={acct.id}
-                        account={acct}
-                        isSelected={selectedAccount?.id === acct.id}
-                        onSelect={() => { setSelectedAccount(acct); setShowAccountDropdown(false); setAccountSearch(''); }}
-                      />
-                    ))}
-                  </div>
-                ))}
-
-                {accountResults.recent.length === 0 && groupedAccounts.length === 0 && (
-                  <div className="px-3 py-4 text-sm text-slate-600 text-center">No accounts found</div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Department */}
-          <DimensionPicker
-            containerClass="dept-search-container"
-            icon={<Building2 size={12} className="inline mr-1 -mt-0.5" />}
-            label="Department"
-            required={requireDept}
-            open={showDeptDropdown}
-            setOpen={setShowDeptDropdown}
-            selectedLabel={selectedDept ? `${selectedDept.code} · ${selectedDept.name}` : null}
-            onClear={() => setSelectedDept(null)}
-            emptyHint={departments.length === 0 ? 'No departments for this company' : 'Select a department'}
-            options={departments.map((d) => ({ id: d.id, label: `${d.code} · ${d.name}`, selected: selectedDept?.id === d.id }))}
-            onSelect={(id) => { setSelectedDept(departments.find((d) => d.id === id) ?? null); setShowDeptDropdown(false); }}
-            missing={deptMissing}
-            missingMsg="This company requires a department on every entry"
-          />
-
-          {/* Class */}
-          <DimensionPicker
-            containerClass="class-search-container"
-            icon={<Layers size={12} className="inline mr-1 -mt-0.5" />}
-            label="Class"
-            required={requireClass}
-            open={showClassDropdown}
-            setOpen={setShowClassDropdown}
-            selectedLabel={selectedClass ? `${selectedClass.code} · ${selectedClass.name}` : null}
-            onClear={() => setSelectedClass(null)}
-            emptyHint={classes.length === 0 ? 'No classes defined' : 'Select a class'}
-            options={classes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}`, selected: selectedClass?.id === c.id }))}
-            onSelect={(id) => { setSelectedClass(classes.find((c) => c.id === id) ?? null); setShowClassDropdown(false); }}
-            missing={classMissing}
-            missingMsg="This company requires a class on every entry"
-          />
-
-          {/* Job / Project */}
-          <div className="job-search-container">
-            <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-              <Briefcase size={12} className="inline mr-1 -mt-0.5" />
-              Job / Project
-              {jobRequired && <span className="text-red-400 ml-1">*</span>}
-              {!jobRequired && <span className="text-slate-600 ml-1">(optional)</span>}
-            </label>
-
-            {selectedJob && !showJobDropdown && (
-              <button
-                onClick={() => {
-                  setShowJobDropdown(true);
-                  setJobSearch('');
-                  setTimeout(() => jobSearchRef.current?.focus(), 50);
-                }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-left hover:border-slate-600 transition-colors group"
-              >
-                <span className="text-sm text-slate-200">
-                  <span className="font-mono text-xs text-slate-400">{selectedJob.job_number}</span>
-                  {' · '}
-                  {selectedJob.name}
-                  {selectedJob.customer_name && (
-                    <span className="text-slate-500 ml-1">({selectedJob.customer_name})</span>
-                  )}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setSelectedJob(null); }}
-                    className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
-                    aria-label="Clear job"
-                  >
-                    <X size={12} />
-                  </button>
-                  <ChevronRight size={14} className="text-slate-600 group-hover:text-slate-400" />
-                </div>
-              </button>
-            )}
-
-            {(!selectedJob || showJobDropdown) && (
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600" />
-                <input
-                  ref={jobSearchRef}
-                  type="text"
-                  value={jobSearch}
-                  onChange={(e) => setJobSearch(e.target.value)}
-                  onFocus={() => setShowJobDropdown(true)}
-                  placeholder={effectiveLocationId ? 'Search by job number or name...' : 'Select a company first'}
-                  aria-label="Search jobs"
-                  disabled={!effectiveLocationId}
-                  className="w-full pl-9 pr-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-              </div>
-            )}
-
-            {showJobDropdown && effectiveLocationId && jobResults && (
-              <div className="mt-1 max-h-48 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
-                {jobResults.length > 0 ? (
-                  jobResults.map((job) => (
-                    <button
-                      key={job.id}
-                      onClick={() => { setSelectedJob(job); setShowJobDropdown(false); setJobSearch(''); }}
-                      className={clsx(
-                        'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-                        selectedJob?.id === job.id ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs text-slate-400">{job.job_number}</span>
-                        <span className="ml-2 text-sm truncate">{job.name}</span>
-                        {job.customer_name && (
-                          <span className="ml-1 text-xs text-slate-500">({job.customer_name})</span>
-                        )}
-                      </div>
-                      <span className="text-2xs text-slate-600 shrink-0 ml-2">{job.status}</span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-3 py-4 text-sm text-slate-600 text-center">No jobs found</div>
-                )}
-              </div>
-            )}
-
-            {jobMissing && (
-              <div className="mt-1.5 flex items-center gap-1.5 text-red-400 text-xs">
-                <AlertCircle size={12} />
-                <span>COGS account — job assignment is required for cost tracking</span>
-              </div>
-            )}
-          </div>
-
-          </>
+              </PanelSection>
+            </>
           )}
 
           {/* Notes */}
-          <div>
-            <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-              Notes
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Add notes about this transaction..."
-              aria-label="Notes"
-              rows={3}
-              className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40 focus:border-brand-500/40 resize-none"
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04] transition-colors"
-          >
-            Cancel
-          </button>
-          {transaction.status === 'POSTED' ? (
-            reverseOpen ? (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={reverseReason}
-                  onChange={(e) => setReverseReason(e.target.value)}
-                  placeholder="Why reverse? (required)"
-                  aria-label="Reason for reversal"
-                  className="w-56 px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500/40"
-                  autoFocus
-                />
-                <button
-                  onClick={handleReverse}
-                  disabled={isReversing || reverseReason.trim().length < 3}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-red-600 text-white hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isReversing ? <Loader2 size={14} className="animate-spin" /> : null}
-                  Confirm reversal
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setReverseOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium border border-slate-700 text-slate-300 hover:border-red-500/40 hover:text-red-400"
-                title="Voids the posted journal entries and returns this line to review"
-              >
-                Reverse &amp; edit
-              </button>
-            )
-          ) : splitMode ? (
-            <span className="text-2xs text-slate-500">Approve from the split above</span>
-          ) : (
-          <button
-            onClick={handleSaveApprove}
-            disabled={!selectedAccount || isSaving || isAlreadyPosted || blockingMissing}
-            className={clsx(
-              'inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors',
-              !selectedAccount || isAlreadyPosted || blockingMissing
-                ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
-            )}
-          >
-            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            {isAlreadyPosted ? 'Already Posted' : 'Save & Approve'}
-          </button>
-          )}
-        </div>
+          <PanelSection>
+            <Field label="Notes">
+              <Textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Add a note about this transaction"
+                aria-label="Notes"
+                rows={3}
+              />
+            </Field>
+          </PanelSection>
+        </Panel>
       </div>
-    </>
-  );
-}
 
-/** One line in the auto-approve checklist: a green check or an amber alert. */
-function AutoCheck({ ok, label }: { ok: boolean; label: string }) {
-  return (
-    <div className="flex items-center gap-2 text-xs">
-      {ok ? (
-        <Check size={12} className="text-emerald-400 shrink-0" />
-      ) : (
-        <AlertCircle size={12} className="text-amber-400 shrink-0" />
-      )}
-      <span className={ok ? 'text-slate-300' : 'text-slate-400'}>{label}</span>
-    </div>
-  );
-}
-
-/** A weighted sub-score bar for the composite match breakdown. */
-function ScoreBar({ label, weight, value }: { label: string; weight: string; value: number }) {
-  const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-2xs text-slate-500 w-14 shrink-0">
-        {label} <span className="text-slate-600">{weight}</span>
-      </span>
-      <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
-        <div
-          className={clsx(
-            'h-full rounded-full',
-            pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-blue-500' : 'bg-amber-500'
-          )}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span className="text-2xs font-mono tabular-nums text-slate-400 w-8 text-right">{pct}%</span>
+      <ConfirmDialog
+        open={reverseOpen}
+        onClose={() => setReverseOpen(false)}
+        onConfirm={async (reason) => {
+          await handleReverse(reason ?? '');
+        }}
+        title="Reverse this posting?"
+        confirmLabel="Reverse posting"
+        tone="danger"
+        footNote="The journal entries are voided, not deleted."
+        reason={{
+          label: 'Why reverse?',
+          help: 'Required. At least 3 characters. Kept on the audit trail.',
+          minLength: 3,
+          placeholder: 'e.g. Coded to the wrong account',
+        }}
+      >
+        This voids the posted journal entries and returns the line to review, where you can code it again.
+      </ConfirmDialog>
     </div>
   );
 }
@@ -998,96 +844,46 @@ function AccountRow({ account, isSelected, onSelect }: {
   onSelect: () => void;
 }) {
   return (
-    <button
-      onClick={onSelect}
-      className={clsx(
-        'w-full flex items-center justify-between px-3 py-2 text-left transition-colors',
-        isSelected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
-      )}
-    >
-      <div>
-        <span className="font-mono text-xs text-slate-400">{account.account_number}</span>
-        <span className="ml-2 text-sm">{account.name}</span>
-      </div>
-      {isSelected && <Check size={14} className="text-brand-400" />}
+    <button type="button" className={s.pickItem} aria-pressed={isSelected} onClick={onSelect}>
+      <span>
+        <span className="code">{account.account_number}</span>
+        {account.name}
+      </span>
+      {isSelected && <Icon name="check" label="Selected" />}
     </button>
   );
 }
 
-/** Compact single-select dropdown used for the Department and Class dimensions. */
-function DimensionPicker(props: {
-  containerClass: string;
-  icon: React.ReactNode;
+/** Single-select for the Department and Class dimensions (kit native select). */
+function DimensionSelect(props: {
   label: string;
   required: boolean;
-  open: boolean;
-  setOpen: (v: boolean) => void;
-  selectedLabel: string | null;
-  onClear: () => void;
+  value: string;
   emptyHint: string;
-  options: Array<{ id: string; label: string; selected: boolean }>;
-  onSelect: (id: string) => void;
+  options: Array<{ id: string; label: string }>;
+  onChange: (id: string) => void;
   missing: boolean;
   missingMsg: string;
 }) {
-  const { containerClass, icon, label, required, open, setOpen, selectedLabel, onClear, emptyHint, options, onSelect, missing, missingMsg } = props;
+  const { label, required, value, emptyHint, options, onChange, missing, missingMsg } = props;
   return (
-    <div className={containerClass}>
-      <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-        {icon}
-        {label}
-        {required ? <span className="text-red-400 ml-1">*</span> : <span className="text-slate-600 ml-1">(optional)</span>}
-      </label>
-
-      <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-left hover:border-slate-600 transition-colors group"
-      >
-        <span className={clsx('text-sm', selectedLabel ? 'text-slate-200' : 'text-slate-600')}>
-          {selectedLabel ?? emptyHint}
-        </span>
-        <div className="flex items-center gap-1">
-          {selectedLabel && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onClear(); }}
-              className="p-0.5 rounded hover:bg-white/[0.08] text-slate-600 hover:text-slate-300"
-              aria-label={`Clear ${label.toLowerCase()}`}
-            >
-              <X size={12} />
-            </button>
-          )}
-          <ChevronRight size={14} className={clsx('text-slate-600 transition-transform', open && 'rotate-90')} />
-        </div>
-      </button>
-
-      {open && (
-        <div className="mt-1 max-h-48 overflow-y-auto rounded-md bg-slate-800 border border-slate-700 shadow-xl">
-          {options.length > 0 ? (
-            options.map((o) => (
-              <button
-                key={o.id}
-                onClick={() => onSelect(o.id)}
-                className={clsx(
-                  'w-full flex items-center justify-between px-3 py-2 text-left text-sm transition-colors',
-                  o.selected ? 'bg-brand-500/10 text-brand-400' : 'text-slate-300 hover:bg-white/[0.04]'
-                )}
-              >
-                <span>{o.label}</span>
-                {o.selected && <Check size={14} className="text-brand-400" />}
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-4 text-sm text-slate-600 text-center">{emptyHint}</div>
-          )}
-        </div>
-      )}
-
-      {missing && (
-        <div className="mt-1.5 flex items-center gap-1.5 text-red-400 text-xs">
-          <AlertCircle size={12} />
-          <span>{missingMsg}</span>
-        </div>
-      )}
-    </div>
+    <Field
+      label={
+        <>
+          {label}
+          {required ? <span className={s.req} aria-label="required">*</span> : <span className={s.opt}>(optional)</span>}
+        </>
+      }
+      error={missing ? missingMsg : undefined}
+    >
+      <Select value={value} onChange={(e) => onChange(e.target.value)} disabled={options.length === 0}>
+        <option value="">{emptyHint}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.label}
+          </option>
+        ))}
+      </Select>
+    </Field>
   );
 }

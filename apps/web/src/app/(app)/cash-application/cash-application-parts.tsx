@@ -3,28 +3,19 @@
 /**
  * Cash-application building blocks, extracted so they can be reused across the merged
  * Banking & Cash screens:
- *   • <ApplyDepositsQueue /> — the AI deposit→invoice proposal queue, now mounted as the
- *     "Apply Deposits" tab of the Bank Feed (was the standalone /cash-application page).
- *   • <TieOutCard /> — the AR subledger ↔ GL control tie-out, now a section/tab on
+ *   • <ApplyDepositsQueue /> — the AI deposit→invoice proposal queue, mounted as the
+ *     "Apply deposits" tab of the Bank feed (was the standalone /cash-application page).
+ *   • <TieOutCard /> — the AR subledger ↔ GL control tie-out, a section/tab on
  *     Reconciliation (moved off the standalone page).
  *
  * All logic rides the existing API routes (/api/cash-application/{proposals,apply,tie-out});
- * nothing here re-implements cash application.
+ * nothing here re-implements cash application. Presentation is merit-ui kit classes only.
  */
 
-import { useMemo, useState } from 'react';
-import {
-  Loader2,
-  AlertCircle,
-  CheckCircle2,
-  Banknote,
-  Scale,
-  Sparkles,
-  ChevronDown,
-  ChevronRight,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { useId, useMemo, useState, type CSSProperties } from 'react';
+import { Button, Check, Conf, Eyebrow, Icon, InlineNotice, Input, Status, Tag } from '@meritbooks/merit-ui';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
+import { EmptyState } from '@/components/ui';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 
@@ -74,72 +65,101 @@ interface ApplyResult {
   invoiceIds: string[];
 }
 
-function confidenceClass(c: number): string {
-  if (c >= 0.9) return 'bg-emerald-500/10 text-emerald-400';
-  if (c >= 0.7) return 'bg-amber-500/10 text-amber-400';
-  return 'bg-red-500/10 text-red-400';
+// Layout only — every visual value is a kit token.
+const S = {
+  surface: { border: '1px solid var(--line)', background: 'var(--white)' } as CSSProperties,
+  pad: { padding: '16px 24px' } as CSSProperties,
+  figs: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginTop: 16 } as CSSProperties,
+  fig: { borderTop: '1px solid var(--line)', paddingTop: 12 } as CSSProperties,
+  stack: { display: 'flex', flexDirection: 'column', gap: 8 } as CSSProperties,
+  head: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0,1fr) auto',
+    alignItems: 'center',
+    gap: 16,
+    width: '100%',
+    minHeight: 64,
+    padding: '8px 24px',
+    border: 0,
+    background: 'none',
+    font: 'inherit',
+    color: 'inherit',
+    textAlign: 'left',
+    cursor: 'pointer',
+  } as CSSProperties,
+  headTop: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 } as CSSProperties,
+  headRight: { display: 'flex', alignItems: 'center', gap: 16 } as CSSProperties,
+  body: { borderTop: '1px solid var(--line)', padding: '16px 24px 16px' } as CSSProperties,
+  sum: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginTop: 16 } as CSSProperties,
+  amt: { width: 136 } as CSSProperties,
+  skel: { display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 24px' } as CSSProperties,
+};
+
+function ConfTag({ confidence }: { confidence: number }) {
+  return <Conf score={Math.round(confidence * 100)} label={`AI confidence ${Math.round(confidence * 100)} of 100`} />;
 }
 
 // ── AR tie-out card ─────────────────────────────────────────────────────────────
 
 export function TieOutCard() {
-  const { data, isLoading, error } = useQuery<{ data: TieOut }>('/api/cash-application/tie-out');
+  const { data, isLoading, error, refetch } = useQuery<{ data: TieOut }>('/api/cash-application/tie-out');
   const tie = data?.data;
 
   return (
-    <div className="card p-5">
-      <div className="flex items-center gap-2">
-        <Scale size={16} className="text-indigo-400" />
-        <h2 className="text-sm font-semibold text-white">AR subledger ↔ GL control tie-out</h2>
-      </div>
-      <p className="mt-1 text-xs text-slate-500">
+    <section style={{ ...S.surface, ...S.pad }} aria-label="AR tie-out">
+      <Eyebrow>{['AR', 'Tie-out']}</Eyebrow>
+      <h2 className="t-head" style={{ marginTop: 4 }}>AR subledger to GL control</h2>
+      <p className="t-cap" style={{ marginTop: 4 }}>
         The sum of open invoice balances should equal the AR control account in the general ledger.
       </p>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-400" />
+        <div style={S.figs} aria-busy="true">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} style={{ ...S.fig, ...S.stack }}>
+              <span className="mb-skel" style={{ width: 96, height: 12 }} aria-hidden="true" />
+              <span className="mb-skel" style={{ width: 128, height: 20 }} aria-hidden="true" />
+            </div>
+          ))}
+          <span className="sr" role="status">Loading the tie-out</span>
         </div>
       ) : error ? (
-        <p className="mt-4 text-sm text-red-400">{error}</p>
-      ) : !tie ? null : (
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <div className="rounded-lg bg-slate-800/40 p-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500">AR subledger</p>
-            <p className="mt-1 font-mono text-lg text-slate-100">{formatMoney(tie.subledgerCents)}</p>
-            <p className="mt-0.5 text-[11px] text-slate-500">Σ open invoice balances</p>
+        <div style={{ marginTop: 16 }}>
+          <InlineNotice tone="neg" title="The tie-out didn't load.">
+            {error}{' '}
+            <button type="button" className="link" onClick={() => void refetch()}>
+              Try again
+            </button>
+          </InlineNotice>
+        </div>
+      ) : !tie ? (
+        <p className="t-cap" style={{ marginTop: 16 }}>No tie-out yet. It appears once invoices or AR postings exist.</p>
+      ) : (
+        <div style={S.figs}>
+          <div className="fig" style={S.fig}>
+            <span className="fig-l">AR subledger</span>
+            <span className="fig-v fig-v--dense tnum">{formatMoney(tie.subledgerCents)}</span>
+            <span className="fig-vs">Sum of open invoice balances</span>
           </div>
-          <div className="rounded-lg bg-slate-800/40 p-3">
-            <p className="text-[11px] uppercase tracking-wide text-slate-500">
-              GL control{tie.arAccountNumber ? ` · ${tie.arAccountNumber}` : ''}
-            </p>
-            <p className="mt-1 font-mono text-lg text-slate-100">
-              {tie.glControlCents === null ? '—' : formatMoney(tie.glControlCents)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-500">AR account GL balance</p>
+          <div className="fig" style={S.fig}>
+            <span className="fig-l">GL control{tie.arAccountNumber ? ` · ${tie.arAccountNumber}` : ''}</span>
+            <span className="fig-v fig-v--dense tnum">{tie.glControlCents === null ? '—' : formatMoney(tie.glControlCents)}</span>
+            <span className="fig-vs">AR account balance in the GL</span>
           </div>
-          <div
-            className={clsx(
-              'rounded-lg p-3',
-              tie.tiesOut ? 'bg-emerald-500/10' : 'bg-amber-500/10',
-            )}
-          >
-            <p className="text-[11px] uppercase tracking-wide text-slate-400">Variance</p>
-            <p
-              className={clsx(
-                'mt-1 font-mono text-lg',
-                tie.tiesOut ? 'text-emerald-400' : 'text-amber-400',
+          <div className="fig" style={S.fig}>
+            <span className="fig-l">Variance</span>
+            <span className="fig-v fig-v--dense tnum">{tie.varianceCents === null ? '—' : formatMoney(tie.varianceCents)}</span>
+            <span className="fig-vs">
+              {tie.tiesOut ? (
+                <Status kind="ready">Ties out · no reconciling items</Status>
+              ) : (
+                <Status kind="risk">{tie.note ?? tie.reconcilingItem?.label ?? 'Reconciling item'}</Status>
               )}
-            >
-              {tie.varianceCents === null ? '—' : formatMoney(tie.varianceCents)}
-            </p>
-            <p className="mt-0.5 text-[11px] text-slate-400">
-              {tie.tiesOut ? 'Ties out — no reconciling items' : tie.note ?? tie.reconcilingItem?.label ?? 'Reconciling item'}
-            </p>
+            </span>
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -154,6 +174,7 @@ export function ProposalCard({ proposal, onApplied }: { proposal: Proposal; onAp
   const [expanded, setExpanded] = useState(false);
   const [applying, setApplying] = useState(false);
   const [touched, setTouched] = useState(false);
+  const bodyId = useId();
 
   const proposedSet = useMemo(() => new Set(proposal.proposedInvoiceIds), [proposal.proposedInvoiceIds]);
 
@@ -245,187 +266,153 @@ export function ProposalCard({ proposal, onApplied }: { proposal: Proposal; onAp
   }
 
   return (
-    <div className="card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-4 px-4 py-3 text-left transition-colors hover:bg-slate-800/30"
-      >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/10">
-          <Banknote size={16} className="text-indigo-400" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-medium text-white">{proposal.customerName}</p>
-            <span className="inline-flex shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-300 ring-1 ring-inset ring-slate-600/40">
-              {proposal.kind === 'single' ? 'Single invoice' : 'Lump remittance'}
-            </span>
-            {proposal.confidence !== null && (
-              <span
-                className={clsx(
-                  'inline-flex shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] font-medium',
-                  confidenceClass(proposal.confidence),
-                )}
-              >
-                {Math.round(proposal.confidence * 100)}%
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-slate-500">
+    <article style={S.surface} aria-label={`Deposit from ${proposal.customerName}`}>
+      <button type="button" style={S.head} onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-controls={bodyId}>
+        <span style={{ minWidth: 0 }}>
+          <span style={S.headTop}>
+            <span className="l1">{proposal.customerName}</span>
+            <Tag>{proposal.kind === 'single' ? 'Single invoice' : 'Lump remittance'}</Tag>
+            {proposal.confidence !== null && <ConfTag confidence={proposal.confidence} />}
+          </span>
+          <span className="l2">
+            {proposal.deposit ? `${proposal.deposit.date} · ` : ''}
             {proposal.reasoning ?? proposal.title ?? 'Proposed cash application'}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-3">
-          <span className="font-mono text-sm text-slate-200">{formatMoney(depositCents)}</span>
-          {expanded ? (
-            <ChevronDown size={16} className="text-slate-500" />
-          ) : (
-            <ChevronRight size={16} className="text-slate-500" />
-          )}
-        </div>
+          </span>
+        </span>
+        <span style={S.headRight}>
+          <span className="tnum" style={{ fontWeight: 600 }}>{formatMoney(depositCents)}</span>
+          <Icon name={expanded ? 'down' : 'right'} />
+        </span>
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-800/60 px-4 py-4">
-          <div className="mb-2 flex items-center gap-2 text-xs text-slate-400">
-            <Sparkles size={12} className="text-indigo-400" />
-            AI proposed the highlighted invoice(s). Adjust the selection or amounts if the match is
-            wrong, then apply.
+        <div id={bodyId} style={S.body}>
+          <div className="row" style={{ gap: 8 }}>
+            <Tag tone="ai">AI proposal</Tag>
+            <span className="t-cap">The AI picked the invoices marked Proposed. Change the selection or amounts if the match is wrong, then apply.</span>
           </div>
 
           {proposal.candidateInvoices.length === 0 ? (
-            <p className="py-4 text-sm text-slate-500">No open invoices remain for this customer.</p>
+            <p className="t-cap" style={{ marginTop: 16 }}>No open invoices remain for this customer.</p>
           ) : (
-            <div className="divide-y divide-slate-800/40 rounded-lg border border-slate-800/60">
-              {proposal.candidateInvoices.map((inv) => {
-                const st = lines[inv.id] ?? { selected: false, amountDollars: '' };
-                const isProposed = proposedSet.has(inv.id);
-                return (
-                  <div
-                    key={inv.id}
-                    className={clsx(
-                      'flex items-center gap-3 px-3 py-2.5',
-                      isProposed && 'bg-indigo-500/[0.04]',
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={st.selected}
-                      onChange={() => toggle(inv)}
-                      className="h-4 w-4 shrink-0 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500/40"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate font-mono text-xs text-slate-200">{inv.invoiceNumber}</p>
-                        {isProposed && (
-                          <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300">
-                            proposed
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-slate-500">
-                        Due {inv.dueDate} · balance {formatMoney(inv.balanceCents)}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1">
-                      <span className="text-xs text-slate-500">$</span>
-                      <input
-                        type="number"
-                        min={0}
-                        step="0.01"
-                        disabled={!st.selected}
-                        value={st.amountDollars}
-                        onChange={(e) => setAmount(inv.id, e.target.value)}
-                        className="w-28 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-right font-mono text-xs text-slate-100 disabled:opacity-40 focus:border-emerald-500/40 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <table className="tbl tbl-q tbl-q--compact tbl-q--flush" style={{ marginTop: 12 }} aria-label="Open invoices for this customer">
+              <colgroup>
+                <col style={{ width: 48 }} />
+                <col />
+                <col style={{ width: 160 }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col"><span className="sr">Apply</span></th>
+                  <th scope="col">Invoice</th>
+                  <th scope="col" className="n">Apply amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {proposal.candidateInvoices.map((inv) => {
+                  const st = lines[inv.id] ?? { selected: false, amountDollars: '' };
+                  const isProposed = proposedSet.has(inv.id);
+                  return (
+                    <tr key={inv.id} className={['q-row', st.selected && 'is-selected'].filter(Boolean).join(' ')}>
+                      <td>
+                        <Check checked={st.selected} onChange={() => toggle(inv)} aria-label={`Apply to invoice ${inv.invoiceNumber}`} />
+                      </td>
+                      <td>
+                        <span className="l1">
+                          <span className="code">{inv.invoiceNumber}</span>
+                          {isProposed && <Tag tone="ai">Proposed</Tag>}
+                        </span>
+                        <span className="l2 tnum">
+                          Due {inv.dueDate} · balance {formatMoney(inv.balanceCents)}
+                        </span>
+                      </td>
+                      <td className="n">
+                        <Input
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          inputMode="decimal"
+                          className="input--money"
+                          style={S.amt}
+                          disabled={!st.selected}
+                          value={st.amountDollars}
+                          onChange={(e) => setAmount(inv.id, e.target.value)}
+                          aria-label={`Amount to apply to ${inv.invoiceNumber}, in dollars`}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
 
           {/* Applied / remainder summary */}
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div className="flex items-center gap-4">
-              <span className="text-slate-400">
-                Applied <span className="font-mono text-slate-200">{formatMoney(appliedCents)}</span>
+          <div style={S.sum}>
+            <div className="row" style={{ gap: 16 }}>
+              <span className="t-cap">
+                Applied <b className="tnum">{formatMoney(appliedCents)}</b> of <span className="tnum">{formatMoney(depositCents)}</span>
               </span>
-              <span
-                className={clsx(
-                  overApplied ? 'text-red-400' : remainderCents > 0 ? 'text-amber-400' : 'text-emerald-400',
-                )}
-              >
-                {overApplied
-                  ? `Over by ${formatMoney(-remainderCents)}`
-                  : remainderCents > 0
-                    ? `${formatMoney(remainderCents)} left on account`
-                    : 'Fully applied'}
-              </span>
-            </div>
-            <button
-              type="button"
-              disabled={applying || overApplied}
-              onClick={apply}
-              className={clsx(
-                'inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium transition-colors',
-                'bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+              {overApplied ? (
+                <Status kind="overdue">Over by {formatMoney(-remainderCents)}</Status>
+              ) : remainderCents > 0 ? (
+                <Status kind="risk">{formatMoney(remainderCents)} left on account</Status>
+              ) : (
+                <Status kind="ready">Fully applied</Status>
               )}
-            >
-              {applying ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-              Approve &amp; apply
-            </button>
+            </div>
+            <Button variant="primary" icon="check" disabled={applying || overApplied} aria-busy={applying || undefined} onClick={apply}>
+              {applying ? 'Applying…' : 'Approve & apply'}
+            </Button>
           </div>
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
-// ── Deposit application queue (the "Apply Deposits" tab body) ─────────────────────
+// ── Deposit application queue (the "Apply deposits" tab body) ─────────────────────
 
 export function ApplyDepositsQueue() {
   const { data, isLoading, error, refetch } = useQuery<ProposalsResponse>('/api/cash-application/proposals');
   const proposals = useMemo(() => data?.data ?? [], [data]);
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-400">
+    <div style={{ marginTop: 16 }}>
+      <p className="t-cap">
         Match incoming deposits to open invoices, then approve to post the receipt (DR Cash / CR AR).
+        {proposals.length > 0 && <span className="tnum"> {proposals.length} waiting.</span>}
       </p>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-24">
-          <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
-        </div>
-      ) : error ? (
-        <div className="card p-10 text-center">
-          <AlertCircle className="mx-auto mb-3 h-8 w-8 text-red-400" />
-          <p className="text-sm text-red-400">{error}</p>
-          <button
-            onClick={() => refetch()}
-            className="mt-4 rounded-lg bg-slate-800 px-3.5 py-1.5 text-xs font-medium text-slate-200 hover:bg-slate-700"
-          >
-            Try again
-          </button>
-        </div>
-      ) : proposals.length === 0 ? (
-        <div className="card p-16 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500/70" />
-          <p className="text-sm font-medium text-white">No deposits waiting to be applied</p>
-          <p className="mt-1 text-xs text-slate-500">
-            When the AI matches an unapplied deposit to open invoices, it will appear here for your
-            approval.
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {proposals.map((p) => (
-            <ProposalCard key={p.id} proposal={p} onApplied={refetch} />
-          ))}
-        </div>
-      )}
+      <div style={{ ...S.stack, gap: 12, marginTop: 16 }}>
+        {isLoading ? (
+          <div style={S.surface} aria-busy="true">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} style={{ ...S.skel, borderTop: i > 0 ? '1px solid var(--line)' : undefined }}>
+                <span className="mb-skel" style={{ width: 200, height: 12 }} aria-hidden="true" />
+                <span className="mb-skel" style={{ width: 320, height: 12 }} aria-hidden="true" />
+              </div>
+            ))}
+            <span className="sr" role="status">Loading deposits</span>
+          </div>
+        ) : error ? (
+          <InlineNotice tone="neg" title="Deposits didn't load.">
+            {error}{' '}
+            <button type="button" className="link" onClick={() => refetch()}>
+              Try again
+            </button>
+          </InlineNotice>
+        ) : proposals.length === 0 ? (
+          <div style={S.surface}>
+            <EmptyState
+              title="No deposits waiting to be applied"
+              description="When the AI matches an unapplied deposit to open invoices, it shows up here for your approval."
+            />
+          </div>
+        ) : (
+          proposals.map((p) => <ProposalCard key={p.id} proposal={p} onApplied={refetch} />)
+        )}
+      </div>
     </div>
   );
 }

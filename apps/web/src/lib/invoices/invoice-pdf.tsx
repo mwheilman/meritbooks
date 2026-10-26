@@ -5,6 +5,7 @@ import type { InvoiceDoc } from './invoice-doc';
 import { buildLineTable, columnWidths, type LineTable } from './templates/columns';
 import type { InvoiceFont, InvoiceLayout } from './templates/types';
 import { encodeQr, qrSvgPath } from '@/lib/qr/qr-code';
+import { ProgressInvoicePdf } from './progress-pdf';
 
 /**
  * Customer invoice PDF (FPB-invoices §2 + §4 Slice 1B), driven entirely by the
@@ -100,6 +101,9 @@ function stampFor(status: string): string | null {
 }
 
 export function InvoicePdf({ doc, style }: { doc: InvoiceDoc; style?: InvoiceLayout }) {
+  // A progress billing prints as an Application and Certificate for Payment (G702/G703
+  // style) — every caller (download, email attachment, reminder, hosted pay page) gets it.
+  if (doc.progress) return <ProgressInvoicePdf doc={{ ...doc, progress: doc.progress }} />;
   const t = doc.template;
   const layout: InvoiceLayout = style ?? t.style;
   const look = LOOK[layout];

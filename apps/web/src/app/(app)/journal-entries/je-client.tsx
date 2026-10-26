@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Plus, Sparkles } from 'lucide-react';
-import { PageHeader } from '@/components/ui';
+import { Button, PageHeader } from '@/components/ui';
 import { JournalEntryList } from './je-list';
 import { JournalEntryForm } from './je-form';
 import { JeAiComposer } from './je-ai-composer';
+import s from './je.module.css';
 
 export function JournalEntriesClient() {
   const [showCreate, setShowCreate] = useState(false);
@@ -19,26 +19,20 @@ export function JournalEntriesClient() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className={s.stack}>
       <PageHeader
-        title="Journal Entries"
-        description="Create, review, and post manual journal entries to the general ledger."
+        title="Journal entries"
+        description="Create, review and post manual journal entries to the general ledger."
         actions={
           !showCreate && !showCompose ? (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowCompose(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-500/40 text-emerald-300 text-sm font-medium hover:bg-emerald-500/10 transition-colors"
-              >
-                <Sparkles size={16} /> Compose with AI
-              </button>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
-              >
-                <Plus size={16} /> New Entry
-              </button>
-            </div>
+            <>
+              <Button icon="ask" onClick={() => setShowCompose(true)}>
+                Compose with AI
+              </Button>
+              <Button variant="primary" icon="plus" onClick={() => setShowCreate(true)}>
+                New entry
+              </Button>
+            </>
           ) : undefined
         }
       />

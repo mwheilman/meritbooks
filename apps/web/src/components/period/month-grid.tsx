@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from '@meritbooks/merit-ui';
-import type { MonthCloseState } from '@/lib/period/closed';
+import { CLOSE_STATE_LABEL, type MonthCloseState } from '@/lib/period/closed';
 import { addMonths, fiscalYearName, monthLabel, monthShort, type MonthKey, type PeriodBasis, type PeriodContext } from '@/lib/period/resolve';
 import { cellRole, fiscalYearSpan, gridMonths, isSelectable, maxFiscalYear, previewWindow } from '@/lib/period/picker-model';
 import s from './period-picker.module.css';
@@ -22,7 +22,11 @@ export interface MonthGridProps {
   autoFocus?: boolean;
 }
 
-const CLOSE_WORD: Record<MonthCloseState, string> = { closed: 'closed', soft: 'soft-closed', open: 'open' };
+const CLOSE_WORD: Record<MonthCloseState, string> = {
+  closed: CLOSE_STATE_LABEL.closed.toLowerCase(),
+  soft: CLOSE_STATE_LABEL.soft.toLowerCase(),
+  open: CLOSE_STATE_LABEL.open.toLowerCase(),
+};
 
 /**
  * 4 × 3 month grid for one fiscal year (fiscal order), with year arrows. ARIA grid with a roving

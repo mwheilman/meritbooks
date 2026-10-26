@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Dash, Evidence, Icon, Pip, Widget, type PipKind } from '@meritbooks/merit-ui';
 import { ShellLine } from '@/components/layout/shell-context';
+import { subledgerDifferenceText } from '@/lib/reports/control-balances';
 import { getClientHome, getRecentActivity, type ClientHome as ClientHomeData, type PeriodStatus } from './actions';
 import { ClientDecideQueue } from './client-queue';
 import { PERIOD_WORD, ago, cents, dayLabel, monthLabel, shortLabel } from './home-format';
@@ -229,11 +230,21 @@ export async function ClientHome({ locationId }: { locationId: string }) {
           <Evidence
             rows={[
               { label: 'Book cash', value: Math.round(b.cashCents) },
-              { label: 'Open receivables', value: Math.round(b.openARCents) },
-              { label: 'Less open payables', value: -Math.round(b.openAPCents) },
+              { label: 'Receivables (AR control)', value: Math.round(b.openARCents) },
+              { label: 'Less payables (AP control)', value: -Math.round(b.openAPCents) },
             ]}
             total={{ label: 'Cash + receivables − payables' }}
           />
+          {[
+            subledgerDifferenceText('receivables', b.openARCents, b.subledgerARCents, cents),
+            subledgerDifferenceText('payables', b.openAPCents, b.subledgerAPCents, cents),
+          ]
+            .filter((t): t is string => t !== null)
+            .map((t) => (
+              <p key={t} className="t-meta" style={{ marginTop: 6 }}>
+                {t}
+              </p>
+            ))}
         </Widget>
 
         {/* The client's Inbox, tab by tab — the same shared counts as the Inbox tabs and

@@ -5,6 +5,7 @@ import { BUILT_IN_TEMPLATE, type InvoiceTemplate } from './templates/types';
 import { allocateLineTax, type DocLineInput } from './templates/columns';
 import { resolvePayLink, unresolvedPayLink, type PayLinkState } from './pay-link';
 import { MERIT_DEFAULT_BRAND, type ResolvedBrand } from '@/lib/branding/types';
+import { buildProgressApplication, isProgressBilling, type ProgressApplication, type ProgressBillFact } from './progress-application';
 
 /**
  * Loads everything needed to render an invoice as a CUSTOMER-FACING document (PDF,
@@ -64,6 +65,12 @@ export interface InvoiceDoc {
   /** The customer's default CC list (customer_invoice_settings). */
   customer_cc_emails: string[];
   pay: PayLinkState;
+  /**
+   * Set when the invoice is a progress billing (is_progress_bill / application_number):
+   * the Application and Certificate for Payment (G702/G703 style) the PDF prints instead
+   * of the plain layout. Optional so hand-built docs (sample / tests) stay valid.
+   */
+  progress?: ProgressApplication | null;
 }
 
 const num = (v: unknown) => Number(v ?? 0);
@@ -82,7 +89,8 @@ const INVOICE_SELECT = `id, org_id, invoice_number, invoice_date, due_date, stat
   customer_message, public_token, payment_methods_allowed, card_surcharge_enabled, ach_surcharge_enabled,
   subtotal_cents, discount_cents, tax_cents,
   retainage_cents, total_cents, amount_paid_cents, balance_cents,
-  bill_to, ship_to, customer_id, location_id, job_id, invoice_type, template_id, cc_emails`;
+  bill_to, ship_to, customer_id, location_id, job_id, invoice_type, template_id, cc_emails,
+  is_progress_bill, application_number`;
 
 /** Load by invoice id (authenticated routes). */
 export async function loadInvoiceDocById(
@@ -160,7 +168,7 @@ async function hydrate(
       ? supabase.schema('core').from('locations').select('id, name, short_code').eq('org_id', orgId).eq('id', locationId).maybeSingle()
       : Promise.resolve({ data: null }),
     jobId
-      ? supabase.schema('core').from('jobs').select('job_number, name').eq('org_id', orgId).eq('id', jobId).maybeSingle()
+      ? supabase.schema('core').from('jobs').select('job_number, name, contract_amount_cents, original_contract_cents').eq('org_id', orgId).eq('id', jobId).maybeSingle()
       : Promise.resolve({ data: null }),
     itemIds.length
       ? supabase.schema('core').from('items').select('id, name').eq('org_id', orgId).in('id', itemIds)
@@ -224,7 +232,35 @@ async function hydrate(
 
   const c = cust as Record<string, unknown> | null;
   const l = loc as { id: string; name: string; short_code: string | null } | null;
-  const j = job as { job_number: string | null; name: string | null } | null;
+  const j = job as { job_number: string | null; name: string | null; contract_amount_cents?: number | string | null; original_contract_cents?: number | string | null } | null;
+
+  // Progress billing → the G702/G703-style application (lib/invoices/progress-application.ts).
+  let progress: ProgressApplication | null = null;
+  if (isProgressBilling({ is_progress_bill: inv.is_progress_bill as boolean | null, application_number: inv.application_number as number | null })) {
+    const accountType = (row: Record<string, unknown>): string | null => {
+      const a = row.account as { account_type?: string } | Array<{ account_type?: string }> | null;
+      return (Array.isArray(a) ? a[0]?.account_type : a?.account_type) ?? null;
+    };
+    const current: ProgressBillFact = {
+      id: invoiceId,
+      invoiceNumber: String(inv.invoice_number ?? ''),
+      invoiceDate: String(inv.invoice_date ?? ''),
+      status: String(inv.status ?? ''),
+      applicationNumber: inv.application_number == null ? null : num(inv.application_number),
+      retainageCents: num(inv.retainage_cents),
+      lines: progressLines(rawLines, accountType),
+    };
+    const jobBills = jobId ? await loadJobProgressBills(supabase, orgId, jobId, invoiceId, accountType).catch((e: unknown) => {
+      console.error('[invoice-doc] prior progress bills failed', e);
+      return [] as ProgressBillFact[];
+    }) : [];
+    const optCents = (v: unknown) => (v == null || v === '' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+    progress = buildProgressApplication({
+      current,
+      jobBills,
+      contract: j ? { originalContractCents: optCents(j.original_contract_cents), contractSumToDateCents: optCents(j.contract_amount_cents) } : null,
+    });
+  }
 
   const pay = await resolvePayLink(supabase, orgId, {
     public_token: String(inv.public_token ?? ''),
@@ -280,5 +316,59 @@ async function hydrate(
     cc_emails: Array.isArray(inv.cc_emails) ? (inv.cc_emails as string[]) : [],
     customer_cc_emails: resolved.customerCc,
     pay,
+    progress,
   };
+}
+
+/** Bill lines as progress facts: ASSET-account lines are retainage releases (CR Retainage
+ *  receivable); LIABILITY lines (deposit applied) are neither work nor retainage. */
+function progressLines(
+  rows: Record<string, unknown>[],
+  accountType: (row: Record<string, unknown>) => string | null,
+): ProgressBillFact['lines'] {
+  return rows
+    .filter((r) => accountType(r) !== 'LIABILITY')
+    .map((r) => ({ description: String(r.description ?? ''), amountCents: num(r.amount_cents), isRelease: accountType(r) === 'ASSET' }));
+}
+
+/** Every other issued progress bill on the job, with its lines (RLS / org scoped). */
+async function loadJobProgressBills(
+  supabase: SupabaseClient,
+  orgId: string,
+  jobId: string,
+  currentId: string,
+  accountType: (row: Record<string, unknown>) => string | null,
+): Promise<ProgressBillFact[]> {
+  const { data: bills, error } = await supabase
+    .from('invoices')
+    .select('id, invoice_number, invoice_date, status, application_number, retainage_cents')
+    .eq('org_id', orgId)
+    .eq('job_id', jobId)
+    .eq('is_progress_bill', true)
+    .not('status', 'in', '(DRAFT,VOIDED)')
+    .neq('id', currentId)
+    .limit(500);
+  if (error) throw new Error(error.message);
+  const rows = (bills ?? []) as Record<string, unknown>[];
+  if (rows.length === 0) return [];
+  const { data: lineRows, error: lineErr } = await supabase
+    .from('invoice_lines')
+    .select('invoice_id, line_number, description, amount_cents, account:accounts!invoice_lines_account_id_fkey(account_type)')
+    .in('invoice_id', rows.map((r) => r.id as string))
+    .order('line_number', { ascending: true });
+  if (lineErr) throw new Error(lineErr.message);
+  const byInvoice = new Map<string, Record<string, unknown>[]>();
+  for (const l of (lineRows ?? []) as Record<string, unknown>[]) {
+    const k = String(l.invoice_id);
+    byInvoice.set(k, [...(byInvoice.get(k) ?? []), l]);
+  }
+  return rows.map((r) => ({
+    id: String(r.id),
+    invoiceNumber: String(r.invoice_number ?? ''),
+    invoiceDate: String(r.invoice_date ?? ''),
+    status: String(r.status ?? ''),
+    applicationNumber: r.application_number == null ? null : num(r.application_number),
+    retainageCents: num(r.retainage_cents),
+    lines: progressLines(byInvoice.get(String(r.id)) ?? [], accountType),
+  }));
 }

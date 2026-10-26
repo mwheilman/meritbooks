@@ -1,14 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert } from 'lucide-react';
+import { Button, Field, InlineNotice, Input, PanelSection, Select, Status, cx } from '@meritbooks/merit-ui';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
 import { StatusBadge } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { ExplainPanel } from '@/components/explain-panel';
+import { JE_SOURCE_LABELS, JE_TYPE_LABELS } from './je-labels';
+import s from './je.module.css';
 
 interface JELineDetail {
   id: string; lineNumber: number; accountId: string | null;
@@ -42,7 +43,7 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
   const [entryDate, setEntryDate] = useState('');
   const [lines, setLines] = useState<EditLine[]>([]);
 
-  const { data: acctResp } = useQuery<{ recent: AccountOption[]; accounts: AccountOption[] }>(
+  const { data: acctResp, isLoading: acctLoading } = useQuery<{ recent: AccountOption[]; accounts: AccountOption[] }>(
     '/api/accounts/search', undefined, { enabled: editing }
   );
   const accountOptions = [...(acctResp?.recent ?? []), ...(acctResp?.accounts ?? [])];
@@ -59,8 +60,8 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
   }
   function updateLine(i: number, patch: Partial<EditLine>) { setLines((p) => p.map((l, j) => j === i ? { ...l, ...patch } : l)); }
 
-  const totalDr = lines.reduce((s, l) => s + l.debitCents, 0);
-  const totalCr = lines.reduce((s, l) => s + l.creditCents, 0);
+  const totalDr = lines.reduce((sum, l) => sum + l.debitCents, 0);
+  const totalCr = lines.reduce((sum, l) => sum + l.creditCents, 0);
   const balanced = totalDr === totalCr && totalDr > 0;
 
   async function save() {
@@ -90,124 +91,152 @@ export function JournalEntryDrawer({ entryId, onClose }: { entryId: string | nul
     finally { setSaving(false); }
   }
 
+  const sourceLabel = data?.sourceModule ? (JE_SOURCE_LABELS[data.sourceModule] ?? data.sourceModule) : null;
+
   return (
     <DetailDrawer
       open={!!entryId} onClose={onClose} width="lg"
-      title={data?.entryNumber ?? 'Journal Entry'}
+      title={data?.entryNumber ?? 'Journal entry'}
       subtitle={data ? `${data.entryDate}${data.locationCode ? ` · ${data.locationCode}` : ''}` : null}
       isLoading={isLoading} error={error}
       headerRight={data ? (
-        <div className="flex items-center gap-2">
+        <>
           <StatusBadge status={data.status} />
           {!editing && (
-            <button onClick={beginEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-              <Pencil size={12} /> Edit
-            </button>
+            <Button onClick={beginEdit}>Edit</Button>
           )}
-        </div>
+        </>
       ) : undefined}
     >
       {data && !editing && (
         <>
           <DetailSection title="Entry">
-            <DetailField label="Memo" value={data.memo ?? '--'} />
-            <DetailField label="Type" value={data.entryType} />
-            <DetailField label="Source" value={data.sourceModule ?? '--'} />
-            <DetailField label="Company" value={data.locationName || '--'} />
-            <DetailField label="Period" value={data.periodLabel ?? '--'} mono />
-            <DetailField label="Posted" value={data.postedAt ? new Date(data.postedAt).toLocaleString() : '--'} />
+            <DetailField label="Memo" value={data.memo ?? '—'} />
+            <DetailField label="Type" value={JE_TYPE_LABELS[data.entryType] ?? data.entryType} />
+            <DetailField label="Source" value={sourceLabel ?? '—'} />
+            <DetailField label="Company" value={data.locationName || '—'} />
+            <DetailField label="Period" value={data.periodLabel ?? '—'} mono />
+            <DetailField label="Posted" value={data.postedAt ? new Date(data.postedAt).toLocaleString() : '—'} mono />
             {data.isReversing && <DetailField label="Reversing" value="Yes" />}
             {data.voidReason && <DetailField label="Void reason" value={data.voidReason} />}
           </DetailSection>
 
-          <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Lines ({data.lines.length})</h3>
-          <DetailTable columns={[
-            { key: 'acct', label: 'Account' }, { key: 'dim', label: 'Dimensions' },
-            { key: 'dr', label: 'Debit', align: 'right' }, { key: 'cr', label: 'Credit', align: 'right' },
-          ]}>
-            {data.lines.map((l) => (
-              <tr key={l.id} className="align-top">
-                <td className="px-3 py-2">
-                  <div className="text-sm text-slate-200"><span className="font-mono text-xs text-slate-400">{l.accountNumber}</span> {l.accountName}</div>
-                  {l.memo && <div className="text-2xs text-slate-500 mt-0.5">{l.memo}</div>}
-                </td>
-                <td className="px-3 py-2 text-2xs text-slate-500">{[l.departmentLabel, l.classLabel].filter(Boolean).join(' · ') || '--'}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{l.debitCents ? formatMoney(l.debitCents) : ''}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{l.creditCents ? formatMoney(l.creditCents) : ''}</td>
+          <PanelSection title="Lines" meta={<span className="t-cap tnum">{data.lines.length}</span>}>
+            <DetailTable columns={[
+              { key: 'acct', label: 'Account' }, { key: 'dim', label: 'Dimensions' },
+              { key: 'dr', label: 'Debit', align: 'right' }, { key: 'cr', label: 'Credit', align: 'right' },
+            ]}>
+              {data.lines.map((l) => (
+                <tr key={l.id}>
+                  <td className={s.lineCell}>
+                    <span className="l1"><span className="code">{l.accountNumber}</span>{l.accountName}</span>
+                    {l.memo && <span className="l2">{l.memo}</span>}
+                  </td>
+                  <td className={cx('ink-2', s.lineCell)}>{[l.departmentLabel, l.classLabel].filter(Boolean).join(' · ') || '—'}</td>
+                  <td className={cx('n', s.lineCell)}>{l.debitCents ? formatMoney(l.debitCents) : ''}</td>
+                  <td className={cx('n', s.lineCell)}>{l.creditCents ? formatMoney(l.creditCents) : ''}</td>
+                </tr>
+              ))}
+              <tr className={s.totalRow}>
+                <td colSpan={2}>Totals</td>
+                <td className="n">{formatMoney(data.totalDebitsCents)}</td>
+                <td className="n">{formatMoney(data.totalCreditsCents)}</td>
               </tr>
-            ))}
-            <tr className="border-t border-slate-700 font-medium">
-              <td className="px-3 py-2 text-xs text-slate-400" colSpan={2}>Totals</td>
-              <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-100">{formatMoney(data.totalDebitsCents)}</td>
-              <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-100">{formatMoney(data.totalCreditsCents)}</td>
-            </tr>
-          </DetailTable>
-          <div className={clsx('mt-3 text-xs font-medium', data.balanced ? 'text-emerald-400' : 'text-red-400')}>
-            {data.balanced ? '✓ Balanced' : '✗ Out of balance'}
-          </div>
+            </DetailTable>
+            <div className={s.balance}>
+              {data.balanced ? <Status kind="ready">Balanced</Status> : <Status kind="blocked">Out of balance</Status>}
+              {!data.balanced && (
+                <span className="t-cap tnum">Off by {formatMoney(Math.abs(data.totalDebitsCents - data.totalCreditsCents))}</span>
+              )}
+            </div>
+          </PanelSection>
 
-          <div className="mt-5">
+          <PanelSection>
             <ExplainPanel kind="JOURNAL_ENTRY" id={data.id} />
-          </div>
+          </PanelSection>
 
-          <div className="mt-5">
+          <PanelSection>
             <AttachmentsPanel entityType="gl_entry" entityId={data.id} defaultDocType="OTHER" title="Supporting documents" />
-          </div>
+          </PanelSection>
         </>
       )}
 
       {data && editing && (
         <>
           {needsOverride && (
-            <div className="mb-4 rounded-lg border border-amber-600/40 bg-amber-500/5 p-3">
-              <div className="flex items-center gap-2 text-amber-400 text-sm font-medium mb-2"><ShieldAlert size={15} /> Posted entry — override required</div>
-              <p className="text-2xs text-slate-400 mb-2">This entry is posted to the GL. Saving reverses it and re-posts a corrected entry; the change is audit-logged.</p>
-              <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Reason for override (required)…" aria-label="Reason for override"
-                className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
-            </div>
+            <PanelSection>
+              <InlineNotice tone="warn" title="Posted entry — override required.">
+                This entry is posted to the GL. Saving reverses it and re-posts a corrected entry; the change is audit-logged.
+              </InlineNotice>
+              <Field label="Reason for override" className={s.overrideField}>
+                <Input
+                  type="text"
+                  value={overrideReason}
+                  onChange={(e) => setOverrideReason(e.target.value)}
+                  placeholder="Why this posted entry is being corrected (required)"
+                  autoFocus
+                />
+              </Field>
+            </PanelSection>
           )}
 
-          <DetailSection title="Entry">
-            <div className="px-4 py-3 space-y-3">
-              <label className="block">
-                <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Memo</span>
-                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200" />
-              </label>
-              <label className="block">
-                <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Entry date</span>
-                <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} className="mt-1 w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200" />
-              </label>
+          <PanelSection title="Entry">
+            <div className={s.editGrid}>
+              <Field label="Memo">
+                <Input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} />
+              </Field>
+              <Field label="Entry date">
+                <Input type="date" className="tnum" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+              </Field>
             </div>
-          </DetailSection>
+          </PanelSection>
 
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Lines</h3>
-            <button onClick={() => setLines((p) => [...p, { accountId: '', debitCents: 0, creditCents: 0, memo: null }])} className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300"><Plus size={12} /> Add line</button>
-          </div>
-          <div className="space-y-2">
-            {lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center rounded-lg bg-slate-800/30 p-2">
-                <select value={l.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })} aria-label={`Line ${i + 1} account`} className="col-span-5 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200">
-                  <option value="">Account…</option>
-                  {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
-                </select>
-                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.debitCents)} placeholder="Debit" aria-label={`Line ${i + 1} debit amount`} onChange={(e) => updateLine(i, { debitCents: inputToCents(e.target.value), creditCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
-                <input type="text" inputMode="decimal" defaultValue={centsToInput(l.creditCents)} placeholder="Credit" aria-label={`Line ${i + 1} credit amount`} onChange={(e) => updateLine(i, { creditCents: inputToCents(e.target.value), debitCents: 0 })} className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
-                <button onClick={() => setLines((p) => p.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`} className="col-span-1 p-1 text-slate-500 hover:text-red-400"><Trash2 size={14} /></button>
+          <PanelSection
+            title="Lines"
+            meta={
+              <Button variant="quiet" icon="plus" onClick={() => setLines((p) => [...p, { accountId: '', debitCents: 0, creditCents: 0, memo: null }])}>
+                Add line
+              </Button>
+            }
+          >
+            <div className={s.editLines}>
+              <div className={cx('t-cap', s.editHead)} aria-hidden="true">
+                <span>Account</span><span className="n">Debit</span><span className="n">Credit</span><span />
               </div>
-            ))}
-          </div>
+              {lines.map((l, i) => (
+                <div key={i} className={s.editLine}>
+                  <Select value={l.accountId} onChange={(e) => updateLine(i, { accountId: e.target.value })} aria-label={`Line ${i + 1} account`}>
+                    <option value="">{acctLoading && accountOptions.length === 0 ? 'Loading accounts…' : 'Account…'}</option>
+                    {/* Keep the line's current account selectable even before the list arrives. */}
+                    {l.accountId && !accountOptions.some((a) => a.id === l.accountId) && (
+                      <option value={l.accountId}>{l.accountNumber ? `${l.accountNumber} · ${l.accountName ?? ''}` : 'Current account'}</option>
+                    )}
+                    {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
+                  </Select>
+                  <span className={s.money}>
+                    <span aria-hidden="true">$</span>
+                    <input type="text" inputMode="decimal" autoComplete="off" className="input input--money" defaultValue={centsToInput(l.debitCents)} placeholder="Debit" aria-label={`Line ${i + 1} debit amount`} onChange={(e) => updateLine(i, { debitCents: inputToCents(e.target.value), creditCents: 0 })} />
+                  </span>
+                  <span className={s.money}>
+                    <span aria-hidden="true">$</span>
+                    <input type="text" inputMode="decimal" autoComplete="off" className="input input--money" defaultValue={centsToInput(l.creditCents)} placeholder="Credit" aria-label={`Line ${i + 1} credit amount`} onChange={(e) => updateLine(i, { creditCents: inputToCents(e.target.value), debitCents: 0 })} />
+                  </span>
+                  <Button variant="quiet" iconOnly icon="x" onClick={() => setLines((p) => p.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`} />
+                </div>
+              ))}
+            </div>
 
-          <div className={clsx('mt-3 flex items-center justify-between rounded-lg px-4 py-2.5', balanced ? 'bg-emerald-500/[0.06]' : 'bg-red-500/[0.06]')}>
-            <span className={clsx('text-xs font-medium', balanced ? 'text-emerald-400' : 'text-red-400')}>{balanced ? '✓ Balanced' : '✗ Out of balance'}</span>
-            <span className="text-2xs font-mono text-slate-400">Dr {formatMoney(totalDr)} · Cr {formatMoney(totalCr)}</span>
-          </div>
+            <div className={s.balance}>
+              {balanced ? <Status kind="ready">Balanced</Status> : <Status kind="blocked">Out of balance</Status>}
+              <span className="t-cap tnum">Debits {formatMoney(totalDr)} · Credits {formatMoney(totalCr)}</span>
+            </div>
+          </PanelSection>
 
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">Cancel</button>
-            <button onClick={save} disabled={saving || !balanced} className={clsx('inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium', saving || !balanced ? 'bg-slate-800 text-slate-600 cursor-not-allowed' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Save
-            </button>
+          <div className={s.foot}>
+            <Button variant="quiet" onClick={() => { setEditing(false); setNeedsOverride(false); }}>Cancel</Button>
+            <Button variant="primary" onClick={save} disabled={saving || !balanced} aria-busy={saving || undefined}>
+              {saving ? 'Saving…' : needsOverride ? 'Reverse & re-post' : 'Save'}
+            </Button>
           </div>
         </>
       )}

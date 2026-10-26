@@ -19,19 +19,25 @@
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import {
-  UploadCloud, Loader2, X, FileSpreadsheet, AlertTriangle, CheckCircle2, Info, ChevronDown,
-  Search, Scale, Table2, Save, Trash2, ArrowRight,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { Button, ConfirmDialog, Dialog, Field, Icon, InlineNotice, Input, Select, Tag, cx } from '@meritbooks/merit-ui';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
 import {
   guessMapping, aggregateRows, applySavedMapping, headerSignature,
-  TARGET_LABELS,
+  TARGET_LABELS, MONEY_TARGETS,
   type ColumnMapping, type PayrollFieldTarget, type SavedMappingColumn,
 } from '@/lib/payroll/register-csv';
+import {
+  BalanceNotice,
+  DoneState,
+  ErrorState,
+  JournalLinesTable,
+  RegisterFigures,
+  WorkingState,
+  type AccountOption,
+} from './register-review';
+import s from './payroll.module.css';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface ParseResponse {
@@ -60,7 +66,6 @@ interface BuildResponse {
 }
 interface SavedMapping { id: string; providerName: string; mapping: SavedMappingColumn[]; headerSignature: string | null; updatedAt: string }
 interface LocationOption { id: string; name: string; short_code: string }
-interface AccountOption { id: string; accountNumber: string; name: string; accountType: string; isActive: boolean; approvalStatus: string }
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = '.csv,.tsv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -74,56 +79,15 @@ const TARGET_ORDER: PayrollFieldTarget[] = [
   'fica_ss', 'fica_medicare', 'fica', 'net', 'employer_tax', 'deduction',
 ];
 
-// ── Inline account picker (searches this company's approved COA) ────────────────
-function AccountPicker({
-  value, accounts, onChange, placeholder, invalid,
-}: {
-  value: string; accounts: AccountOption[]; onChange: (id: string) => void; placeholder: string; invalid: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-  const selected = accounts.find((a) => a.id === value);
-  const q = search.trim().toLowerCase();
-  const filtered = q ? accounts.filter((a) => a.accountNumber.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)) : accounts;
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate relative',
-          selected ? 'bg-slate-800 border-slate-700 text-white' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
-        {selected ? `${selected.accountNumber} · ${selected.name}` : placeholder}
-        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <div className="relative">
-              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search accounts..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
-            </div>
-          </div>
-          <div className="max-h-44 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-slate-500 text-center">{accounts.length === 0 ? 'Select a company first' : 'No matches'}</p>
-            ) : filtered.slice(0, 40).map((a) => (
-              <button key={a.id} type="button" onClick={() => { onChange(a.id); setOpen(false); setSearch(''); }}
-                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 flex items-center gap-2">
-                <span className="font-mono text-slate-500 w-12 shrink-0">{a.accountNumber}</span>
-                <span className="text-slate-300 truncate">{a.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+/** A money cell that has text but isn't a number (so it silently sums as 0). */
+function unreadableMoney(raw: string | undefined): boolean {
+  const t = (raw ?? '').trim();
+  if (t === '') return false;
+  const cleaned = t.replace(/^\((.*)\)$/, '$1').replace(/^-/, '').replace(/[$,\s]/g, '');
+  return cleaned !== '' && !/^\d*\.?\d*$/.test(cleaned);
 }
+
+interface RowIssue { row: number; who: string; issue: string }
 
 // ── Review line draft (post stage) ──────────────────────────────────────────────
 interface LineDraft {
@@ -131,7 +95,9 @@ interface LineDraft {
   accountId: string; degraded: boolean; suggestedAccountId: string | null;
 }
 
-// ── Main modal ───────────────────────────────────────────────────────────────
+const STEP_LABELS = ['Map columns', 'Review & post'] as const;
+
+// ── Main dialog ──────────────────────────────────────────────────────────────
 export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; onClose: () => void; onPosted: () => void }) {
   const [phase, setPhase] = useState<'idle' | 'parsing' | 'map' | 'building' | 'review' | 'error' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +117,7 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
   // Save-mapping controls
   const [providerName, setProviderName] = useState('');
   const [savingMapping, setSavingMapping] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
   // Review (post) stage
   const [drafts, setDrafts] = useState<LineDraft[]>([]);
@@ -214,6 +181,32 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
   );
   const hasGross = agg.grossCents > 0;
   const hasNet = agg.netCents > 0;
+
+  // Rows to check: a mapped money cell we can't read (it would sum as 0), or — when
+  // both gross and net are mapped — a row whose own arithmetic doesn't foot. The
+  // same pure aggregation the totals use, one row at a time; nothing is changed.
+  const rowIssues = useMemo<RowIssue[]>(() => {
+    if (rows.length === 0) return [];
+    const moneyCols = mapping.filter((m) => MONEY_TARGETS.has(m.target));
+    const employeeCol = mapping.find((m) => m.target === 'employee');
+    const footable = mapping.some((m) => m.target === 'gross') && mapping.some((m) => m.target === 'net');
+    const out: RowIssue[] = [];
+    rows.forEach((r, i) => {
+      const who = employeeCol ? (r[employeeCol.index] ?? '').trim() : '';
+      const bad = moneyCols.filter((m) => unreadableMoney(r[m.index]));
+      if (bad.length > 0) {
+        out.push({ row: i + 1, who, issue: `Can’t read ${bad.map((m) => m.header || `column ${m.index + 1}`).join(', ')}` });
+        return;
+      }
+      if (footable) {
+        const one = aggregateRows([r], mapping);
+        if (one.grossCents !== 0 && one.footingDeltaCents !== 0) {
+          out.push({ row: i + 1, who, issue: `Off by ${formatMoney(Math.abs(one.footingDeltaCents))}` });
+        }
+      }
+    });
+    return out;
+  }, [rows, mapping]);
 
   if (!open) return null;
 
@@ -324,6 +317,16 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
   const allAccountsPicked = drafts.every((d) => inputToCents(d.amountInput) === 0 || !!d.accountId);
   const canPost = !saving && balanced && allAccountsPicked && !!locationId && !!payDate && drafts.length >= 2;
 
+  const blocker = !locationId
+    ? 'Choose a company.'
+    : !payDate
+    ? 'Enter a pay date.'
+    : !balanced
+    ? 'The entry must balance.'
+    : !allAccountsPicked
+    ? 'Choose an account for every line with an amount.'
+    : null;
+
   const confirmPost = async () => {
     setSaving(true);
     const lines = drafts.filter((d) => inputToCents(d.amountInput) > 0).map((d) => ({
@@ -347,343 +350,369 @@ export function ImportRegisterCsv({ open, onClose, onPosted }: { open: boolean; 
   // Can we build? Need at least a gross column that sums > 0.
   const canBuild = hasGross;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 sm:p-8">
-      <div className="w-full max-w-4xl bg-surface-900 border border-slate-800 rounded-2xl shadow-2xl my-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <div>
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-              <FileSpreadsheet size={16} className="text-emerald-400" /> Import register from spreadsheet
-            </h2>
-            <p className="text-2xs text-slate-500 mt-0.5">
-              CSV or Excel from any processor — no AI. Map the columns once, save the mapping, and post a balanced payroll entry.
-            </p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
-        </div>
+  const stepIndex = phase === 'map' || phase === 'building' ? 0 : phase === 'review' ? 1 : -1;
 
-        <div className="p-5 space-y-4">
-          {/* Idle: dropzone */}
-          {phase === 'idle' && (
-            <>
-              <div
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-                className={clsx('cursor-pointer rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-                  dragOver ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
-                <FileSpreadsheet size={28} className="mx-auto text-slate-500 mb-3" />
-                <p className="text-sm text-slate-300">Drop a payroll register spreadsheet, or <span className="text-emerald-400">browse</span></p>
-                <p className="text-2xs text-slate-500 mt-1">CSV, TSV, or XLSX · up to 10MB · first row must be column headers</p>
-              </div>
-              <input ref={inputRef} type="file" accept={ACCEPT} className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }} />
-              <div className="flex items-start gap-2 text-2xs text-slate-500">
-                <Info size={12} className="mt-0.5 shrink-0" />
-                <span>Fully deterministic — no model reads your file. Export the payroll register from ADP, Gusto, QuickBooks Payroll, Paychex, or your spreadsheet. Prefer a PDF? Use <span className="text-slate-300">Import payroll register</span> instead.</span>
+  const actions =
+    phase === 'map' ? (
+      <>
+        {!canBuild && <span className="t-cap">Map a gross wages column first.</span>}
+        <Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" iconAfter="right" onClick={() => void buildEntry()} disabled={!canBuild}>
+          Build balanced entry
+        </Button>
+      </>
+    ) : phase === 'review' ? (
+      <>
+        {blocker && <span className="t-cap">{blocker}</span>}
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="primary" icon="check" onClick={() => void confirmPost()} disabled={!canPost} aria-busy={saving || undefined}>
+          {saving ? 'Posting…' : 'Post payroll entry'}
+        </Button>
+      </>
+    ) : phase === 'done' ? (
+      <Button variant="primary" onClick={onClose}>Done</Button>
+    ) : (
+      <Button onClick={onClose}>{phase === 'error' ? 'Close' : 'Cancel'}</Button>
+    );
+
+  const footNote =
+    phase === 'map' ? (
+      <Button variant="quiet" icon="left" onClick={() => { setPhase('idle'); }}>Upload a different file</Button>
+    ) : phase === 'review' ? (
+      <Button variant="quiet" icon="left" onClick={() => setPhase('map')} disabled={saving}>Back to column mapping</Button>
+    ) : (
+      'No AI reads this file. Nothing posts until you confirm a balanced entry.'
+    );
+
+  return (
+    <Dialog
+      open={open}
+      onClose={() => { if (!saving) onClose(); }}
+      title={
+        <span className={s.dialogTitle}>
+          Import a register from a spreadsheet
+        </span>
+      }
+      width={960}
+      className={s.tallDialog}
+      dismissOnScrim={phase === 'idle' || phase === 'error' || phase === 'done'}
+      footNote={footNote}
+      actions={actions}
+    >
+      <div className={s.body}>
+        {stepIndex >= 0 && (
+          <div className={s.steps} aria-label="Import steps">
+            {STEP_LABELS.map((label, i) => (
+              <span
+                key={label}
+                className={cx(s.step, i === stepIndex && s.stepOn, i < stepIndex && s.stepDone)}
+                aria-current={i === stepIndex ? 'step' : undefined}
+              >
+                <span className={s.stepNo} aria-hidden="true">{i + 1}</span>
+                {label}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Idle: dropzone */}
+        {phase === 'idle' && (
+          <>
+            <p className="ink-2">
+              CSV or Excel from any processor. Map the columns once, save the mapping, and post a balanced payroll entry.
+            </p>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={cx(s.drop, dragOver && s.dropOver)}
+              aria-label="Choose a payroll register spreadsheet, or drop one here"
+            >
+              <span className={s.dropIcon} aria-hidden="true"><Icon name="file-text" /></span>
+              <span className="t-head">Drop a payroll register spreadsheet, or browse</span>
+              <span className="t-cap">CSV, TSV or XLSX · up to 10 MB · the first row must be column headers</span>
+            </button>
+            <input ref={inputRef} type="file" accept={ACCEPT} className={s.hidden}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }} />
+            <p className="t-cap">
+              Export the payroll register from your processor or your own spreadsheet. Prefer a PDF? Close this and use
+              Import register.
+            </p>
+            {savedMappings.length > 0 && (
+              <p className="t-cap tnum">
+                {savedMappings.length} saved column mapping{savedMappings.length === 1 ? '' : 's'}. We apply the matching
+                one when you drop a file.
+              </p>
+            )}
+          </>
+        )}
+
+        {(phase === 'parsing' || phase === 'building') && (
+          <WorkingState
+            title={phase === 'parsing' ? `Reading ${fileName ?? 'the file'}…` : 'Building the balanced payroll entry…'}
+            detail={phase === 'parsing' ? 'Parsing rows and detecting the column mapping.' : 'Summing the mapped columns and resolving accounts.'}
+          />
+        )}
+
+        {phase === 'error' && <ErrorState message={error} onRetry={() => { setPhase('idle'); setError(null); }} />}
+
+        {phase === 'done' && (
+          <DoneState entryNumber={postedEntryNumber} onAnother={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} />
+        )}
+
+        {/* ── Stage: MAP ─────────────────────────────────────────────────────── */}
+        {phase === 'map' && (
+          <>
+            <div className={s.footRow}>
+              <div className={s.meta}>
+                <Icon name="file-text" />
+                <span className={s.metaStrong}>{fileName}</span>
+                <span className="tnum">{rows.length} row{rows.length === 1 ? '' : 's'}{truncated ? ' (first 20,000)' : ''}</span>
+                <span className="tnum">{headers.length} columns</span>
               </div>
               {savedMappings.length > 0 && (
-                <div className="text-2xs text-slate-500">
-                  {savedMappings.length} saved column mapping{savedMappings.length === 1 ? '' : 's'} — we auto-apply the matching one when you drop a file.
-                </div>
+                <Select
+                  aria-label="Apply a saved mapping"
+                  style={{ width: 220 }}
+                  onChange={(e) => { if (e.target.value) applySaved(e.target.value); e.target.value = ''; }}
+                  defaultValue=""
+                >
+                  <option value="">Apply a saved mapping…</option>
+                  {savedMappings.map((m) => <option key={m.id} value={m.id}>{m.providerName}</option>)}
+                </Select>
               )}
-            </>
-          )}
-
-          {(phase === 'parsing' || phase === 'building') && (
-            <div className="py-16 text-center">
-              <Loader2 size={28} className="mx-auto text-emerald-400 animate-spin mb-3" />
-              <p className="text-sm text-slate-300">{phase === 'parsing' ? `Reading ${fileName ?? 'file'}…` : 'Building the balanced payroll entry…'}</p>
-              <p className="text-2xs text-slate-500 mt-1">{phase === 'parsing' ? 'Parsing rows and detecting the column mapping.' : 'Summing the mapped columns and resolving accounts.'}</p>
             </div>
-          )}
 
-          {phase === 'error' && (
-            <div className="py-12 text-center">
-              <AlertTriangle size={24} className="mx-auto text-red-400 mb-2" />
-              <p className="text-sm text-red-400">{error}</p>
-              <button onClick={() => { setPhase('idle'); setError(null); }} className="mt-3 px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Try another file</button>
+            {error && (
+              <InlineNotice tone="neg" title="We couldn’t build the entry.">
+                {error}
+              </InlineNotice>
+            )}
+
+            {/* Mapping table with a sample preview */}
+            <div className={cx(s.lines, s.scrollLines)}>
+              <table className="tbl tbl-q tbl-q--compact" aria-label="Column mapping">
+                <colgroup>
+                  <col style={{ width: 220 }} />
+                  <col />
+                  <col style={{ width: 280 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">Column</th>
+                    <th scope="col">Sample values</th>
+                    <th scope="col">Maps to</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mapping.map((m) => {
+                    const samples = rows.slice(0, 3).map((r) => r[m.index]).filter((v) => (v ?? '').trim() !== '');
+                    const isLabelled = m.target === 'employer_tax' || m.target === 'deduction';
+                    const colName = m.header || `Column ${m.index + 1}`;
+                    return (
+                      <tr key={m.index} className={cx('q-row', s.cellTop)}>
+                        <td>
+                          <span className="l1" style={{ whiteSpace: 'normal' }}>{colName}</span>
+                        </td>
+                        <td>
+                          <span className={cx('tnum', s.samples)}>{samples.length ? samples.join(', ') : '—'}</span>
+                        </td>
+                        <td className={s.mapTarget}>
+                          <Select
+                            value={m.target}
+                            aria-label={`Map ${colName} to`}
+                            onChange={(e) => setColTarget(m.index, e.target.value as PayrollFieldTarget)}
+                          >
+                            {TARGET_ORDER.map((t) => <option key={t} value={t}>{TARGET_LABELS[t]}</option>)}
+                          </Select>
+                          {isLabelled && (
+                            <Input
+                              type="text"
+                              value={m.label ?? m.header}
+                              onChange={(e) => setColLabel(m.index, e.target.value)}
+                              placeholder="Ledger line label"
+                              aria-label={`Ledger line label for ${colName}`}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          )}
 
-          {phase === 'done' && (
-            <div className="py-12 text-center">
-              <CheckCircle2 size={28} className="mx-auto text-emerald-400 mb-2" />
-              <p className="text-sm text-emerald-300">Payroll register posted{postedEntryNumber ? ` — entry ${postedEntryNumber}` : ''}.</p>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <button onClick={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} className="px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Import another</button>
-                <button onClick={onClose} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">Done</button>
+            {/* Live preview */}
+            <section>
+              <div className={s.sectionHead}>
+                <span className="eyebrow">Live preview<span className="sl">//</span>Mapped totals</span>
+                {agg.employeeCount > 0 && <span className="t-cap tnum">{agg.employeeCount} employee{agg.employeeCount === 1 ? '' : 's'}</span>}
               </div>
-            </div>
-          )}
+              <div style={{ marginTop: 8 }}>
+                <RegisterFigures gross={agg.grossCents} withheld={withheldTotal} employerTax={employerTaxTotal} net={agg.netCents} />
+              </div>
+            </section>
 
-          {/* ── Stage: MAP ─────────────────────────────────────────────────────── */}
-          {phase === 'map' && (
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2 text-2xs text-slate-500">
-                  <FileSpreadsheet size={12} /> <span className="text-slate-400">{fileName}</span>
-                  <span className="text-slate-600">·</span> <span>{rows.length} row{rows.length === 1 ? '' : 's'}{truncated ? ' (first 20,000)' : ''}</span>
-                  <span className="text-slate-600">·</span> <span>{headers.length} columns</span>
-                </div>
-                {savedMappings.length > 0 && (
-                  <div className="flex items-center gap-2">
-                    <select onChange={(e) => { if (e.target.value) applySaved(e.target.value); e.target.value = ''; }}
-                      className="px-2 py-1.5 rounded-lg text-2xs text-slate-300 bg-slate-800 border border-slate-700" defaultValue="">
-                      <option value="">Apply saved mapping…</option>
-                      {savedMappings.map((m) => <option key={m.id} value={m.id}>{m.providerName}</option>)}
-                    </select>
-                  </div>
+            {/* Footing / balance readiness */}
+            {!hasGross ? (
+              <InlineNotice title="Map a gross wages column">to build the entry.</InlineNotice>
+            ) : agg.registerFoots ? (
+              <InlineNotice tone="info" icon={<Icon name="check" />} title="The register foots.">
+                Gross equals net plus withholdings and deductions, so the payroll entry will balance.
+              </InlineNotice>
+            ) : (
+              <InlineNotice tone="warn" title={<>The register is off by <span className="tnum">{formatMoney(Math.abs(agg.footingDeltaCents))}</span>.</>}>
+                Gross minus withholdings and deductions doesn&apos;t equal net. Check your column mapping
+                {hasNet ? '.' : ' — no net pay column is mapped yet.'}
+              </InlineNotice>
+            )}
+
+            {/* Rows to check */}
+            {rowIssues.length > 0 && (
+              <InlineNotice
+                tone="warn"
+                title={<><span className="tnum">{rowIssues.length}</span> row{rowIssues.length === 1 ? '' : 's'} to check.</>}
+              >
+                These rows have an amount we can&apos;t read (it counts as 0) or don&apos;t foot on their own. Totals rows
+                and blank lines in the export are the usual cause. Row numbers count data rows under the header.
+                <ul className={s.rowIssues} aria-label="Rows to check">
+                  {rowIssues.slice(0, 50).map((ri) => (
+                    <li key={ri.row}>
+                      <span className="tnum">Row {ri.row}</span>
+                      <span className="mb-trunc">{ri.who || '—'}</span>
+                      <span className="tnum">{ri.issue}</span>
+                    </li>
+                  ))}
+                </ul>
+                {rowIssues.length > 50 && (
+                  <span className="t-cap tnum">and {rowIssues.length - 50} more</span>
                 )}
-              </div>
+              </InlineNotice>
+            )}
 
-              {/* Mapping table with a sample preview */}
-              <div className="card overflow-hidden">
-                <div className="max-h-72 overflow-y-auto">
-                  <table className="w-full">
-                    <thead className="sticky top-0 bg-surface-900 z-10">
-                      <tr className="border-b border-slate-800 text-2xs uppercase tracking-wider text-slate-500">
-                        <th className="text-left px-3 py-2 font-semibold w-48">Column</th>
-                        <th className="text-left px-3 py-2 font-semibold">Sample values</th>
-                        <th className="text-left px-3 py-2 font-semibold w-64">Maps to</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-800/40">
-                      {mapping.map((m) => {
-                        const samples = rows.slice(0, 3).map((r) => r[m.index]).filter((v) => (v ?? '').trim() !== '');
-                        const isLabelled = m.target === 'employer_tax' || m.target === 'deduction';
-                        return (
-                          <tr key={m.index} className="align-top">
-                            <td className="px-3 py-2">
-                              <span className="text-xs text-slate-200 flex items-center gap-1.5"><Table2 size={11} className="text-slate-500" /> {m.header || `Column ${m.index + 1}`}</span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <span className="text-2xs text-slate-500 font-mono">{samples.length ? samples.join(', ') : '—'}</span>
-                            </td>
-                            <td className="px-3 py-2">
-                              <select value={m.target} onChange={(e) => setColTarget(m.index, e.target.value as PayrollFieldTarget)}
-                                className={clsx('w-full px-2 py-1.5 rounded-lg text-xs bg-slate-800 border',
-                                  m.target === 'ignore' ? 'border-slate-700 text-slate-500' : 'border-emerald-600/40 text-white')}>
-                                {TARGET_ORDER.map((t) => <option key={t} value={t}>{TARGET_LABELS[t]}</option>)}
-                              </select>
-                              {isLabelled && (
-                                <input type="text" value={m.label ?? m.header} onChange={(e) => setColLabel(m.index, e.target.value)}
-                                  placeholder="GL line label" className="mt-1 w-full px-2 py-1 rounded-lg text-2xs text-slate-200 bg-slate-800/60 border border-slate-700 placeholder:text-slate-600" />
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+            {/* Period */}
+            <div className={s.grid3}>
+              <Field label="Pay date">
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+              </Field>
+              <Field label="Period start (optional)">
+                <Input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+              </Field>
+              <Field label="Period end (optional)">
+                <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+              </Field>
+            </div>
 
-              {/* Live preview */}
-              <div className="rounded-xl border border-slate-800 bg-slate-800/20 p-3">
-                <div className="mb-2 text-2xs font-semibold uppercase tracking-wider text-slate-400">Live preview — mapped totals</div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <PreviewTile label="Gross wages" value={formatMoney(agg.grossCents)} tone="debit" />
-                  <PreviewTile label="Withheld & deductions" value={formatMoney(withheldTotal)} />
-                  <PreviewTile label="Employer taxes" value={formatMoney(employerTaxTotal)} tone="debit" />
-                  <PreviewTile label="Net pay (take-home)" value={formatMoney(agg.netCents)} tone="net" />
+            {/* Save mapping */}
+            <div className={s.saveRow}>
+              <Field label="Save this mapping as" help="Reused when the same columns come in again.">
+                <Input
+                  type="text"
+                  value={providerName}
+                  onChange={(e) => setProviderName(e.target.value)}
+                  placeholder="Your processor’s name"
+                />
+              </Field>
+              <Button icon="check" onClick={() => void saveMapping()} disabled={savingMapping || !providerName.trim()} aria-busy={savingMapping || undefined}>
+                {savingMapping ? 'Saving…' : 'Save mapping'}
+              </Button>
+              {savedMappings.length > 0 && (
+                <div className={s.savedList} aria-label="Saved mappings">
+                  {savedMappings.map((m) => (
+                    <Tag key={m.id} className={s.savedTag}>
+                      {m.providerName}
+                      <button
+                        type="button"
+                        className="btn btn--quiet btn--icon"
+                        style={{ width: 20, height: 20 }}
+                        onClick={() => setConfirmDelete({ id: m.id, name: m.providerName })}
+                        aria-label={`Delete saved mapping ${m.providerName}`}
+                        title={`Delete ${m.providerName}`}
+                      >
+                        <Icon name="x" />
+                      </button>
+                    </Tag>
+                  ))}
                 </div>
-                {/* Footing / balance readiness */}
-                <div className={clsx('mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                  !hasGross ? 'bg-slate-800/40 border border-slate-700 text-slate-400'
-                    : agg.registerFoots ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                    : 'bg-amber-500/10 border border-amber-500/30 text-amber-200')}>
-                  <Scale size={14} className="shrink-0" />
-                  {!hasGross ? <span>Map a <span className="text-slate-200">Gross wages</span> column to build the entry.</span>
-                    : agg.registerFoots ? <span>The register foots — gross equals net + withholdings + deductions. The payroll entry will balance.</span>
-                    : <span>Register is off by <span className="font-mono">{formatMoney(Math.abs(agg.footingDeltaCents))}</span> (gross − withholdings − deductions vs net). Check your column mapping{hasNet ? '' : ' — no net pay column is mapped yet'}.</span>}
-                </div>
-              </div>
+              )}
+            </div>
+          </>
+        )}
 
-              {/* Period + save-mapping */}
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
-                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
-                </div>
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Period start (optional)</label>
-                  <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
-                </div>
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Period end (optional)</label>
-                  <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
-                </div>
-              </div>
+        {/* ── Stage: REVIEW (accounts + post) ─────────────────────────────────── */}
+        {phase === 'review' && (
+          <>
+            {!registerFoots && (
+              <InlineNotice tone="warn" title="The register doesn’t foot.">
+                Gross minus withholdings and deductions is off from net pay by{' '}
+                <b className="tnum">{formatMoney(Math.abs(footingDelta))}</b>. Review the amounts before posting.
+              </InlineNotice>
+            )}
+            {unresolvedRoles.length > 0 && (
+              <InlineNotice tone="warn" title="Some lines have no account role.">
+                No role is mapped for {unresolvedRoles.join(', ')}. Choose an account for each line below, or map the role
+                on the Account roles screen.
+              </InlineNotice>
+            )}
 
-              <div className="flex flex-wrap items-center gap-2 rounded-lg bg-slate-800/30 border border-slate-800 px-3 py-2">
-                <Save size={13} className="text-slate-500" />
-                <span className="text-2xs text-slate-400">Reuse this mapping next time:</span>
-                <input type="text" value={providerName} onChange={(e) => setProviderName(e.target.value)}
-                  placeholder="e.g. ADP, Gusto" className="px-2 py-1 rounded-lg text-2xs text-white bg-slate-800 border border-slate-700 placeholder:text-slate-600 w-32" />
-                <button onClick={() => void saveMapping()} disabled={savingMapping || !providerName.trim()}
-                  className="px-2.5 py-1 rounded-lg text-2xs text-slate-200 border border-slate-700 hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1">
-                  {savingMapping ? <Loader2 size={11} className="animate-spin" /> : <Save size={11} />} Save mapping
-                </button>
-                {savedMappings.map((m) => (
-                  <span key={m.id} className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-2xs text-slate-400">
-                    {m.providerName}
-                    <button onClick={() => void deleteSaved(m.id, m.providerName)} className="text-slate-500 hover:text-red-400"><Trash2 size={10} /></button>
+            {reg && (
+              <section>
+                <div className={s.sectionHead}>
+                  <span className="eyebrow">Register totals</span>
+                  <span className={s.meta}>
+                    {reg.payDate && <span className="tnum">Pay date {reg.payDate}</span>}
+                    {(reg.periodStart || reg.periodEnd) && <span className="tnum">Period {reg.periodStart ?? '—'} → {reg.periodEnd ?? '—'}</span>}
+                    {typeof reg.employeeCount === 'number' && reg.employeeCount > 0 && <span className="tnum">{reg.employeeCount} employee{reg.employeeCount === 1 ? '' : 's'}</span>}
                   </span>
-                ))}
-              </div>
+                </div>
+                <p className="t-cap" style={{ marginTop: 8 }}>
+                  Posts as: debit gross wages and employer taxes; credit net pay (to cash or in transit) and the tax and
+                  deduction liabilities. Check the account on every line before posting.
+                </p>
+              </section>
+            )}
 
-              <div className="flex items-center justify-between pt-1">
-                <button onClick={() => { setPhase('idle'); }} className="text-2xs text-slate-500 hover:text-slate-300">Upload a different file</button>
-                <button onClick={() => void buildEntry()} disabled={!canBuild}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
-                  Build balanced entry <ArrowRight size={13} />
-                </button>
-              </div>
+            {/* Company + pay date */}
+            <div className={s.grid2}>
+              <Field label="Company">
+                <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  <option value="">Choose a company…</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Pay date">
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+              </Field>
             </div>
-          )}
 
-          {/* ── Stage: REVIEW (accounts + post) ─────────────────────────────────── */}
-          {phase === 'review' && (
-            <div className="space-y-4">
-              {!registerFoots && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
-                  <AlertTriangle size={13} className="text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-2xs text-amber-200/90">
-                    The register does not foot — gross minus withholdings and deductions is off from net pay by
-                    {' '}<span className="font-mono">{formatMoney(Math.abs(footingDelta))}</span>. Review the amounts before posting.
-                  </p>
-                </div>
-              )}
-              {unresolvedRoles.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
-                  <AlertTriangle size={13} className="text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-2xs text-amber-200/90">
-                    No account role is mapped for: <span className="font-mono">{unresolvedRoles.join(', ')}</span>. Pick an account for each line below (or map the role on the Account Roles screen).
-                  </p>
-                </div>
-              )}
+            <JournalLinesTable
+              drafts={drafts}
+              accounts={usableAccounts}
+              locationId={locationId}
+              loadingAccounts={loadingAccts}
+              totalDebits={totalDebits}
+              totalCredits={totalCredits}
+              amountCents={inputToCents}
+              onPatch={patchLine}
+            />
 
-              {reg && (
-                <div className="rounded-xl border border-slate-800 bg-slate-800/20 p-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-slate-500">
-                    <span className="font-semibold uppercase tracking-wider text-slate-400">Register totals</span>
-                    {reg.payDate && <span>Pay date {reg.payDate}</span>}
-                    {(reg.periodStart || reg.periodEnd) && <span>Period {reg.periodStart ?? '—'} → {reg.periodEnd ?? '—'}</span>}
-                    {typeof reg.employeeCount === 'number' && reg.employeeCount > 0 && <span>{reg.employeeCount} employee{reg.employeeCount === 1 ? '' : 's'}</span>}
-                  </div>
-                  <p className="text-2xs text-slate-500">
-                    Posts as: DR gross wages + DR employer taxes → CR net pay (to cash / in-transit) + CR the tax &amp; deduction liabilities. Review the account for every line before posting.
-                  </p>
-                </div>
-              )}
-
-              {/* Company + pay date */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Company</label>
-                  <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
-                    <option value="">Select company…</option>
-                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
-                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
-                </div>
-              </div>
-
-              {/* Lines */}
-              <div className="card overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-2xs uppercase tracking-wider text-slate-500">
-                      <th className="text-left px-3 py-2 font-semibold">Line</th>
-                      <th className="text-left px-3 py-2 font-semibold w-56">Account</th>
-                      <th className="text-right px-3 py-2 font-semibold w-24">Debit</th>
-                      <th className="text-right px-3 py-2 font-semibold w-24">Credit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {drafts.map((d) => (
-                      <tr key={d.key} className="align-top">
-                        <td className="px-3 py-2">
-                          <span className="text-xs text-slate-200">{d.label}</span>
-                          {d.degraded && <span className="block text-2xs text-amber-400/80 mt-0.5">Unmapped — verify account</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          <AccountPicker value={d.accountId} accounts={usableAccounts}
-                            invalid={inputToCents(d.amountInput) > 0 && !d.accountId}
-                            placeholder={!locationId ? 'Pick a company first' : loadingAccts ? 'Loading…' : 'Select account'}
-                            onChange={(id) => patchLine(d.key, { accountId: id })} />
-                        </td>
-                        <td className="px-3 py-1.5 text-right">
-                          {d.side === 'DR' ? (
-                            <input type="number" min="0" step="0.01" value={d.amountInput}
-                              onChange={(e) => patchLine(d.key, { amountInput: e.target.value })}
-                              className="w-20 px-2 py-1 rounded-lg text-xs text-emerald-300 font-mono text-right bg-slate-800 border border-slate-700" />
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-                        <td className="px-3 py-1.5 text-right">
-                          {d.side === 'CR' ? (
-                            <input type="number" min="0" step="0.01" value={d.amountInput}
-                              onChange={(e) => patchLine(d.key, { amountInput: e.target.value })}
-                              className="w-20 px-2 py-1 rounded-lg text-xs text-red-300 font-mono text-right bg-slate-800 border border-slate-700" />
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-slate-800 text-xs font-mono">
-                      <td className="px-3 py-2 text-slate-400" colSpan={2}>Totals</td>
-                      <td className="px-3 py-2 text-right text-emerald-300">{formatMoney(totalDebits)}</td>
-                      <td className="px-3 py-2 text-right text-red-300">{formatMoney(totalCredits)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Balance banner */}
-              <div className={clsx('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                totalDebits === 0 ? 'bg-slate-800/40 border border-slate-700 text-slate-400'
-                  : balanced ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                  : 'bg-red-500/10 border border-red-500/30 text-red-300')}>
-                <Scale size={14} className="shrink-0" />
-                {totalDebits === 0 ? <span>Enter the register amounts above to build the balanced entry.</span>
-                  : balanced ? <span>Balanced — debits equal credits at <span className="font-mono">{formatMoney(totalDebits)}</span>.</span>
-                  : <span>Out of balance by <span className="font-mono">{formatMoney(Math.abs(imbalance))}</span> — debits <span className="font-mono">{formatMoney(totalDebits)}</span> vs credits <span className="font-mono">{formatMoney(totalCredits)}</span>. Fix the amounts before posting.</span>}
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <button onClick={() => setPhase('map')} className="text-2xs text-slate-500 hover:text-slate-300">Back to column mapping</button>
-                <button onClick={() => void confirmPost()} disabled={!canPost}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                  Confirm &amp; post payroll entry
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            <BalanceNotice totalDebits={totalDebits} totalCredits={totalCredits} />
+          </>
+        )}
       </div>
-    </div>
-  );
-}
 
-function PreviewTile({ label, value, tone }: { label: string; value: string; tone?: 'debit' | 'net' }) {
-  return (
-    <div className="rounded-lg bg-slate-900/40 px-2.5 py-2">
-      <p className="text-2xs uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={clsx('mt-0.5 font-mono text-sm font-semibold tabular-nums',
-        tone === 'net' ? 'text-emerald-400' : tone === 'debit' ? 'text-slate-200' : 'text-slate-300')}>{value}</p>
-    </div>
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={async () => { if (confirmDelete) await deleteSaved(confirmDelete.id, confirmDelete.name); }}
+        title="Delete this saved mapping?"
+        confirmLabel={confirmDelete ? `Delete ${confirmDelete.name}` : 'Delete mapping'}
+        tone="danger"
+      >
+        Files with these columns won&apos;t be mapped automatically any more. Registers already posted are not affected.
+      </ConfirmDialog>
+    </Dialog>
   );
 }

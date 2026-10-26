@@ -8,11 +8,14 @@
  *
  * The component never holds the raw value until the server returns it for a logged
  * reveal; "Hide" drops it from state.
+ *
+ * Presentation: a kit detail row (`.mb-detail-row`) so it sits inside a DetailSection
+ * beside DetailField rows. Kit classes + inline layout only (it renders inside bridged
+ * and ported pages alike).
  */
 
 import { useState } from 'react';
-import { Eye, EyeOff, Loader2, Lock } from 'lucide-react';
-import { clsx } from 'clsx';
+import { Button, Icon, Input, Tag } from '@meritbooks/merit-ui';
 
 export type MaskLevel = 'hidden' | 'grouped' | 'masked' | 'reveal_logged' | 'visible';
 
@@ -54,75 +57,69 @@ export function MaskedField({ label, value, level, onReveal }: MaskedFieldProps)
   }
 
   return (
-    <div className="px-4 py-2.5">
-      <div className="flex items-center justify-between gap-4">
-        <span className="text-xs text-slate-500 shrink-0">{label}</span>
-        <span className="flex items-center gap-2 min-w-0">
-          {level === 'hidden' || shown == null ? (
-            <span className="flex items-center gap-1 text-xs text-slate-500" title="Hidden for your role">
-              <Lock size={12} aria-hidden /> {value == null && level !== 'hidden' ? 'Not on file' : 'Hidden'}
-            </span>
-          ) : (
-            <span className={clsx('text-sm font-mono tabular-nums truncate', revealed ? 'text-amber-300' : 'text-slate-200')}>
-              {shown}
-            </span>
-          )}
-          {canReveal && !revealed && !asking && (
-            <button
-              type="button"
-              onClick={() => { setAsking(true); setError(null); }}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label={`Reveal ${label}`}
-            >
-              <Eye size={12} aria-hidden /> Reveal
-            </button>
-          )}
-          {revealed && (
-            <button
-              type="button"
-              onClick={() => setRevealed(null)}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-slate-400 hover:text-white hover:bg-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              aria-label={`Hide ${label}`}
-            >
-              <EyeOff size={12} aria-hidden /> Hide
-            </button>
-          )}
-        </span>
-      </div>
+    <div className="mb-detail-row" style={{ flexWrap: 'wrap', rowGap: 8 }}>
+      <span className="ink-2" style={{ flex: 'none' }}>{label}</span>
+      <span className="row" style={{ minWidth: 0, justifyContent: 'flex-end', fontWeight: 500, color: 'var(--ink)' }}>
+        {level === 'hidden' || shown == null ? (
+          <span className="row ink-3" title="Hidden for your role" style={{ gap: 6, fontWeight: 400 }}>
+            <Icon name="lock" /> {value == null && level !== 'hidden' ? 'Not on file' : 'Hidden'}
+          </span>
+        ) : (
+          <span className="tnum mb-trunc">
+            {shown}
+          </span>
+        )}
+        {revealed && <Tag tone="warn">Revealed</Tag>}
+        {canReveal && !revealed && !asking && (
+          <Button
+            variant="quiet"
+            icon="eye"
+            onClick={() => { setAsking(true); setError(null); }}
+            aria-label={`Reveal ${label}`}
+          >
+            Reveal
+          </Button>
+        )}
+        {revealed && (
+          <Button
+            variant="quiet"
+            onClick={() => setRevealed(null)}
+            aria-label={`Hide ${label}`}
+          >
+            Hide
+          </Button>
+        )}
+      </span>
       {asking && (
         <form
-          className="mt-2 flex items-center gap-2"
+          className="row"
+          style={{ flexBasis: '100%' }}
           onSubmit={(e) => { e.preventDefault(); void submit(); }}
         >
-          <label className="sr-only" htmlFor={`reveal-reason-${label}`}>Reason for revealing {label}</label>
-          <input
+          <label className="sr" htmlFor={`reveal-reason-${label}`}>Reason for revealing {label}</label>
+          <Input
             id={`reveal-reason-${label}`}
             autoFocus
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Escape') { setAsking(false); setReason(''); } }}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setAsking(false); setReason(''); } }}
             placeholder="Reason (logged)"
             maxLength={500}
-            className="flex-1 rounded-md border border-slate-700 bg-surface-950 px-2 py-1 text-xs text-white placeholder:text-slate-600 focus:border-emerald-500 focus:outline-none"
+            style={{ flex: 1, minWidth: 0 }}
           />
-          <button
-            type="submit"
-            disabled={busy}
-            className="flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500"
-          >
-            {busy ? <Loader2 size={12} className="animate-spin" aria-hidden /> : <Eye size={12} aria-hidden />} Reveal
-          </button>
-          <button
-            type="button"
+          <Button type="submit" variant="primary" icon="eye" disabled={busy} aria-busy={busy || undefined}>
+            {busy ? 'Revealing…' : 'Reveal'}
+          </Button>
+          <Button
+            variant="quiet"
             onClick={() => { setAsking(false); setReason(''); setError(null); }}
-            className="rounded-md px-2 py-1 text-xs text-slate-400 hover:text-white"
           >
             Cancel
-          </button>
+          </Button>
         </form>
       )}
-      {error && <p className="mt-1 text-[11px] text-red-400" role="alert">{error}</p>}
-      {revealed && <p className="mt-1 text-[11px] text-slate-500">Revealed — this access was logged.</p>}
+      {error && <p className="field-error" role="alert" style={{ flexBasis: '100%', margin: 0 }}>{error}</p>}
+      {revealed && <p className="t-cap" style={{ flexBasis: '100%', margin: 0 }}>Revealed — this access was logged.</p>}
     </div>
   );
 }

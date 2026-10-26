@@ -82,8 +82,8 @@ describe('deterministic summary sentences', () => {
     expect(summarizeVariance('Opex', [{ label: 'Payroll', actual: 152_000_00, plan: 100_000_00, direction: 'lower_is_better' }, { label: 'Rent', actual: 90_00, plan: 100_00, direction: 'lower_is_better' }])).toBe(
       'Opex is $52K worse than budget overall; the largest gap is payroll ($52K worse).',
     );
-    expect(summarizeThreshold('Debt / EBITDA', 2.4, 3.5, 'max', 'multiple')).toBe('Debt / EBITDA is 2.4x against a 3.5x maximum: 31.4% headroom.');
-    expect(summarizeThreshold('DSCR', 1.1, 1.25, 'min', 'multiple')).toBe('DSCR is 1.1x against a 1.25x minimum: in breach by 12.0%.');
+    expect(summarizeThreshold('Debt / EBITDA', 2.4, 3.5, 'max', 'multiple')).toBe('Debt / EBITDA is 2.4× against a 3.5× maximum: 31.4% headroom.');
+    expect(summarizeThreshold('DSCR', 1.1, 1.25, 'min', 'multiple')).toBe('DSCR is 1.1× against a 1.25× minimum: in breach by 12.0%.');
     expect(summarizeBullet('Revenue', 8_100_000_00, 8_400_000_00, 'money', 'higher_is_better')).toBe('Revenue is $8.1M, 96.4% of the $8.4M target (behind).');
     expect(summarizeRuleOf40([{ label: 'Heritage', x: 0.3, y: 0.22 }, { label: 'Swan', x: 0.05, y: 0.1 }, { label: 'New', x: null, y: 0.1 }])).toBe(
       '1 of 2 companies clear the Rule of 40; Heritage leads at 52. 1 company has too little history to score.',

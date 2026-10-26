@@ -14,8 +14,9 @@
 .cellOk .cellV { color: var(--pos); }
 .meter { margin-top: 6px; }
 
-.cols { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: var(--s2); align-items: start; }
-@media (max-width: 1180px) { .cols { grid-template-columns: 1fr; } }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: var(--s2); align-items: start; }
+/* At 1280px the shell rail + a 380px panel would leave the table ~560px: stack instead. */
+@media (max-width: 1400px) { .cols { grid-template-columns: 1fr; } }
 .surface { border: 1px solid var(--line); background: var(--white); min-width: 0; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); padding: 12px 16px; border-bottom: 1px solid var(--line); }
 .toolbar :global(.field) { margin: 0; }
@@ -63,3 +64,11 @@
 @media (max-width: 720px) { .policyGrid { grid-template-columns: 1fr; } }
 .ovRow { display: grid; grid-template-columns: 110px minmax(0, 1.6fr) 120px 90px 110px 80px 32px; gap: 8px; align-items: center; margin-bottom: 6px; }
 @media (max-width: 900px) { .ovRow { grid-template-columns: 1fr 1fr; } }
+
+/* The account column needs room to read ("Operating expenses — Sales" / "6100 · P&L"): the
+   figure columns are fixed, so below ~880px of table the grid scrolls sideways instead of
+   squeezing the account to an ellipsis. */
+.tableScroll { overflow-x: auto; }
+.tableScroll > table, .tableScroll table { min-width: 860px; }
+.tableScroll :global(.l1) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+@media (max-width: 1400px) { .sticky { position: static; } }

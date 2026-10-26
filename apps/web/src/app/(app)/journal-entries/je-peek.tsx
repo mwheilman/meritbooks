@@ -2,7 +2,8 @@
 
 import { usePeekDetail } from '@/components/hover-peek';
 import { formatMoney } from '@meritbooks/shared';
-import { Loader2 } from 'lucide-react';
+import { Status } from '@meritbooks/merit-ui';
+import s from './je.module.css';
 
 interface JELine { id: string; accountNumber: string; accountName: string; debitCents: number; creditCents: number; }
 interface JEDetail {
@@ -15,48 +16,60 @@ export function JournalEntryPeek({ entryId }: { entryId: string }) {
   const { data, loading } = usePeekDetail<JEDetail>(`/api/journal-entries/${entryId}`);
 
   if (loading && !data) {
-    return <div className="flex items-center justify-center py-10"><Loader2 size={18} className="animate-spin text-slate-500" /></div>;
+    return (
+      <div className={`wg-loading ${s.peekState}`} aria-busy="true">
+        <span className="bar-l" style={{ width: '50%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '85%' }} aria-hidden="true" />
+        <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+        <span className="sr" role="status">Loading the entry preview</span>
+      </div>
+    );
   }
-  if (!data) return <div className="px-3 py-6 text-center text-xs text-slate-500">Preview unavailable</div>;
+  if (!data) return <div className={s.peekState}><p className="t-cap">Preview unavailable — open the entry to see it.</p></div>;
 
   const shown = data.lines.slice(0, 7);
   const more = data.lines.length - shown.length;
 
   return (
-    <div className="p-3 text-xs">
-      <div className="flex items-center justify-between mb-2">
-        <span className="font-mono font-semibold text-white">{data.entryNumber}</span>
-        <span className="text-2xs text-slate-500">{data.entryDate}</span>
+    <div className={s.peek}>
+      <div className={s.peekHead}>
+        <div style={{ minWidth: 0 }}>
+          <span className="l1 tnum">{data.entryNumber}</span>
+          {data.memo && <span className="l2">{data.memo}</span>}
+        </div>
+        <span className="t-cap tnum">{data.entryDate}</span>
       </div>
-      {data.memo && <div className="text-2xs text-slate-400 mb-2 truncate">{data.memo}</div>}
-      <table className="w-full">
+      <table className={s.peekLines}>
         <thead>
-          <tr className="text-2xs text-slate-500 uppercase tracking-wider">
-            <th className="text-left font-semibold pb-1">Account</th>
-            <th className="text-right font-semibold pb-1">Dr</th>
-            <th className="text-right font-semibold pb-1">Cr</th>
+          <tr>
+            <th scope="col">Account</th>
+            <th scope="col">Debit</th>
+            <th scope="col">Credit</th>
           </tr>
         </thead>
         <tbody>
           {shown.map((l) => (
-            <tr key={l.id} className="border-t border-slate-800/60">
-              <td className="py-1 pr-2 text-slate-300 truncate max-w-[150px]">
-                <span className="font-mono text-2xs text-slate-500">{l.accountNumber}</span> {l.accountName}
+            <tr key={l.id}>
+              <td title={`${l.accountNumber} ${l.accountName}`}>
+                <span className="code">{l.accountNumber}</span>
+                <span className="ink-2">{l.accountName}</span>
               </td>
-              <td className="py-1 text-right font-mono tabular-nums text-slate-200">{l.debitCents ? formatMoney(l.debitCents) : ''}</td>
-              <td className="py-1 text-right font-mono tabular-nums text-slate-200">{l.creditCents ? formatMoney(l.creditCents) : ''}</td>
+              <td className="n">{l.debitCents ? formatMoney(l.debitCents) : ''}</td>
+              <td className="n">{l.creditCents ? formatMoney(l.creditCents) : ''}</td>
             </tr>
           ))}
-          {more > 0 && <tr><td className="py-1 text-2xs text-slate-500 italic" colSpan={3}>+ {more} more</td></tr>}
-          <tr className="border-t border-slate-700 font-semibold">
-            <td className="py-1 text-2xs text-slate-400">Totals</td>
-            <td className="py-1 text-right font-mono tabular-nums text-slate-100">{formatMoney(data.totalDebitsCents)}</td>
-            <td className="py-1 text-right font-mono tabular-nums text-slate-100">{formatMoney(data.totalCreditsCents)}</td>
-          </tr>
+          {more > 0 && <tr><td className="t-cap" colSpan={3}>+ {more} more line{more > 1 ? 's' : ''}</td></tr>}
         </tbody>
+        <tfoot>
+          <tr>
+            <td>Totals</td>
+            <td className="n">{formatMoney(data.totalDebitsCents)}</td>
+            <td className="n">{formatMoney(data.totalCreditsCents)}</td>
+          </tr>
+        </tfoot>
       </table>
-      <div className={`mt-1.5 text-2xs font-medium ${data.balanced ? 'text-emerald-400' : 'text-red-400'}`}>
-        {data.balanced ? '✓ Balanced' : '✗ Out of balance'}
+      <div className={s.peekFoot}>
+        {data.balanced ? <Status kind="ready">Balanced</Status> : <Status kind="blocked">Out of balance</Status>}
       </div>
     </div>
   );

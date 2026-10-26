@@ -4,6 +4,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAuthedServerSupabase } from '@/lib/supabase/authed';
 import { fetchAll } from '@/lib/supabase/fetch-all';
 import { fetchBookCash } from '@/lib/cash/book-cash';
+import { fetchControlBalances } from '@/lib/reports/control-balances';
 import { getOrgToday } from '@/lib/dates/org-today';
 import { loadClientScope } from '@/lib/rbac/client-scope';
 import {
@@ -66,8 +67,12 @@ export interface CompanyBoard {
   /** CANONICAL book cash (lib/cash/book-cash) as of today in the org's timezone. */
   cashCents: number;
   cashStatus: CashStatus;
+  /** Payables / receivables — the AP / AR CONTROL balances per the GL (lib/reports/control-balances), as of today. */
   openAPCents: number;
   openARCents: number;
+  /** The open-item subledgers behind them (unpaid bills / issued unpaid invoices). */
+  subledgerAPCents: number;
+  subledgerARCents: number;
   /** Total actionable items (toReview + everything in the Inbox). */
   totalOpen: number;
 }
@@ -114,8 +119,11 @@ export interface WorkboardConsolidated {
   lanes: LaneCounts;
   needsYou: number;
   cashCents: number;
+  /** GL control balances (see CompanyBoard). */
   openAPCents: number;
   openARCents: number;
+  subledgerAPCents: number;
+  subledgerARCents: number;
   /** Companies whose current-month period is hard-closed. */
   companiesClosed: number;
 }
@@ -140,6 +148,8 @@ const EMPTY_CONSOLIDATED: WorkboardConsolidated = {
   cashCents: 0,
   openAPCents: 0,
   openARCents: 0,
+  subledgerAPCents: 0,
+  subledgerARCents: 0,
   companiesClosed: 0,
 };
 
@@ -189,7 +199,7 @@ export async function getWorkboard(): Promise<Workboard> {
 
   // Fire every source in parallel. Each degrades to empty on error (see below), so
   // one broken queue never blanks the whole board.
-  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, work] = await Promise.all([
+  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, work, control] = await Promise.all([
     supabase
       .from('bank_transactions')
       .select('location_id, status')
@@ -223,6 +233,8 @@ export async function getWorkboard(): Promise<Workboard> {
       .eq('period_month', month),
     // Everything waiting on a human — the SAME service + scope as the Inbox (all clients).
     loadWork(supabase, null, today),
+    // Receivables / payables = the GL control balances (the balance-sheet figures).
+    fetchControlBalances(supabase, null, { asOfDate: today }).catch(() => null),
   ]);
 
   // ── Bucket per company ──────────────────────────────────────────────────────
@@ -291,8 +303,10 @@ export async function getWorkboard(): Promise<Workboard> {
       periodStatus: periodByLoc.get(loc.id) ?? 'NO_PERIOD',
       cashCents,
       cashStatus: cashStatusFor(cashCents, loc.minimum_cash_cents),
-      openAPCents: openAP.get(loc.id) ?? 0,
-      openARCents: openAR.get(loc.id) ?? 0,
+      openAPCents: control ? control.byLocation[loc.id]?.apCents ?? 0 : openAP.get(loc.id) ?? 0,
+      openARCents: control ? control.byLocation[loc.id]?.arCents ?? 0 : openAR.get(loc.id) ?? 0,
+      subledgerAPCents: openAP.get(loc.id) ?? 0,
+      subledgerARCents: openAR.get(loc.id) ?? 0,
       totalOpen: rev + w.needsYou,
     };
   });
@@ -321,6 +335,8 @@ export async function getWorkboard(): Promise<Workboard> {
     cashCents: companies.reduce((n, c) => n + c.cashCents, 0),
     openAPCents: companies.reduce((n, c) => n + c.openAPCents, 0),
     openARCents: companies.reduce((n, c) => n + c.openARCents, 0),
+    subledgerAPCents: companies.reduce((n, c) => n + c.subledgerAPCents, 0),
+    subledgerARCents: companies.reduce((n, c) => n + c.subledgerARCents, 0),
     companiesClosed: companies.filter((c) => c.periodStatus === 'HARD_CLOSE').length,
   };
 
@@ -455,7 +471,7 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
   const location = loc as LocationRow;
   const [year, month] = today.split('-').map(Number);
 
-  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, workRes] = await Promise.all([
+  const [bankRes, receiptRes, billRes, invoiceRes, bookCash, periodRes, workRes, control] = await Promise.all([
     fetchAll(
       () =>
         supabase
@@ -477,6 +493,7 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
     supabase.from('fiscal_periods').select('status').eq('location_id', locationId).eq('period_year', year).eq('period_month', month).maybeSingle(),
     // Everything waiting on a human for THIS client — the same service + scope as its Inbox.
     loadWork(supabase, locationId, today),
+    fetchControlBalances(supabase, null, { asOfDate: today, locationIds: [locationId] }).catch(() => null),
   ]);
   const work = countsForLocation(workRes.counts, locationId);
   const w = workFigures(work);
@@ -538,8 +555,10 @@ export async function getClientHome(locationId: string): Promise<ClientHome> {
     periodStatus: status ?? 'NO_PERIOD',
     cashCents,
     cashStatus: cashStatusFor(cashCents, location.minimum_cash_cents),
-    openAPCents: openAP,
-    openARCents: openAR,
+    openAPCents: control ? control.apCents : openAP,
+    openARCents: control ? control.arCents : openAR,
+    subledgerAPCents: openAP,
+    subledgerARCents: openAR,
     totalOpen: review + w.needsYou,
   };
 

@@ -1,33 +1,23 @@
-import { PageHeader } from '@/components/ui';
-import { FpnaDashboard } from './fpna-dashboard';
 import { requirePagePermission } from '@/lib/rbac/page-guard';
+import { FpnaWorkspace } from './fpna-workspace';
 
 export const metadata = { title: 'FP&A' };
 
 export const dynamic = 'force-dynamic';
 
 /**
- * FP&A Dashboard — the native financial-planning command center (Pillar 3).
+ * /fpna — the FP&A workspace (Wave 4A, FPB-reports-fpna §4.13), rebuilt on merit-ui over the
+ * 3B metric registry, the 3B analytics, the 3A report engine and the 3C chart kit.
  *
- * Read-only. KPIs with prior-period deltas, monthly burn + cash runway, an
- * actual-vs-budget-vs-forecast variance table, and 12-month trends — all drawn
- * live from the owned GL (never asserted). Every figure is computed
- * deterministically in `lib/fpna/dashboard.ts`, reusing the same account-type
- * math as the financial statements, so the dashboard can't disagree with them.
+ * Tabs: Dashboard (KPI cards from the 123-metric catalog, saved per user, role defaults
+ * published and locked by an administrator) · Performance · Budget vs actual · Bridges ·
+ * Working capital · Profitability · Group · Leverage & covenants. Every figure is computed on
+ * the server, governed for the reader (non-finance: released months only) and drillable.
  *
- * PAGE-LEVEL RBAC (identity gate #9): gated on the financial-reports view
- * permission — the same guard the Reports and Profitability surfaces use. Fails
- * closed (redirect) for any role that may not read financial statements.
+ * PAGE-LEVEL RBAC: financial-reports view — the same guard as Reports. Every API route
+ * re-checks it (publish needs settings_acct:edit; export / add-to-pack need reports:export).
  */
-export default async function FpnaDashboardPage() {
+export default async function FpnaPage() {
   await requirePagePermission('reports', 'view');
-  return (
-    <>
-      <PageHeader
-        title="FP&A Dashboard"
-        description="KPIs, cash runway, plan variance, and trends — read live from the books, not asserted."
-      />
-      <FpnaDashboard />
-    </>
-  );
+  return <FpnaWorkspace />;
 }

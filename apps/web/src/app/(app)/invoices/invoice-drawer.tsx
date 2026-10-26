@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { clsx } from 'clsx';
-import { Pencil, Plus, Trash2, Loader2, ShieldAlert, Download, Send, Receipt, Ban, FileX } from 'lucide-react';
+import { Button, Field, Input, InlineNotice, MoneyInput, Select, Textarea } from '@meritbooks/merit-ui';
 import { useQuery, addToast } from '@/hooks';
 import { formatMoney } from '@meritbooks/shared';
-import { StatusBadge, CurrencyTag } from '@/components/ui';
+import { CurrencyTag } from '@/components/ui';
 import { DetailDrawer, DetailSection, DetailField, DetailTable } from '@/components/detail-drawer';
 import { InvoiceTextOverrides } from '@/components/invoice-text-overrides';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { ExplainPanel } from '@/components/explain-panel';
 import { PayLinkPanel } from './pay-link-panel';
+import { InvoiceStatus } from './invoice-status';
 import { SendInvoiceDialog } from './send-invoice-dialog';
+import s from './invoices.module.css';
 
 interface InvLine {
   id?: string; lineNumber?: number; description: string;
@@ -34,18 +35,18 @@ interface InvDetail {
     deliveredAt: string | null; viewCount: number;
     lastViewedAt: string | null; lastReminderAt: string | null;
   } | null;
-  /** Header status derived with Delivery from the same facts ('ISSUED' = never sent). */
+  /** Header status — THE derivation the list uses (lib/invoices/display-status.ts). */
   displayStatus?: string;
+  displayStatusLabel?: string;
+  displayStatusDetail?: string;
   displayStatusHint?: string | null;
+  daysOverdue?: number;
   payments?: Array<{
     id: string; paymentDate: string; amountCents: number; appliedCents: number;
     method: string | null; referenceNumber: string | null;
   }>;
 }
 interface AccountOption { id: string; account_number: string; name: string; account_type?: string }
-
-const centsToInput = (c: number) => (c / 100).toFixed(2);
-const inputToCents = (v: string) => Math.round((parseFloat(v.replace(/[^0-9.-]/g, '')) || 0) * 100);
 
 /** "Jul 3, 2026, 4:12 PM" — a delivery timestamp reads better with the time. */
 const fmtWhen = (iso: string | null) =>
@@ -193,6 +194,15 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
     }
   }
 
+  const st = data?.status;
+  const isTerminal = st === 'VOIDED' || st === 'WRITTEN_OFF';
+  const hasPayment = !!data && (data.amountPaidCents > 0 || st === 'PAID' || st === 'PARTIALLY_PAID');
+  // Void: only an unpaid, non-terminal invoice (a paid one must be
+  // credit-memo'd). Write-off: an unpaid/partially-paid invoice that was
+  // posted and still carries an open balance.
+  const canVoid = !!data && !isTerminal && !hasPayment && st !== 'DRAFT';
+  const canWriteOff = !!data && !isTerminal && st !== 'PAID' && st !== 'DRAFT' && data.balanceCents > 0;
+
   return (
     <DetailDrawer
       open={!!invoiceId}
@@ -204,43 +214,33 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
       error={error}
       headerRight={
         data ? (
-          <div className="flex items-center gap-2">
-            <span title={data.displayStatusHint ?? undefined}>
-              <StatusBadge status={data.displayStatus ?? data.status} variant={data.displayStatus === 'ISSUED' ? 'info' : undefined} />
-            </span>
-            {!editing && (
-              <>
-                <a href={`/api/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer"
-                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-                  <Download size={12} /> PDF
-                </a>
-                <button onClick={sendInvoice} disabled={data.status === 'VOIDED'}
-                   title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'Type an address in the Send dialog'}
-                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed">
-                  <Send size={12} />
-                  {data.delivery?.sentAt ? 'Resend' : 'Send'}
-                </button>
-              </>
-            )}
-            {!editing && onCreateCreditMemo && data.status !== 'DRAFT' && data.status !== 'VOIDED' && (
-              <button
-                onClick={() => onCreateCreditMemo({ invoiceId: data.id, customerId: data.customerId, locationId: data.locationId })}
-                title="Issue a customer credit against this invoice"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-                <Receipt size={12} /> Credit memo
-              </button>
-            )}
-            {!editing && (
-              <button onClick={beginEdit} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-800 text-slate-200 hover:bg-slate-700">
-                <Pencil size={12} /> Edit
-              </button>
-            )}
-          </div>
+          <InvoiceStatus status={data.displayStatus ?? data.status} daysOverdue={data.daysOverdue} hint={data.displayStatusHint} />
         ) : undefined
       }
     >
       {data && !editing && (
         <>
+          <div className="btn-row">
+            <Button
+              variant="primary"
+              onClick={sendInvoice}
+              disabled={data.status === 'VOIDED'}
+              title={data.customerEmail ? `Email this invoice to ${data.customerEmail}` : 'Type an address in the Send dialog'}
+            >
+              {data.delivery?.sentAt ? 'Resend' : 'Send'}
+            </Button>
+            <a className="btn" href={`/api/invoices/${data.id}/pdf`} target="_blank" rel="noreferrer">Download PDF</a>
+            {onCreateCreditMemo && data.status !== 'DRAFT' && data.status !== 'VOIDED' && (
+              <Button
+                onClick={() => onCreateCreditMemo({ invoiceId: data.id, customerId: data.customerId, locationId: data.locationId })}
+                title="Issue a customer credit against this invoice"
+              >
+                Issue credit memo
+              </Button>
+            )}
+            <Button variant="quiet" onClick={beginEdit}>Edit</Button>
+          </div>
+
           <DetailSection title="Invoice">
             <DetailField label="Customer" value={data.customerName || '--'} />
             {data.customerEmail && <DetailField label="Email" value={data.customerEmail} />}
@@ -252,33 +252,35 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             {data.memo && <DetailField label="Memo" value={data.memo} />}
           </DetailSection>
 
-          <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Lines ({data.lines.length})</h3>
-          <DetailTable columns={[
-            { key: 'desc', label: 'Description' }, { key: 'qty', label: 'Qty', align: 'right' },
-            { key: 'price', label: 'Unit', align: 'right' }, { key: 'amt', label: 'Amount', align: 'right' },
-          ]}>
-            {data.lines.map((l) => (
-              <tr key={l.id}>
-                <td className="px-3 py-2">
-                  <div className="text-sm text-slate-200">{l.description}</div>
-                  <div className="text-2xs text-slate-500 mt-0.5 font-mono">{l.accountNumber} · {l.accountName}</div>
-                </td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{l.quantity}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-400">{formatMoney(l.unitPriceCents, { currency: ccy })}</td>
-                <td className="px-3 py-2 text-right text-sm font-mono tabular-nums text-slate-200">{formatMoney(l.amountCents, { currency: ccy })}</td>
-              </tr>
-            ))}
-          </DetailTable>
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Lines ({data.lines.length})</h3></div>
+            <DetailTable columns={[
+              { key: 'desc', label: 'Description' }, { key: 'qty', label: 'Qty', align: 'right' },
+              { key: 'price', label: 'Unit', align: 'right' }, { key: 'amt', label: 'Amount', align: 'right' },
+            ]}>
+              {data.lines.map((l) => (
+                <tr key={l.id}>
+                  <td className={s.lineCell}>
+                    <div>{l.description}</div>
+                    <div className="t-cap tnum">{l.accountNumber} · {l.accountName}</div>
+                  </td>
+                  <td className="n ink-2">{l.quantity}</td>
+                  <td className="n ink-2">{formatMoney(l.unitPriceCents, { currency: ccy })}</td>
+                  <td className="n">{formatMoney(l.amountCents, { currency: ccy })}</td>
+                </tr>
+              ))}
+            </DetailTable>
+          </section>
 
-          <DetailSection title="">
+          <DetailSection title="Totals">
             {(isForeign || ccy !== 'USD') && (
               <DetailField
                 label="Currency"
                 value={
-                  <span className="inline-flex items-center gap-2">
+                  <span className={s.inline}>
                     <CurrencyTag code={ccy} homeCurrency={homeCcy} />
                     {isForeign && (
-                      <span className="text-2xs text-slate-500">
+                      <span className="t-cap">
                         reported in {homeCcy}
                         {data.fxRate ? ` · rate ${data.fxRate}` : ''}
                       </span>
@@ -301,41 +303,35 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
             />
             <DetailField label="Total" value={formatMoney(data.totalCents, { currency: ccy })} mono />
             <DetailField label="Paid" value={formatMoney(data.amountPaidCents, { currency: ccy })} mono />
-            <DetailField label="Balance" value={formatMoney(data.balanceCents, { currency: ccy })} mono />
+            <DetailField label="Balance" value={<b>{formatMoney(data.balanceCents, { currency: ccy })}</b>} mono />
           </DetailSection>
 
           {/* Ledger-grounded "explain this invoice" — DR AR / CR revenue, tax, status */}
-          <div className="mt-5">
+          <div className={s.drawerBlock}>
             <ExplainPanel kind="INVOICE" id={data.id} />
           </div>
 
           {data.payments && data.payments.length > 0 && (
-            <div className="mt-5">
-              <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">
-                Payments received ({data.payments.length})
-              </h3>
-              <div className="space-y-3">
+            <section className="panel-sec">
+              <div className="panel-sec-h"><h3>Payments received ({data.payments.length})</h3></div>
+              <div className={s.stackGap}>
                 {data.payments.map((p) => (
-                  <div key={p.id} className="space-y-2">
-                    <div className="flex items-center justify-between rounded-lg bg-slate-800/40 px-3 py-2">
-                      <div className="min-w-0">
-                        <div className="text-sm text-slate-200">
-                          {formatMoney(p.appliedCents)} applied
-                          {p.appliedCents !== p.amountCents && (
-                            <span className="text-slate-500"> of {formatMoney(p.amountCents)}</span>
-                          )}
-                        </div>
-                        <div className="text-2xs text-slate-500 font-mono">
-                          {p.paymentDate}{p.method ? ` · ${p.method}` : ''}{p.referenceNumber ? ` · ${p.referenceNumber}` : ''}
-                        </div>
-                      </div>
+                  <div key={p.id} className={s.payment}>
+                    <div>
+                      <span className="tnum" style={{ fontWeight: 600 }}>{formatMoney(p.appliedCents)}</span> applied
+                      {p.appliedCents !== p.amountCents && (
+                        <span className="ink-2"> of <span className="tnum">{formatMoney(p.amountCents)}</span></span>
+                      )}
+                    </div>
+                    <div className="t-cap tnum">
+                      {p.paymentDate}{p.method ? ` · ${p.method}` : ''}{p.referenceNumber ? ` · ${p.referenceNumber}` : ''}
                     </div>
                     {/* Ledger-grounded "explain this payment" — DR cash / CR AR, applied invoices */}
                     <ExplainPanel kind="PAYMENT" id={p.id} />
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
           <DetailSection title="Delivery">
@@ -362,184 +358,196 @@ export function InvoiceDrawer({ invoiceId, onClose, onCreateCreditMemo }: {
                   <DetailField label="Reminder sent" value={fmtWhen(data.delivery.lastReminderAt) ?? '--'} />
                 )}
               </>
+            ) : data.delivery && (data.delivery.viewCount > 0 || data.delivery.lastReminderAt) ? (
+              // Never emailed as an invoice, but it DID reach the customer (a reminder or the
+              // pay link) — the same delivery evidence the status chip uses.
+              <>
+                <div className="mb-detail-row">
+                  <span className="ink-2" style={{ whiteSpace: 'normal' }}>
+                    The invoice email was never sent, but the customer has it through a reminder or the pay link.
+                  </span>
+                </div>
+                {data.delivery.lastReminderAt && (
+                  <DetailField label="Reminder sent" value={fmtWhen(data.delivery.lastReminderAt) ?? '--'} />
+                )}
+                {data.delivery.viewCount > 0 && (
+                  <DetailField
+                    label="Opened"
+                    value={`${data.delivery.viewCount}×${data.delivery.lastViewedAt ? ` · last ${fmtWhen(data.delivery.lastViewedAt)}` : ''}`}
+                  />
+                )}
+              </>
             ) : (
-              <div className="px-4 py-3 text-xs text-slate-500">
-                {data.customerEmail
-                  ? 'Not sent yet. Use Send to email the branded invoice and a Pay Now link to the customer.'
-                  : `Not sent. Add an email to ${data.customerName || 'this customer'} to enable sending.`}
+              <div className="mb-detail-row">
+                <span className="ink-2" style={{ whiteSpace: 'normal' }}>
+                  {data.customerEmail
+                    ? 'Not sent yet. Use Send to email the branded invoice and a Pay now link to the customer.'
+                    : `Not sent. Add an email to ${data.customerName || 'this customer'} to enable sending.`}
+                </span>
               </div>
             )}
           </DetailSection>
 
-          <div className="mt-5">
+          <div className={s.drawerBlock}>
             <PayLinkPanel invoiceId={data.id} />
           </div>
 
-          <div className="mt-5 pt-4 border-t border-slate-800">
-            <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Customer-facing text — this invoice</h3>
+          <section className="panel-sec">
+            <div className="panel-sec-h"><h3>Customer-facing text — this invoice</h3></div>
             <InvoiceTextOverrides scope="INVOICE" refId={data.id} />
-          </div>
+          </section>
 
-          <div className="mt-5">
+          <div className={s.drawerBlock}>
             <AttachmentsPanel entityType="invoice" entityId={data.id} defaultDocType="OTHER" title="Documents" />
           </div>
 
-          {(() => {
-            const st = data.status;
-            const isTerminal = st === 'VOIDED' || st === 'WRITTEN_OFF';
-            const hasPayment = data.amountPaidCents > 0 || st === 'PAID' || st === 'PARTIALLY_PAID';
-            // Void: only an unpaid, non-terminal invoice (a paid one must be
-            // credit-memo'd). Write-off: an unpaid/partially-paid invoice that was
-            // posted and still carries an open balance.
-            const canVoid = !isTerminal && !hasPayment && st !== 'DRAFT';
-            const canWriteOff = !isTerminal && st !== 'PAID' && st !== 'DRAFT' && data.balanceCents > 0;
-            if (!canVoid && !canWriteOff) return null;
+          {(canVoid || canWriteOff) && (
+            <section className={s.danger} aria-label="Irreversible corrections">
+              <div className="panel-sec-h"><h3>Irreversible corrections</h3></div>
 
-            return (
-              <div className="mt-5 pt-4 border-t border-red-900/40">
-                <h3 className="text-2xs text-red-400/80 uppercase tracking-wider font-semibold mb-2 flex items-center gap-1.5">
-                  <ShieldAlert size={12} /> Irreversible corrections
-                </h3>
+              {!confirmAction && (
+                <div className="btn-row">
+                  {canVoid && (
+                    <Button
+                      variant="danger"
+                      onClick={() => { setConfirmAction('void'); setActionReason(''); }}
+                      title="Reverse this invoice's GL posting and mark it VOIDED (unpaid invoices only)"
+                    >
+                      Void invoice
+                    </Button>
+                  )}
+                  {canWriteOff && (
+                    <Button
+                      onClick={() => { setConfirmAction('write-off'); setActionReason(''); }}
+                      title="Post DR Bad Debt Expense / CR Accounts Receivable for the open balance and mark it WRITTEN_OFF"
+                    >
+                      Write off bad debt
+                    </Button>
+                  )}
+                </div>
+              )}
 
-                {!confirmAction && (
-                  <div className="flex items-center gap-2">
-                    {canVoid && (
-                      <button onClick={() => { setConfirmAction('void'); setActionReason(''); }}
-                        title="Reverse this invoice's GL posting and mark it VOIDED (unpaid invoices only)"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-red-800/60 bg-red-950/30 text-red-300 hover:bg-red-900/40">
-                        <Ban size={13} /> Void invoice
-                      </button>
+              {confirmAction && (
+                <div className={s.confirmBox} role="alertdialog" aria-label={confirmAction === 'void' ? 'Confirm void' : 'Confirm write-off'}>
+                  <p className="ink-2">
+                    {confirmAction === 'void' ? (
+                      <>Void <b className="tnum">{data.invoiceNumber}</b>? This reverses its GL entry and removes it from receivables. The invoice number is kept for audit and cannot be reused.</>
+                    ) : (
+                      <>Write off the <b className="tnum">{formatMoney(data.balanceCents)}</b> open balance on <b className="tnum">{data.invoiceNumber}</b> as bad debt? This posts DR Bad Debt Expense / CR Accounts Receivable and marks the invoice WRITTEN_OFF.</>
                     )}
-                    {canWriteOff && (
-                      <button onClick={() => { setConfirmAction('write-off'); setActionReason(''); }}
-                        title="Post DR Bad Debt Expense / CR Accounts Receivable for the open balance and mark it WRITTEN_OFF"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-amber-800/60 bg-amber-950/30 text-amber-300 hover:bg-amber-900/40">
-                        <FileX size={13} /> Write off bad debt
-                      </button>
-                    )}
+                  </p>
+                  <Field label="Reason" help="Recommended — it goes on the audit trail.">
+                    <Input
+                      type="text"
+                      value={actionReason}
+                      onChange={(e) => setActionReason(e.target.value)}
+                      placeholder={confirmAction === 'void' ? 'Reason for voiding' : 'Reason for write-off'}
+                      autoFocus
+                    />
+                  </Field>
+                  <div className="btn-row" style={{ justifyContent: 'flex-end' }}>
+                    <Button variant="quiet" onClick={() => { setConfirmAction(null); setActionReason(''); }} disabled={actioning}>
+                      Cancel
+                    </Button>
+                    <Button variant="danger" onClick={() => runCorrection(confirmAction)} disabled={actioning} aria-busy={actioning || undefined}>
+                      {actioning ? 'Working…' : confirmAction === 'void' ? 'Void invoice' : 'Write off'}
+                    </Button>
                   </div>
-                )}
-
-                {confirmAction && (
-                  <div className="rounded-lg border border-red-800/50 bg-red-950/20 p-3 space-y-2">
-                    <p className="text-xs text-slate-300">
-                      {confirmAction === 'void' ? (
-                        <>Void <span className="font-mono">{data.invoiceNumber}</span>? This reverses its GL entry and removes it from receivables. The invoice number is kept for audit and cannot be reused.</>
-                      ) : (
-                        <>Write off the <span className="font-mono tabular-nums">{formatMoney(data.balanceCents)}</span> open balance on <span className="font-mono">{data.invoiceNumber}</span> as bad debt? This posts DR Bad Debt Expense / CR Accounts Receivable and marks the invoice WRITTEN_OFF.</>
-                      )}
-                    </p>
-                    <input type="text" value={actionReason} onChange={(e) => setActionReason(e.target.value)}
-                      placeholder={confirmAction === 'void' ? 'Reason for voiding (recommended)…' : 'Reason for write-off (recommended)…'}
-                      className="w-full px-3 py-2 rounded-md bg-slate-900/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-red-500/40" />
-                    <div className="flex items-center justify-end gap-2">
-                      <button onClick={() => { setConfirmAction(null); setActionReason(''); }} disabled={actioning}
-                        className="px-3 py-1.5 rounded-md text-xs text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">
-                        Cancel
-                      </button>
-                      <button onClick={() => runCorrection(confirmAction)} disabled={actioning}
-                        className={clsx('inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium',
-                          actioning ? 'bg-slate-800 text-slate-600'
-                            : confirmAction === 'void' ? 'bg-red-600 text-white hover:bg-red-500'
-                            : 'bg-amber-600 text-white hover:bg-amber-500')}>
-                        {actioning ? <Loader2 size={13} className="animate-spin" /> : confirmAction === 'void' ? <Ban size={13} /> : <FileX size={13} />}
-                        {actioning ? 'Working…' : confirmAction === 'void' ? 'Void invoice' : 'Write off'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
 
       {data && editing && (
         <>
           {needsOverride && (
-            <div className="mb-4 rounded-lg border border-amber-600/40 bg-amber-500/5 p-3">
-              <div className="flex items-center gap-2 text-amber-400 text-sm font-medium mb-2">
-                <ShieldAlert size={15} /> Posted invoice — override required
-              </div>
-              <p className="text-2xs text-slate-400 mb-2">
-                This invoice is posted to the GL. Editing it is logged to the audit trail; changing amounts reverses and re-posts the journal entry.
-              </p>
-              <input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)}
-                placeholder="Reason for override (required)…"
-                className="w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-amber-500/40" />
-            </div>
+            <InlineNotice tone="warn" title="Posted invoice — override required.">
+              This invoice is posted to the GL. Editing it is logged to the audit trail; changing amounts reverses and re-posts the journal entry.
+            </InlineNotice>
           )}
 
-          <DetailSection title="Invoice">
-            <div className="px-4 py-3 space-y-3">
-              <label className="block">
-                <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Memo</span>
-                <textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={2}
-                  className="mt-1 w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200 resize-none" />
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="block">
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Invoice date</span>
-                  <input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200" />
-                </label>
-                <label className="block">
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Due date</span>
-                  <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
-                    className="mt-1 w-full px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700 text-sm text-slate-200" />
-                </label>
+          <section className="panel-sec">
+            <div className={s.form}>
+              {needsOverride && (
+                <Field label="Reason for override *">
+                  <Input type="text" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="Why this posted invoice is changing" autoFocus />
+                </Field>
+              )}
+              <Field label="Memo">
+                <Textarea value={memo} onChange={(e) => setMemo(e.target.value)} rows={2} />
+              </Field>
+              <div className={s.grid2}>
+                <Field label="Invoice date">
+                  <Input type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+                </Field>
+                <Field label="Due date">
+                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </Field>
               </div>
             </div>
-          </DetailSection>
+          </section>
 
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-2xs text-slate-500 uppercase tracking-wider font-semibold">Lines</h3>
-            <button onClick={() => setLines((p) => [...p, { description: '', quantity: 1, unitPriceCents: 0, amountCents: 0, accountNumber: '', accountName: '' }])}
-              className="inline-flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300">
-              <Plus size={12} /> Add line
-            </button>
-          </div>
-          <div className="space-y-2">
-            {lines.map((l, i) => (
-              <div key={i} className="rounded-lg bg-slate-800/30 p-3 space-y-2">
-                <input type="text" value={l.description} onChange={(e) => updateLine(i, { description: e.target.value })}
-                  placeholder="Description"
-                  className="w-full px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-sm text-slate-200" />
-                <div className="grid grid-cols-12 gap-2 items-center">
-                  <select value={l.accountId ?? ''} onChange={(e) => updateLine(i, { accountId: e.target.value })}
-                    className="col-span-6 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200">
+          <section className="panel-sec">
+            <div className={s.drawerHead}>
+              <span className="eyebrow">Lines</span>
+              <Button
+                variant="quiet"
+                icon="plus"
+                onClick={() => setLines((p) => [...p, { description: '', quantity: 1, unitPriceCents: 0, amountCents: 0, accountNumber: '', accountName: '' }])}
+              >
+                Add line
+              </Button>
+            </div>
+            <div className={s.stackGap}>
+              {lines.map((l, i) => (
+                <div key={i} className={s.editLine}>
+                  <Input
+                    type="text"
+                    value={l.description}
+                    onChange={(e) => updateLine(i, { description: e.target.value })}
+                    placeholder="Description"
+                    aria-label={`Line ${i + 1} description`}
+                  />
+                  <Select value={l.accountId ?? ''} onChange={(e) => updateLine(i, { accountId: e.target.value })} aria-label={`Line ${i + 1} account`}>
                     <option value="">Account…</option>
                     {accountOptions.map((a) => <option key={a.id} value={a.id}>{a.account_number} · {a.name}</option>)}
-                  </select>
-                  <input type="number" value={l.quantity} onChange={(e) => updateLine(i, { quantity: parseFloat(e.target.value) || 0 })}
-                    className="col-span-2 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right" />
-                  <input type="text" inputMode="decimal" defaultValue={centsToInput(l.unitPriceCents)}
-                    onChange={(e) => updateLine(i, { unitPriceCents: inputToCents(e.target.value) })}
-                    className="col-span-3 px-2 py-1.5 rounded bg-slate-800/60 border border-slate-700 text-xs text-slate-200 text-right font-mono" />
-                  <button onClick={() => setLines((p) => p.filter((_, j) => j !== i))} className="col-span-1 p-1 text-slate-500 hover:text-red-400">
-                    <Trash2 size={14} />
-                  </button>
+                  </Select>
+                  <div className={s.editLineGrid}>
+                    <Input
+                      type="number"
+                      value={l.quantity}
+                      onChange={(e) => updateLine(i, { quantity: parseFloat(e.target.value) || 0 })}
+                      className={s.num}
+                      aria-label={`Line ${i + 1} quantity`}
+                    />
+                    <MoneyInput
+                      valueCents={l.unitPriceCents}
+                      onChangeCents={(c) => updateLine(i, { unitPriceCents: c ?? 0 })}
+                      aria-label={`Line ${i + 1} unit price`}
+                    />
+                    <span className={s.amount}>= {formatMoney(l.amountCents)}</span>
+                    <Button variant="quiet" iconOnly icon="x" onClick={() => setLines((p) => p.filter((_, j) => j !== i))} aria-label={`Remove line ${i + 1}`} />
+                  </div>
                 </div>
-                <div className="text-right text-2xs text-slate-500 font-mono">= {formatMoney(l.amountCents)}</div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-slate-800/40 px-4 py-2.5">
-            <span className="text-xs text-slate-400">New subtotal</span>
-            <span className="text-sm font-mono tabular-nums text-slate-100">{formatMoney(editedSubtotal)}</span>
-          </div>
+            <div className={s.subtotalBar}>
+              <span className="ink-2">New subtotal</span>
+              <span className="tnum" style={{ fontWeight: 600 }}>{formatMoney(editedSubtotal)}</span>
+            </div>
 
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <button onClick={() => { setEditing(false); setNeedsOverride(false); }} className="px-4 py-2 rounded-md text-sm text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]">
-              Cancel
-            </button>
-            <button onClick={save} disabled={saving}
-              className={clsx('inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium',
-                saving ? 'bg-slate-800 text-slate-600' : 'bg-emerald-600 text-white hover:bg-emerald-500')}>
-              {saving ? <Loader2 size={14} className="animate-spin" /> : <Pencil size={14} />} Save
-            </button>
-          </div>
+            <div className="btn-row" style={{ justifyContent: 'flex-end', marginTop: 16 }}>
+              <Button variant="quiet" onClick={() => { setEditing(false); setNeedsOverride(false); }}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={save} disabled={saving} aria-busy={saving || undefined}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          </section>
         </>
       )}
       {data && (

@@ -140,7 +140,7 @@ export function LayoutDesigner() {
             {r.kind === 'subtotal' && <Field label="Adds rows (use − to subtract: rev, -cogs)"><Input value={formatOf(r.of)} onChange={(e) => patchRow(i, { ...r, of: parseOf(e.target.value) })} /></Field>}
             {r.kind === 'subtotal' && <Field label="Weight"><Select value={r.emphasis ?? 'sub'} onChange={(e) => patchRow(i, { ...r, emphasis: e.target.value as 'sub' | 'grand' })}><option value="sub">Subtotal</option><option value="grand">Grand total</option></Select></Field>}
             {r.kind === 'formula' && <Field label="Formula ({row} + − × ÷ numbers)"><Input value={r.expr} onChange={(e) => patchRow(i, { ...r, expr: e.target.value })} /></Field>}
-            {r.kind === 'formula' && <Field label="Shown as"><Select value={r.format} onChange={(e) => patchRow(i, { ...r, format: e.target.value as 'amount' | 'percent' })}><option value="amount">Amount</option><option value="percent">Percent</option></Select></Field>}
+            {r.kind === 'formula' && <Field label="Shown as"><Select value={r.format} onChange={(e) => patchRow(i, { ...r, format: e.target.value as 'amount' | 'percent' | 'ratio' })}><option value="amount">Amount</option><option value="percent">Percent</option><option value="ratio">Ratio (×)</option></Select></Field>}
           </div>
           {r.kind === 'accounts' && (
             <div className={s.toggles} style={{ marginTop: 8 }}>

@@ -20,6 +20,10 @@
  *   any section's period is not released the delivery is HELD (reported SKIPPED with the
  *   reason, last_run_status 'HELD: …') — unreleased figures are never emailed, and a
  *   partial pack is never sent.
+ * - CLIENT SCOPE (security review H3): the SYSTEM client sees every company, so before compiling,
+ *   the pack's creator must STILL cover its companies (an all-companies pack: all-clients scope);
+ *   otherwise the pack is SKIPPED with the reason logged. Each FP&A dashboard renders only when its
+ *   companies sit inside the pack's (lib/reports/compiler/pack-scope.ts).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -38,6 +42,8 @@ import { buildPackEmail } from '@/lib/reports/compiler/pack-email';
 import { buildExportFilename } from '@/lib/reports/export/statement-model';
 import { createOrgScopedSupabase } from '@/lib/reports/compiler/org-scoped-client';
 import { resolveEmailProvider, resolveFromAddress, EmailSendError } from '@/lib/email/provider';
+import { packDashboardAttachments } from '@/lib/fpna/workspace/server/pack-delivery';
+import { packCreatorScope, packLocationIds } from '@/lib/reports/compiler/pack-scope';
 
 interface DuePackRow {
   id: string;
@@ -49,6 +55,7 @@ interface DuePackRow {
   schedule_cadence: Cadence;
   recipients: string[] | null;
   next_run_date: string | null;
+  created_by: string | null;
 }
 
 export interface PackResult {
@@ -86,7 +93,7 @@ export async function deliverDuePacks(
 
   let query = admin
     .from('report_packs')
-    .select('id, org_id, name, entity_label, location_ids, specs, schedule_cadence, recipients, next_run_date')
+    .select('id, org_id, name, entity_label, location_ids, specs, schedule_cadence, recipients, next_run_date, created_by')
     .eq('schedule_active', true)
     .neq('schedule_cadence', 'NONE')
     .lte('next_run_date', today);
@@ -148,6 +155,17 @@ export async function deliverDuePacks(
       continue;
     }
 
+    // H3: the creator must still cover the pack's companies (the system client sees them all).
+    const creator = await packCreatorScope(admin, pack.org_id, pack.created_by ?? null, packLocationIds(pack.location_ids)).catch(
+      () => ({ ok: false as const, reason: 'could not check the pack creator’s client scope' }),
+    );
+    if (!creator.ok) {
+      console.warn('[report-pack delivery] skipped (client scope)', pack.id, creator.reason);
+      results.push({ id: pack.id, name: pack.name, status: 'SKIPPED', detail: `client scope — ${creator.reason}` });
+      await record(`SKIPPED: ${creator.reason}`);
+      continue;
+    }
+
     // Per-org RLS-scoped client — the ONLY client that reads ledger data.
     const scoped = createOrgScopedSupabase(pack.org_id);
     if (!scoped) {
@@ -176,6 +194,13 @@ export async function deliverDuePacks(
       const pdf = await renderToBuffer(<CompilePackPdf pack={compiled} />);
       const filename = buildExportFilename(`report-pack-${pack.name}`, 'pdf');
       const { subject, html, text } = buildPackEmail(compiled, pack.name, cadenceLabel(pack.schedule_cadence));
+      // FP&A dashboards added to the pack (migration 191) — recomputed for the last complete
+      // month with no user (non-finance governance: released months only). A dashboard that
+      // fails never blocks the pack; it is named in the run status.
+      const dashboards = await packDashboardAttachments(admin, scoped, pack, today).catch((e: unknown) => ({
+        attachments: [] as Awaited<ReturnType<typeof packDashboardAttachments>>['attachments'],
+        problems: [e instanceof Error ? e.message : 'dashboards could not be rendered'],
+      }));
 
       await provider.send(
         {
@@ -183,13 +208,13 @@ export async function deliverDuePacks(
           subject,
           html,
           text,
-          attachments: [{ filename, content: new Uint8Array(pdf), contentType: 'application/pdf' }],
+          attachments: [{ filename, content: new Uint8Array(pdf), contentType: 'application/pdf' }, ...dashboards.attachments],
         },
         from,
       );
 
       results.push({ id: pack.id, name: pack.name, status: 'DELIVERED', recipients: recipients.length });
-      await record(`DELIVERED to ${recipients.length} recipient(s)`);
+      await record(`DELIVERED to ${recipients.length} recipient(s)${dashboards.attachments.length ? ` with ${dashboards.attachments.length} dashboard(s)` : ''}${dashboards.problems.length ? ` — not attached: ${dashboards.problems.join('; ')}` : ''}`);
     } catch (e) {
       const detail = e instanceof EmailSendError ? e.message : e instanceof Error ? e.message : 'unknown error';
       console.error('[report-pack delivery] failed', pack.id, detail);

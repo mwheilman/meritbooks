@@ -184,10 +184,16 @@ export function extent(...arrays: ReadonlyArray<ReadonlyArray<number | null | un
   return lo === Infinity ? null : [lo, hi];
 }
 
-/** Which axis labels to show when there is not room for all (every nth, always the last). */
-export function labelEvery(count: number, widthPx: number, minLabelPx = 36): number {
+/**
+ * Which axis labels to show when there is not room for all (every nth, always the last).
+ * Pass the labels themselves and each slot is at least as wide as the widest label plus a gap,
+ * so long labels ("Q3 FY27", "Sep 2026") thin out instead of overlapping.
+ */
+export function labelEvery(count: number, widthPx: number, minLabelPx = 36, labels?: ReadonlyArray<string>): number {
   if (count <= 1) return 1;
-  const fit = Math.max(1, Math.floor(widthPx / minLabelPx));
+  const widest = labels && labels.length ? Math.max(...labels.map((l) => textWidth(l))) + 10 : 0;
+  const slot = Math.max(minLabelPx, widest);
+  const fit = Math.max(1, Math.floor(widthPx / slot));
   return Math.max(1, Math.ceil(count / fit));
 }
 

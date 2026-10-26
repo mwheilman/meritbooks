@@ -1,0 +1,302 @@
+/* Bank feed (S3 review-queue grammar) — layout only; every visual token comes from the kit. */
+
+/* ── Processing metrics: three figures, each value + comparison + where it goes ── */
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--white);
+  margin-top: 16px;
+}
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px 16px;
+  border-right: 1px solid var(--line);
+}
+.metric:last-child {
+  border-right: 0;
+}
+.metricValue {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 28px;
+}
+.metricSkel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 16px;
+  border-right: 1px solid var(--line);
+}
+.metricSkel:last-child {
+  border-right: 0;
+}
+
+/* ── Toolbars ── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 16px 0 0;
+}
+.toolbar :global(.sp) {
+  flex: 1;
+}
+.search {
+  width: 320px;
+  max-width: 100%;
+}
+.vendorSelect {
+  width: 224px;
+}
+.synced {
+  white-space: nowrap;
+}
+
+.statusTabs {
+  margin-top: 16px;
+}
+.bands {
+  margin-top: 16px;
+}
+
+/* ── Saved views ── */
+.views {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.view {
+  display: inline-flex;
+  align-items: stretch;
+  height: 32px;
+  border: 1px solid var(--line-2);
+  background: var(--white);
+}
+.view[data-on='true'] {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+.viewApply {
+  max-width: 200px;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.viewDel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.viewDel:hover {
+  color: var(--neg);
+}
+.saveForm {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+}
+
+/* ── Duplicate notice ── */
+.notice {
+  margin-top: 16px;
+}
+.dupList {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.dupList li {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-2);
+}
+
+/* ── The queue ── */
+.queue {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+.selbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 16px 0 24px;
+  border-bottom: 1px solid var(--line);
+}
+/* The scroller owns both axes so the kit's sticky .tbl-q header sticks inside it. */
+.scroll {
+  max-height: calc(100vh - 220px);
+  max-height: calc(100dvh - 220px);
+  min-height: 240px;
+  overflow: auto;
+}
+.table {
+  min-width: 1152px;
+}
+.sortBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.sortBtn:hover {
+  color: var(--electric);
+}
+.sortOn {
+  color: var(--electric);
+}
+
+/* A cell that is itself the control (account / job picker, split tag). */
+.cellBtn {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cellBtn:hover :global(.l1) {
+  text-decoration: underline;
+  text-decoration-color: var(--electric);
+  text-underline-offset: 3px;
+}
+.vend {
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vend:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--electric);
+  text-underline-offset: 3px;
+}
+.asks {
+  color: var(--warn);
+  font-weight: 500;
+}
+.need {
+  color: var(--neg);
+  font-weight: 500;
+}
+.muted {
+  color: var(--ink-3);
+  font-weight: 400;
+}
+.l2Row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.confCell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.confBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.confBtn:hover {
+  text-decoration: underline;
+  text-decoration-color: var(--electric);
+  text-underline-offset: 3px;
+}
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 16px 0 24px;
+  border-top: 1px solid var(--line);
+}
+.keybar {
+  flex-wrap: wrap;
+}
+
+/* ── Inline pickers (kit popover) ── */
+.pickList {
+  max-height: 280px;
+}
+.pickItem {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+}
+.pickName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickEmpty {
+  padding: 12px 16px;
+  color: var(--ink-3);
+}
+
+@media (max-width: 960px) {
+  .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .metric,
+  .metricSkel {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

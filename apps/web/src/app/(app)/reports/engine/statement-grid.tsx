@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from '@meritbooks/merit-ui';
-import { formatAmount, formatPercent, formatPoints, ROUNDING_UNIT_LABEL } from '@/lib/reports/engine/format';
+import { formatCell, isNonMoneyRow, isPercentColumn, ROUNDING_UNIT_LABEL } from '@/lib/reports/engine/format';
 import type { DrillScope, ReportColumn, ReportResult, ReportRow } from '@/lib/reports/engine/types';
 import s from './engine.module.css';
 
@@ -16,7 +16,7 @@ export interface CellDrill {
 /** The drill scope for one cell, or null when the cell is not drillable. */
 export function cellScope(row: ReportRow, col: ReportColumn, i: number): DrillScope | null {
   if (!row.accountIds?.length) return null;
-  if (row.percent || col.percent || col.kind === 'variance_amount' || col.kind === 'variance_pct' || col.kind === 'common_size') return null;
+  if (isNonMoneyRow(row) || isPercentColumn(col) || col.kind === 'variance_amount') return null;
   const override = row.cellDrill?.[i];
   if (row.cellDrill) return override ?? null;
   return col.drill ?? null;
@@ -36,10 +36,7 @@ function rowClass(r: ReportRow): string {
 }
 
 function cellText(r: ReportRow, c: ReportColumn, v: number | null, rounding: ReportResult['rounding']): string {
-  if (v == null) return '';
-  if (c.percent || c.kind === 'variance_pct' || c.kind === 'common_size') return formatPercent(v);
-  if (r.percent) return c.kind === 'variance_amount' ? formatPoints(v) : formatPercent(v);
-  return formatAmount(v, rounding);
+  return formatCell(r, c, v, rounding);
 }
 
 export interface StatementGridProps {
@@ -120,7 +117,7 @@ export function StatementGrid({ result, onDrill, collapsed, onToggle }: Statemen
               <th key={c.id} scope="col" className={c.current ? s.cur : undefined} title={c.status === 'preliminary' ? 'Preliminary — the period is not hard-closed' : c.status === 'partial' ? 'In progress — the period has not ended' : undefined}>
                 {c.label}
                 {(c.status === 'preliminary' || c.status === 'partial') && <span className={s.statusP} aria-label={c.status === 'partial' ? 'in progress' : 'preliminary'}>{c.status === 'partial' ? '*' : 'P'}</span>}
-                {c.sublabel && <span className="sub">{c.sublabel}</span>}
+                {c.sublabel && <span className={s.sub}>{c.sublabel}</span>}
               </th>
             ))}
           </tr>

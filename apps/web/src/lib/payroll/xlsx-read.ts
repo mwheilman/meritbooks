@@ -54,6 +54,9 @@ function readCentralDirectory(buf: Buffer): ZipEntry[] {
   return entries;
 }
 
+/** Largest inflated size of one ZIP entry (security review LOW — decompression bomb). */
+export const MAX_INFLATED_BYTES = 50 * 1024 * 1024;
+
 /** Inflate a single ZIP entry to a UTF-8 string (stored or DEFLATE only). */
 function readEntry(buf: Buffer, entry: ZipEntry): string | null {
   const LFH_SIG = 0x04034b50;
@@ -65,7 +68,8 @@ function readEntry(buf: Buffer, entry: ZipEntry): string | null {
   const data = buf.subarray(dataStart, dataStart + entry.compressedSize);
   try {
     if (entry.method === 0) return data.toString('utf8'); // stored
-    if (entry.method === 8) return inflateRawSync(data).toString('utf8'); // deflate
+    // deflate — output capped (zip-bomb guard: a few KB can inflate to gigabytes); over the cap → unreadable
+    if (entry.method === 8) return inflateRawSync(data, { maxOutputLength: MAX_INFLATED_BYTES }).toString('utf8');
     return null;
   } catch {
     return null;

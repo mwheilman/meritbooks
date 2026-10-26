@@ -37,14 +37,17 @@ import {
   type QueueAction,
   type QueueColumn,
 } from '@meritbooks/merit-ui';
-import { DOC_TYPES, DOC_TYPE_LABEL, MAX_DOCUMENT_BYTES, entityTypeLabel, formatBytes, type DocType } from '@/lib/documents/schema';
-import { TARGETS } from '@/lib/documents/intelligence/types';
+import { MAX_DOCUMENT_BYTES, entityTypeLabel, formatBytes } from '@/lib/documents/schema';
+import { DOCUMENT_TYPES, UPLOAD_DOCUMENT_TYPES, parseDocumentType } from '@/lib/documents/catalog';
+import { TARGETS, type DocClass } from '@/lib/documents/intelligence/types';
 import { openDocument } from '@/components/documents/intelligence-client';
 import { DocumentPanel } from './document-panel';
 import {
+  bandCount,
   fmtDate,
   statusOf,
   typeLabel,
+  visibleColumnIds,
   type AnalyzeResponse,
   type Band,
   type CenterRow,
@@ -76,13 +79,13 @@ export function DocumentsCenter() {
   const [band, setBand] = useState<Band>('all');
   const [rawSearch, setRawSearch] = useState('');
   const search = useDebounce(rawSearch, 300);
-  const [typeFilter, setTypeFilter] = useState<DocType | 'ALL'>('ALL');
+  const [typeFilter, setTypeFilter] = useState<DocClass | 'ALL'>('ALL');
   const [datePreset, setDatePreset] = useState<DatePreset>('ALL');
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [openId, setOpenId] = useState<string | null>(null);
-  const [uploadType, setUploadType] = useState<DocType | 'AUTO'>('AUTO');
+  const [uploadType, setUploadType] = useState<DocClass | 'AUTO'>('AUTO');
   const [working, setWorking] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [backfillNote, setBackfillNote] = useState<string | null>(null);
@@ -96,16 +99,22 @@ export function DocumentsCenter() {
   }, []);
   useEffect(() => setPage(1), [band, search, typeFilter, datePreset]);
 
-  // Bands backed by intelligence state: fetch the ids first.
+  // Bands and the type filter are backed by intelligence state (the catalog type is the read
+  // class, lib/documents/catalog.ts): fetch the matching ids first, then list those files.
   const bandStatus = band === 'review' ? 'needs_review' : band === 'proposals' ? 'proposal_created' : null;
-  const { data: bandIntel } = useQuery<IntelResponse>(bandStatus ? '/api/documents/intelligence' : null, { status: bandStatus ?? undefined }, { key: `b:${refreshKey}`, scope: false });
-  const bandIds = bandStatus ? (bandIntel ? bandIntel.data.map((r) => r.document_id) : null) : undefined;
+  const classFilter = typeFilter !== 'ALL' ? typeFilter : null;
+  const needIds = bandStatus !== null || classFilter !== null;
+  const { data: bandIntel } = useQuery<IntelResponse>(
+    needIds ? '/api/documents/intelligence' : null,
+    { status: bandStatus ?? undefined, doc_class: classFilter ?? undefined },
+    { key: `b:${refreshKey}:${bandStatus ?? ''}:${classFilter ?? ''}`, scope: false },
+  );
+  const bandIds = needIds ? (bandIntel ? bandIntel.data.map((r) => r.document_id) : null) : undefined;
 
   const listParams = {
     page: String(page),
     per_page: String(PER_PAGE),
     search: search.trim() || undefined,
-    doc_type: typeFilter !== 'ALL' ? typeFilter : undefined,
     date_from: presetToDateFrom(datePreset),
     linked: band === 'unfiled' ? 'unfiled' : undefined,
     ids: bandIds === undefined ? undefined : (bandIds ?? []).join(','),
@@ -168,7 +177,7 @@ export function DocumentsCenter() {
       }
       const fd = new FormData();
       fd.append('file', file);
-      if (uploadType !== 'AUTO') fd.append('doc_type', uploadType);
+      if (uploadType !== 'AUTO') fd.append('doc_class', uploadType);
       const res = await fetch('/api/documents', { method: 'POST', body: fd });
       const body = (await res.json().catch(() => null)) as { document?: { id: string; file_name: string }; error?: string } | null;
       if (!res.ok || !body?.document) {
@@ -287,6 +296,11 @@ export function DocumentsCenter() {
     },
   ];
 
+  // With the side panel open the table has ~half the width: keep the columns that identify the
+  // file and its state (the panel shows confidence, company and links in full).
+  const shownIds = visibleColumnIds(openRow !== null);
+  const shownColumns = columns.filter((c) => shownIds.includes(c.id));
+
   const actions: QueueAction<CenterRow>[] = [
     { key: 'v', label: 'View', run: (rs) => rs[0] && void openDocument(rs[0].doc.id).then((e) => e && toast.error(e)) },
     { key: 'r', label: 'Read again', run: (rs) => void analyzeSelected(rs.map((r) => r.doc.id)) },
@@ -340,11 +354,11 @@ export function DocumentsCenter() {
         <span className="t-body">{working ?? 'Drop files here. PDFs, images, spreadsheets, Word — up to 25 MB each.'}</span>
         <label className="row" style={{ gap: 8, alignItems: 'center' }}>
           <span className="t-cap">Type</span>
-          <Select value={uploadType} onChange={(e) => setUploadType(e.target.value as DocType | 'AUTO')} aria-label="Type for uploads">
+          <Select value={uploadType} onChange={(e) => setUploadType(parseDocumentType(e.target.value) ?? 'AUTO')} aria-label="Type for uploads">
             <option value="AUTO">Work it out for me</option>
-            {DOC_TYPES.filter((t) => t !== 'OTHER').map((t) => (
-              <option key={t} value={t}>
-                {DOC_TYPE_LABEL[t]}
+            {UPLOAD_DOCUMENT_TYPES.map((t) => (
+              <option key={t.value} value={t.value}>
+                {t.label}
               </option>
             ))}
           </Select>
@@ -367,10 +381,10 @@ export function DocumentsCenter() {
         value={band}
         onChange={setBand}
         items={[
-          { value: 'all', label: 'All', count: band === 'all' ? total : '·', caption: 'Every stored file' },
-          { value: 'review', label: 'Needs review', count: summary?.needs_review ?? '·', caption: 'We couldn’t tell what it is' },
-          { value: 'proposals', label: 'Proposals ready', count: summary?.proposals_pending ?? '·', caption: 'Waiting in a module for review' },
-          { value: 'unfiled', label: 'Unfiled', count: band === 'unfiled' ? total : '·', caption: 'Not linked to a record' },
+          { value: 'all', label: 'All', count: bandCount('all', band, total, summary), caption: 'Every stored file' },
+          { value: 'review', label: 'Needs review', count: bandCount('review', band, total, summary), caption: 'We couldn’t tell what it is' },
+          { value: 'proposals', label: 'Proposals ready', count: bandCount('proposals', band, total, summary), caption: 'Waiting in a module for review' },
+          { value: 'unfiled', label: 'Unfiled', count: bandCount('unfiled', band, total, summary), caption: 'Not linked to a record' },
         ]}
       />
 
@@ -378,11 +392,11 @@ export function DocumentsCenter() {
         <div className={s.grow}>
           <Search aria-label="Search file names" slashToFocus value={rawSearch} onChange={(e) => setRawSearch(e.target.value)} placeholder="Search file names" />
         </div>
-        <Select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as DocType | 'ALL')} aria-label="Filter by type">
+        <Select value={typeFilter} onChange={(e) => setTypeFilter(parseDocumentType(e.target.value) ?? 'ALL')} aria-label="Filter by type">
           <option value="ALL">All types</option>
-          {DOC_TYPES.map((t) => (
-            <option key={t} value={t}>
-              {DOC_TYPE_LABEL[t]}
+          {DOCUMENT_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
             </option>
           ))}
         </Select>
@@ -436,9 +450,10 @@ export function DocumentsCenter() {
             </div>
           ) : (
             <>
+              <div className={`${s.tableWrap} ${openRow ? s.tableWrapNarrow : ''}`}>
               <QueueTable<CenterRow>
                 aria-label="Documents"
-                columns={columns}
+                columns={shownColumns}
                 rows={rows}
                 getRowId={(r) => r.doc.id}
                 rowState={(r) => ({ attn: r.intel?.status === 'needs_review', done: r.intel?.status === 'dismissed' || r.intel?.status === 'duplicate' })}
@@ -460,6 +475,7 @@ export function DocumentsCenter() {
                   </>
                 )}
               />
+              </div>
               <ListPager page={page} perPage={PER_PAGE} total={total} onPage={setPage} noun="documents" />
             </>
           )}

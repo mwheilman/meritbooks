@@ -8,8 +8,8 @@ import s from './reporting-calendar.module.css';
 export const CELL_WORDS: Record<CellState, { word: string; cls: string; long: string }> = {
   released: { word: 'Released', cls: s.released, long: 'Released to partners' },
   released_auto: { word: 'Auto', cls: s.releasedAuto, long: 'Released automatically' },
-  ready: { word: 'Ready', cls: s.ready, long: 'Closed — ready to release' },
-  soft_close: { word: 'Soft', cls: s.soft, long: 'Soft close — can be released as preliminary' },
+  ready: { word: 'Closed', cls: s.ready, long: 'Closed — not released yet' },
+  soft_close: { word: 'Soft-closed', cls: s.soft, long: 'Soft-closed — can be released as preliminary' },
   withdrawn: { word: 'Withdrawn', cls: s.withdrawn, long: 'Taken back from partners' },
   open: { word: 'Open', cls: s.open, long: 'Open — still being worked' },
   not_ended: { word: 'In month', cls: s.open, long: 'The month has not ended' },
@@ -105,8 +105,8 @@ export function CalendarGrid({ calendar, selected, onSelect }: Props) {
         <div className={s.legend} aria-hidden="true">
           <span><i className={`${s.swatch} ${s.released}`} />Released</span>
           <span><i className={`${s.swatch} ${s.releasedAuto}`} />Released automatically</span>
-          <span><i className={`${s.swatch} ${s.ready}`} />Closed, ready</span>
-          <span><i className={`${s.swatch} ${s.soft}`} />Soft close</span>
+          <span><i className={`${s.swatch} ${s.ready}`} />Closed, not released</span>
+          <span><i className={`${s.swatch} ${s.soft}`} />Soft-closed</span>
           <span><i className={`${s.swatch} ${s.outside}`} />Before joining the group</span>
           <span><b>R</b> restated · <b>R!</b> restated, not yet explained</span>
         </div>

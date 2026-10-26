@@ -9,6 +9,7 @@ import { requirePermission } from '@/lib/rbac/require-permission';
 import { createAdminSupabase } from '@/lib/supabase/admin';
 import { createCompany } from '@/lib/companies/create-company';
 import { seedChartOfAccounts } from '@/lib/services/coa-seed';
+import { addressText, exactMatchOrNull, type PartyMatch } from '@/lib/parties/match';
 
 type Cell = string | number | boolean | null;
 type Row = Record<string, string>;
@@ -21,6 +22,8 @@ interface ImportRequest {
   companyId?: string; // location id for ledger imports
   asOfDate?: string; // trial balance
   dryRun?: boolean;
+  /** Customers / vendors: import rows even when they are "Already in Merit" (exact match). */
+  createAnyway?: boolean;
 }
 
 /** Map + coerce a CSV row to a field-keyed record; collect per-cell errors. */
@@ -189,14 +192,47 @@ async function importMasterData(
     toInsert.push(buildCoreRow(key, rec, orgId));
   });
 
+  // "Already in Merit" (Projects 1111 matcher, suite-level): rows that EXACTLY match an existing
+  // customer / vendor (same tax id / email / phone, or name + address) are shown in the preview and
+  // skipped on import unless the person chose createAnyway — so a CSV never re-creates a client
+  // someone already entered in Books or Projects. Checked for the first 200 rows (the matcher is
+  // per row); the insert safety net files any later strong match for review.
+  const alreadyInMerit: Array<{ row: number; name: string; match: PartyMatch }> = [];
+  if ((key === 'customers' || key === 'vendors') && toInsert.length > 0) {
+    const checkable = toInsert.slice(0, 200);
+    const keep: Record<string, Cell>[] = [];
+    for (let i = 0; i < toInsert.length; i++) {
+      const r = toInsert[i];
+      if (i < checkable.length) {
+        const m = await exactMatchOrNull(supabase, {
+          kind: key === 'vendors' ? 'vendor' : 'customer', name: String(r.name ?? ''),
+          email: (r.email as string | null) ?? null, phone: (r.phone as string | null) ?? null,
+          address: addressText({ address_line1: r.address_line1 as string | null, city: r.city as string | null, state: r.state as string | null, zip: r.zip as string | null }),
+        });
+        if (m) {
+          alreadyInMerit.push({ row: i + 2, name: String(r.name ?? ''), match: m });
+          if (!body.createAnyway) continue;
+        }
+      }
+      keep.push(r);
+    }
+    if (!body.createAnyway) {
+      skipped += toInsert.length - keep.length;
+      toInsert.splice(0, toInsert.length, ...keep);
+    }
+  }
+
   if (dryRun) {
-    return NextResponse.json({ ok: errors.length === 0, dryRun: true, willInsert: toInsert.length, skipped, errors: errors.slice(0, 200), destination: `core.${table}` });
+    return NextResponse.json({
+      ok: errors.length === 0, dryRun: true, willInsert: toInsert.length, skipped, errors: errors.slice(0, 200), destination: `core.${table}`,
+      alreadyInMerit: alreadyInMerit.map((a) => ({ row: a.row, name: a.name, existing: { id: a.match.id, name: a.match.name, usage: a.match.usage, matched: a.match.matched } })),
+    });
   }
   if (errors.length > 0) {
     return NextResponse.json({ ok: false, inserted: 0, skipped, errors: errors.slice(0, 200) }, { status: 422 });
   }
   if (toInsert.length === 0) {
-    return NextResponse.json({ ok: true, inserted: 0, skipped, errors: [], destination: `core.${table}` });
+    return NextResponse.json({ ok: true, inserted: 0, skipped, errors: [], destination: `core.${table}`, alreadyInMerit: alreadyInMerit.length });
   }
 
   // Companies go through the single company-creation path so each one is born
@@ -215,7 +251,7 @@ async function importMasterData(
   const { error } = await writer.schema('core').from(table).insert(toInsert.map((r) => ({ ...r, org_id: orgId })));
   if (error) return NextResponse.json({ ok: false, inserted: 0, skipped, errors: [{ row: 0, message: error.message }] }, { status: 500 });
 
-  return NextResponse.json({ ok: true, inserted: toInsert.length, skipped, errors: [], destination: `core.${table}` });
+  return NextResponse.json({ ok: true, inserted: toInsert.length, skipped, errors: [], destination: `core.${table}`, alreadyInMerit: alreadyInMerit.length });
 }
 
 /** Create imported companies via createCompany (location + fiscal periods), then seed the org COA once. */

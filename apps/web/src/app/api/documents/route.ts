@@ -15,6 +15,7 @@ import { listDocuments, uploadDocument } from '@/lib/documents/store';
 import { intelDeps } from '@/lib/documents/intelligence/server';
 import { isEligible, registerDocument } from '@/lib/documents/intelligence/service';
 import { presetFromDocType } from '@/lib/documents/intelligence/types';
+import { docTypeForClass, parseDocumentType, presetFromDocumentType } from '@/lib/documents/catalog';
 import { presentIntel } from '@/lib/documents/intelligence/present';
 
 /**
@@ -104,9 +105,20 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
   const meta = metaParsed.data;
 
+  // The Documents center sends the catalog type (`doc_class`, lib/documents/catalog.ts); older
+  // callers send the coarse `doc_type`. A class wins and sets the coarse bucket itself.
+  const rawClass = form?.get('doc_class');
+  const chosenClass = rawClass ? parseDocumentType(rawClass) : null;
+  if (rawClass && !chosenClass) {
+    return NextResponse.json({ error: 'Unknown document type', code: 'VALIDATION_ERROR' }, { status: 422 });
+  }
+
   // If the uploader didn't choose a type, infer one from the filename/mime.
-  const docType: DocType =
-    form?.get('doc_type') ? meta.doc_type : inferDocType(file.name, file.type || null);
+  const docType: DocType = chosenClass
+    ? docTypeForClass(chosenClass)
+    : form?.get('doc_type')
+      ? meta.doc_type
+      : inferDocType(file.name, file.type || null);
 
   try {
     const { document } = await uploadDocument({
@@ -132,7 +144,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           source: 'center',
           bytes: new Uint8Array(await file.arrayBuffer()),
           // A type the uploader picked is theirs; "Contract" is broad, so the read may refine it.
-          preset: form?.get('doc_type') ? presetFromDocType(meta.doc_type) : null,
+          preset: chosenClass ? presetFromDocumentType(chosenClass) : form?.get('doc_type') ? presetFromDocType(meta.doc_type) : null,
         });
       } catch (e) {
         console.error('[documents] intelligence register failed (non-fatal):', e instanceof Error ? e.message : e);

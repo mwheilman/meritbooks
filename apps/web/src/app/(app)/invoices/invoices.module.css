@@ -1,0 +1,561 @@
+/* Invoices & AR (merit-ui, Style Guide v2.3) — layout only. Every visual value is a kit token
+   from system.css; kit classes (.tbl-q, .fig, .surface, .field …) do the styling. */
+
+/* ---------------------------------------------------------------- page */
+.viewTabs {
+  margin-bottom: var(--s3);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: var(--s2);
+}
+
+.sectionHead p {
+  margin-top: 4px;
+  color: var(--ink-2);
+  max-width: 72ch;
+}
+
+/* Figure strip: value + comparison + where it goes. */
+.figs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--line);
+  background: var(--white);
+  margin-bottom: var(--s2);
+}
+
+.figs > * {
+  padding: 16px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+
+.figs > *:last-child {
+  border-right: 0;
+}
+
+@media (max-width: 1000px) {
+  .figs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .figs > *:nth-child(2) {
+    border-right: 0;
+  }
+  .figs > *:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+.figLink {
+  align-self: flex-start;
+  color: var(--electric);
+  font-weight: 600;
+  font-size: var(--t-12);
+  line-height: var(--lh-12);
+}
+
+.figLink:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.figSkel {
+  width: 112px;
+  height: 20px;
+}
+
+/* ---------------------------------------------------------------- toolbar */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.toolbarSp {
+  flex: 1;
+}
+
+.companySelect {
+  width: 220px;
+}
+
+.search {
+  width: 280px;
+  max-width: 100%;
+}
+
+/* ---------------------------------------------------------------- tables */
+.tableWrap {
+  overflow: auto;
+  max-height: calc(100vh - 340px);
+  min-height: 240px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.tableWrapShort {
+  max-height: none;
+  min-height: 0;
+}
+
+.table {
+  min-width: 1080px;
+}
+
+.tableNarrow {
+  min-width: 860px;
+}
+
+.row {
+  cursor: pointer;
+}
+
+.cellStack {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  line-height: var(--lh-13);
+}
+
+.cellStack > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.inline > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.state {
+  min-height: 240px;
+}
+
+.tableFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+/* ---------------------------------------------------------------- forms (dialogs) */
+.tallDialog {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 120px);
+}
+
+.tallDialog > :global(.dialog-body) {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.grid2,
+.grid3,
+.grid4 {
+  display: grid;
+  gap: 12px;
+}
+
+.grid2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.grid3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid4 {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.linesHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Line editor: description · account · qty · unit price · amount · remove */
+.lineGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) 80px 128px 112px 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.lineGridCredit {
+  grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) 128px 32px;
+}
+
+.lineGridContract {
+  grid-template-columns: minmax(0, 6fr) 88px 128px 32px;
+}
+
+.lineGridMilestone {
+  grid-template-columns: minmax(0, 4fr) 168px 128px 32px;
+}
+
+.lineRows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.totals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 340px;
+  max-width: 100%;
+  margin-left: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.totRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 32px;
+  color: var(--ink-2);
+}
+
+.totRow > :last-child {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.totGrand {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--midnight);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.totGrand > :last-child {
+  font-weight: 700;
+}
+
+.totHint {
+  text-align: right;
+}
+
+.taxInput {
+  width: 120px;
+}
+
+/* ---------------------------------------------------------------- drawer */
+.drawerBlock {
+  margin-top: var(--s3);
+}
+
+.drawerHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.lineCell {
+  white-space: normal !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  height: auto !important;
+}
+
+.payment {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.stackGap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.danger {
+  margin-top: var(--s3);
+  padding-top: 16px;
+  border-top: 1px solid var(--neg);
+}
+
+.confirmBox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--canvas);
+  box-shadow: inset 3px 0 var(--neg);
+}
+
+.editLine {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.editLineGrid {
+  display: grid;
+  grid-template-columns: 80px 128px minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.subtotalBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 10px 16px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+}
+
+/* ---------------------------------------------------------------- hover peek (mini invoice) */
+.peek {
+  margin: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  background: var(--white);
+  font-size: var(--t-12);
+  line-height: var(--lh-12);
+  color: var(--ink-2);
+}
+
+.peekTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--electric);
+}
+
+.peekTop b {
+  display: block;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: var(--t-13);
+  line-height: var(--lh-13);
+}
+
+.peekTop span {
+  display: block;
+}
+
+.peekBill {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.peekBill b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.peekLines {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.peekLines td {
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.peekLines td:last-child {
+  width: 96px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.peekTotals {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+}
+
+.peekTotals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.peekTotals > div > span:last-child {
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.peekStrong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.peekState {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+/* ---------------------------------------------------------------- contract import */
+.drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 240px;
+  padding: 48px 24px;
+  text-align: center;
+  border: 1.5px dashed var(--grey-400);
+  background: var(--white);
+  cursor: pointer;
+  transition: border-color var(--fast), background-color var(--fast);
+}
+
+.drop:hover,
+.drop:focus-visible {
+  border-color: var(--electric);
+}
+
+.drop[data-over='true'] {
+  border-color: var(--electric);
+  background: var(--sky);
+}
+
+.drop[data-busy='true'] {
+  cursor: default;
+  border-style: solid;
+  border-color: var(--line-2);
+  background: var(--canvas);
+}
+
+.dropBar {
+  width: 240px;
+  max-width: 100%;
+}
+
+.hiddenInput {
+  display: none;
+}
+
+.metaLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.metaLine > span:first-child {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lowConf :global(.input),
+.lowConf :global(.select) {
+  border-color: var(--warn);
+  box-shadow: 0 0 0 1px var(--warn);
+}
+
+.lowConfBlock {
+  padding: 12px;
+  box-shadow: inset 3px 0 var(--warn);
+  background: var(--canvas);
+}
+
+.linkBtn {
+  color: var(--electric);
+  font-weight: 600;
+}
+
+.linkBtn:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---------------------------------------------------------------- text overrides */
+.overrideRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 32px;
+  gap: 8px;
+  align-items: start;
+}
+
+.overrideRow > :last-child {
+  margin-top: 20px;
+}
+
+@media (max-width: 720px) {
+  .grid2,
+  .grid3,
+  .grid4 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

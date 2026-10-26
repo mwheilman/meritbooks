@@ -4,17 +4,31 @@ import { AccountPeek } from './account-peek';
 import { AccountDrawer } from './account-drawer';
 import { AccountsGroupedView, type GroupedAccount, type AccountBalance } from './accounts-grouped-view';
 import { GlDetailModal } from './gl-detail-modal';
+import { AccountFlags } from './account-flags';
 
 import { useState, useCallback, useMemo } from 'react';
 import {
-  Search, Plus, Check, X, Lock, Building2, CreditCard, Landmark,
-  Loader2, AlertCircle, Shield, Clock, Inbox, ListTree, Table2,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+  Button,
+  Check,
+  Field,
+  InlineNotice,
+  Input,
+  Keyhints,
+  Search,
+  Seg,
+  Select,
+  Status,
+  Tabs,
+  Tag,
+  Textarea,
+  cx,
+  useListKeynav,
+} from '@meritbooks/merit-ui';
 import { useQuery, useMutation, addToast } from '@/hooks';
 import { useActiveCompany } from '@/lib/hooks/use-active-company';
 import { isSpecificCompany } from '@/lib/company-scope';
-import { PageHeader, EmptyState } from '@/components/ui';
+import { PageHeader, EmptyState, TableSkeleton } from '@/components/ui';
+import s from './coa.module.css';
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -55,6 +69,22 @@ interface BalancesResponse {
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+const TYPE_LABELS: Record<string, string> = {
+  ASSET: 'Asset',
+  LIABILITY: 'Liability',
+  EQUITY: 'Equity',
+  REVENUE: 'Revenue',
+  COGS: 'Cost of goods sold',
+  OPEX: 'Operating expense',
+  OTHER: 'Other income/expense',
+};
+
+function ApprovalStatus({ status }: { status: string }) {
+  if (status === 'PENDING') return <Status kind="risk">Pending</Status>;
+  if (status === 'APPROVED') return <Status kind="ready">Active</Status>;
+  return <Status kind="blocked">Rejected</Status>;
+}
+
 // ─── Main Page ──────────────────────────────────────────────
 
 export default function ChartOfAccountsPage() {
@@ -84,7 +114,7 @@ export default function ChartOfAccountsPage() {
 
   // Per-account ledger activity (POSTED only), scoped to the active company via
   // the shared hook. Only needed for the grouped balance view / list balances.
-  const { data: balData, isLoading: balLoading } = useQuery<BalancesResponse>(
+  const { data: balData, isLoading: balLoading, error: balError } = useQuery<BalancesResponse>(
     '/api/accounts/balances',
     { year: String(year), period_month: String(month) },
     { key: String(refreshKey) }
@@ -146,19 +176,28 @@ export default function ChartOfAccountsPage() {
   const ACCOUNT_TYPES = ['ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'COGS', 'OPEX', 'OTHER'];
   const showGrouped = tab === 'all' && view === 'grouped';
   const yearOptions = [now.getUTCFullYear(), now.getUTCFullYear() - 1, now.getUTCFullYear() - 2];
+  const anyFilter = !!search || !!typeFilter || statusFilter !== 'all';
+  const overlayOpen = !!selectedAccountId || !!ledgerAccount || showRequest;
+
+  // List view keys: J/K move · Enter opens the account. (The grouped view owns
+  // its own keys; only one of the two is mounted.)
+  const showList = !showGrouped && !isLoading && !error && filtered.length > 0;
+  const { setActiveIndex, rowProps } = useListKeynav({
+    count: showList ? filtered.length : 0,
+    onOpen: (i) => { const a = filtered[i]; if (a) { close(); setSelectedAccountId(a.id); } },
+    enabled: showList && !overlayOpen,
+    owner: 'Chart of accounts (list)',
+  });
 
   return (
-    <div className="space-y-6">
+    <div className={s.stack}>
       <PageHeader
-        title="Chart of Accounts"
+        title="Chart of accounts"
         description={`${counts?.total ?? 0} accounts · ${counts?.pending ?? 0} pending approval`}
         actions={
-          <button
-            onClick={() => setShowRequest(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 transition-colors"
-          >
-            <Plus size={16} /> Request Account
-          </button>
+          <Button variant="primary" icon="plus" onClick={() => setShowRequest(true)}>
+            Request account
+          </Button>
         }
       />
 
@@ -169,172 +208,202 @@ export default function ChartOfAccountsPage() {
         />
       )}
 
-      {/* Tabs + filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
-          <button onClick={() => setTab('all')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'all' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
-            All <span className="font-mono ml-1 text-slate-600">{counts?.total ?? 0}</span>
-          </button>
-          <button onClick={() => setTab('pending')} className={clsx('px-3 py-1.5 rounded-md text-xs font-medium', tab === 'pending' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
-            Pending <span className="font-mono ml-1 text-amber-500">{counts?.pending ?? 0}</span>
-          </button>
-        </div>
+      <Tabs<'all' | 'pending'>
+        aria-label="Account approval"
+        value={tab}
+        onChange={setTab}
+        items={[
+          { value: 'all', label: 'All', count: counts?.total ?? 0 },
+          { value: 'pending', label: 'Pending approval', count: counts?.pending ?? 0 },
+        ]}
+      />
 
+      {/* Filters */}
+      <div className={s.toolbar}>
         {tab === 'all' && (
-          <div className="flex gap-0.5 p-0.5 rounded-lg bg-slate-900 border border-slate-800">
-            <button onClick={() => setView('grouped')} aria-label="Grouped view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'grouped' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
-              <ListTree size={13} /> Grouped
-            </button>
-            <button onClick={() => setView('list')} aria-label="List view" className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium', view === 'list' ? 'bg-slate-700 text-white' : 'text-slate-500')}>
-              <Table2 size={13} /> List
-            </button>
-          </div>
+          <Seg<'grouped' | 'list'>
+            aria-label="View"
+            value={view}
+            onChange={setView}
+            items={[
+              { value: 'grouped', label: 'Grouped' },
+              { value: 'list', label: 'List' },
+            ]}
+          />
         )}
 
-        <select
+        <Select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
           aria-label="Filter accounts by type"
-          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
         >
-          <option value="">All Types</option>
-          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+          <option value="">All types</option>
+          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABELS[t] ?? t}</option>)}
+        </Select>
 
-        <select
+        <Select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as 'all' | 'active' | 'inactive')}
           aria-label="Filter accounts by status"
-          className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white"
         >
-          <option value="all">All Status</option>
+          <option value="all">All statuses</option>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
-        </select>
+        </Select>
 
         {showGrouped && (
-          <div className="flex items-center gap-1.5">
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Balance period month"
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+          <span className={s.period}>
+            <Select value={month} onChange={(e) => setMonth(Number(e.target.value))} aria-label="Balance period month">
               {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Balance period year"
-              className="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white">
+            </Select>
+            <Select value={year} onChange={(e) => setYear(Number(e.target.value))} aria-label="Balance period year">
               {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
+            </Select>
+          </span>
         )}
 
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search accounts..."
-            aria-label="Search accounts by number, name, or group"
-            className="w-full pl-9 pr-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500"
-          />
-        </div>
+        <span className={s.grow} />
+
+        {showGrouped && balLoading && (
+          <span className={cx('t-cap', s.loadingNote)} role="status">Loading balances…</span>
+        )}
+        {showGrouped && balError && !balLoading && (
+          <Tag tone="neg" title={balError}>Balances didn&apos;t load</Tag>
+        )}
+        {showGrouped && balData?.meta.truncated && (
+          <Tag tone="warn" title="Too many ledger lines to total in one pass">Balances partial</Tag>
+        )}
+
+        <Search
+          className={s.searchBox}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search number, name or group"
+          aria-label="Search accounts by number, name, or group"
+          slashToFocus
+        />
       </div>
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center py-16"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
+        <TableSkeleton rows={10} cols={6} />
       ) : error ? (
-        <div className="p-8 text-center"><AlertCircle className="w-8 h-8 mx-auto text-red-400 mb-2" /><p className="text-sm text-red-400">{error}</p></div>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Couldn&apos;t load the chart of accounts.</p>
+          <p className="ink-2">{error}</p>
+          <Button onClick={() => setRefreshKey((k) => k + 1)}>Try again</Button>
+        </div>
       ) : filtered.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            icon={Inbox}
-            title={tab === 'pending' ? 'No pending requests' : search || typeFilter || statusFilter !== 'all' ? 'No matching accounts' : 'No accounts yet'}
-            description={
-              tab === 'pending'
-                ? 'New account requests awaiting approval will appear here.'
-                : search || typeFilter || statusFilter !== 'all'
-                  ? 'No accounts match your search or filters. Try clearing them.'
-                  : 'Request your first account to start building the chart of accounts.'
-            }
-            action={tab === 'pending' ? undefined : { label: 'Request Account', onClick: () => setShowRequest(true) }}
-          />
-        </div>
+        <EmptyState
+          title={tab === 'pending' ? 'No pending requests' : anyFilter ? 'No accounts match' : 'No accounts yet'}
+          description={
+            tab === 'pending'
+              ? 'New account requests awaiting approval will appear here.'
+              : anyFilter
+                ? 'No accounts match your search or filters. Try clearing them.'
+                : 'Request your first account to start building the chart of accounts.'
+          }
+          action={
+            tab === 'pending'
+              ? undefined
+              : anyFilter
+                ? { label: 'Clear filters', onClick: () => { setSearch(''); setTypeFilter(''); setStatusFilter('all'); } }
+                : { label: 'Request account', onClick: () => setShowRequest(true) }
+          }
+        />
       ) : showGrouped ? (
-        <div className="relative">
-          {balLoading && (
-            <div className="absolute right-0 -top-7 flex items-center gap-1.5 text-2xs text-slate-500">
-              <Loader2 size={11} className="animate-spin" /> loading balances…
-            </div>
-          )}
-          <AccountsGroupedView
-            accounts={filtered as GroupedAccount[]}
-            balances={balances}
-            periodLabel={periodLabel}
-            onSelectAccount={(id) => setSelectedAccountId(id)}
-            onOpenLedger={(a) => setLedgerAccount(a)}
-          />
-        </div>
+        <AccountsGroupedView
+          accounts={filtered as GroupedAccount[]}
+          balances={balances}
+          periodLabel={periodLabel}
+          onSelectAccount={(id) => { close(); setSelectedAccountId(id); }}
+          onOpenLedger={(a) => setLedgerAccount(a)}
+          keynavEnabled={!overlayOpen}
+        />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full text-sm min-w-[720px]">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-20">Number</th>
-                <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Name</th>
-                <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500 w-24">Type</th>
-                <th className="px-4 py-2.5 text-left text-2xs font-semibold uppercase text-slate-500">Group</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500 w-20">Status</th>
-                <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500 w-16">Flags</th>
-                {tab === 'pending' && <th className="px-4 py-2.5 text-center text-2xs font-semibold uppercase text-slate-500 w-28">Actions</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {filtered.map((acct) => (
-                <tr key={acct.id} {...rowHandlers({ id: acct.id })} onClick={() => setSelectedAccountId(acct.id)} className="row-clickable">
-                  <td className="px-4 py-2 text-xs font-mono text-emerald-400">{acct.accountNumber}</td>
-                  <td className="px-4 py-2 text-slate-300">{acct.name}</td>
-                  <td className="px-4 py-2 text-xs text-slate-500">{acct.accountType}</td>
-                  <td className="px-4 py-2 text-xs text-slate-500">{acct.groupName}</td>
-                  <td className="px-4 py-2 text-center">
-                    {acct.approvalStatus === 'PENDING' ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400"><Clock size={9} />Pending</span>
-                    ) : acct.approvalStatus === 'APPROVED' ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/10 text-emerald-400"><Check size={9} />Active</span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400"><X size={9} />Rejected</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {acct.isControlAccount && <Lock size={11} className="text-amber-500/60" />}
-                      {acct.isCompanySpecific && <Building2 size={11} className="text-blue-400/60" />}
-                      {acct.isBankAccount && <Landmark size={11} className="text-slate-500" />}
-                      {acct.isCreditCard && <CreditCard size={11} className="text-slate-500" />}
-                    </div>
-                  </td>
-                  {tab === 'pending' && (
-                    <td className="px-4 py-2 text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'approve'); }}
-                          disabled={approvalBusyId === acct.id}
-                          aria-busy={approvalBusyId === acct.id}
-                          aria-label={`Approve account ${acct.accountNumber}`}
-                          className="p-1 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-                        >{approvalBusyId === acct.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}</button>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'reject'); }}
-                          disabled={approvalBusyId === acct.id}
-                          aria-busy={approvalBusyId === acct.id}
-                          aria-label={`Reject account ${acct.accountNumber}`}
-                          className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
-                        ><X size={13} /></button>
-                      </div>
-                    </td>
-                  )}
+        <div>
+          <div className={s.tableWrap}>
+            <table className="tbl tbl-q tbl-q--compact" aria-label="Chart of accounts">
+              <colgroup>
+                <col style={{ width: 104 }} />
+                <col />
+                <col style={{ width: 120 }} />
+                <col />
+                <col style={{ width: 120 }} />
+                <col style={{ width: 176 }} />
+                {tab === 'pending' && <col style={{ width: 200 }} />}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th scope="col">Number</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Type</th>
+                  <th scope="col">Group</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Flags</th>
+                  {tab === 'pending' && <th scope="col" className="n">Decide</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((acct, i) => {
+                  const { ref, 'data-active': active } = rowProps(i);
+                  const busy = approvalBusyId === acct.id;
+                  return (
+                    <tr
+                      key={acct.id}
+                      ref={ref}
+                      {...rowHandlers({ id: acct.id })}
+                      onClick={() => { setActiveIndex(i); setSelectedAccountId(acct.id); }}
+                      className={cx('q-row', active && 'is-cursor', !acct.isActive && 'ink-3')}
+                      aria-current={active ? 'true' : undefined}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td><span className={s.num}>{acct.accountNumber}</span></td>
+                      <td title={acct.name}>{acct.name}</td>
+                      <td className="ink-2">{TYPE_LABELS[acct.accountType] ?? acct.accountType}</td>
+                      <td className="ink-2" title={acct.groupName}>{acct.groupName}</td>
+                      <td><ApprovalStatus status={acct.approvalStatus} /></td>
+                      <td><AccountFlags account={acct} /></td>
+                      {tab === 'pending' && (
+                        <td className="n">
+                          <span className="mb-row-acts">
+                            <Button
+                              variant="quiet"
+                              onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'reject'); }}
+                              disabled={busy}
+                              aria-busy={busy || undefined}
+                              aria-label={`Reject account ${acct.accountNumber}`}
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              variant="primary"
+                              icon="check"
+                              onClick={(e) => { e.stopPropagation(); handleApproval(acct.id, 'approve'); }}
+                              disabled={busy}
+                              aria-busy={busy || undefined}
+                              aria-label={`Approve account ${acct.accountNumber}`}
+                            >
+                              {busy ? 'Saving…' : 'Approve'}
+                            </Button>
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <Keyhints
+            className={s.hints}
+            hints={[
+              { chord: 'j k', label: 'Move' },
+              { chord: 'enter', label: 'Open account' },
+              { chord: '/', label: 'Search' },
+            ]}
+          />
         </div>
       )}
 
@@ -356,6 +425,9 @@ export default function ChartOfAccountsPage() {
           accountName={ledgerAccount.name}
           startDate={balData.period.yearStart}
           endDate={balData.period.ytdEnd}
+          periodStartDate={balData.period.periodStart}
+          periodEndDate={balData.period.periodEnd}
+          periodLabel={balData.period.label}
           locationId={scopedLocation}
           onClose={() => setLedgerAccount(null)}
         />
@@ -370,7 +442,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
   const [accountNumber, setAccountNumber] = useState('');
   const [name, setName] = useState('');
   const [accountType, setAccountType] = useState('');
-  const [groupId, setGroupId] = useState('');
+  const [groupId] = useState('');
   const [isCompanySpecific, setIsCompanySpecific] = useState(false);
   const [reqDept, setReqDept] = useState(false);
   const [reqClass, setReqClass] = useState(false);
@@ -382,7 +454,7 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
   );
 
   // Load account groups for the picker
-  const { data: groupData } = useQuery<{ id: string; name: string; display_order: number }[]>(
+  useQuery<{ id: string; name: string; display_order: number }[]>(
     '/api/accounts/search?meta=groups'
   );
 
@@ -412,107 +484,85 @@ function RequestAccountForm({ onClose, onSuccess }: { onClose: () => void; onSuc
     }
   };
 
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-      <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-        <h2 className="text-lg font-semibold text-white">Request New Account</h2>
-        <button onClick={onClose} aria-label="Close request account form" className="p-1 rounded-lg hover:bg-slate-800 text-slate-400"><X size={18} /></button>
-      </div>
-      <div className="p-6 space-y-4">
-        <p className="text-xs text-slate-500 bg-amber-500/5 border border-amber-500/10 rounded-lg px-3 py-2">
-          New accounts require CFO or Controller approval before they can receive postings.
-        </p>
+  const ready = !!accountNumber && !!name && !!accountType;
 
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Account Number</label>
-            <input
+  return (
+    <section className={s.form} aria-label="Request a new account">
+      <div className={s.formHead}>
+        <h2 className="t-section">Request a new account</h2>
+        <Button variant="quiet" iconOnly icon="x" onClick={onClose} aria-label="Close request account form" />
+      </div>
+      <div className={s.formBody}>
+        <InlineNotice tone="info">
+          New accounts need CFO or Controller approval before they can receive postings.
+        </InlineNotice>
+
+        <div className={s.grid3}>
+          <Field label="Account number" help="Up to 5 digits; the type sets the range.">
+            <Input
               type="text"
+              inputMode="numeric"
+              className="tnum"
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value.replace(/\D/g, '').slice(0, 5))}
               placeholder="e.g. 61500"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white font-mono"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Account Name</label>
-            <input
+          </Field>
+          <Field label="Account name">
+            <Input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Equipment Rental"
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
+              placeholder="e.g. Equipment rental"
             />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">Account Type</label>
-            <select
-              value={accountType}
-              onChange={(e) => setAccountType(e.target.value)}
-              className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white"
-            >
-              <option value="">Select type...</option>
-              <option value="ASSET">Asset (10000-19999)</option>
-              <option value="LIABILITY">Liability (20000-29999)</option>
-              <option value="EQUITY">Equity (30000-39999)</option>
-              <option value="REVENUE">Revenue (40000-49999)</option>
-              <option value="COGS">Cost of Goods Sold (50000-59999)</option>
-              <option value="OPEX">Operating Expense (60000-69999)</option>
-              <option value="OTHER">Other Income/Expense (70000-99999)</option>
-            </select>
-          </div>
+          </Field>
+          <Field label="Account type">
+            <Select value={accountType} onChange={(e) => setAccountType(e.target.value)}>
+              <option value="">Select type…</option>
+              <option value="ASSET">Asset (10000–19999)</option>
+              <option value="LIABILITY">Liability (20000–29999)</option>
+              <option value="EQUITY">Equity (30000–39999)</option>
+              <option value="REVENUE">Revenue (40000–49999)</option>
+              <option value="COGS">Cost of goods sold (50000–59999)</option>
+              <option value="OPEX">Operating expense (60000–69999)</option>
+              <option value="OTHER">Other income/expense (70000–99999)</option>
+            </Select>
+          </Field>
         </div>
 
-        <div className="flex items-center gap-6">
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={isCompanySpecific} onChange={(e) => setIsCompanySpecific(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
-            Company-specific
-          </label>
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={reqDept} onChange={(e) => setReqDept(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
-            Require department
-          </label>
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={reqClass} onChange={(e) => setReqClass(e.target.checked)} className="rounded border-slate-600 bg-slate-800 text-emerald-500" />
-            Require class
-          </label>
+        <div className={s.checks}>
+          <Check label="Company-specific" checked={isCompanySpecific} onChange={(e) => setIsCompanySpecific(e.target.checked)} />
+          <Check label="Require department" checked={reqDept} onChange={(e) => setReqDept(e.target.checked)} />
+          <Check label="Require class" checked={reqClass} onChange={(e) => setReqClass(e.target.checked)} />
         </div>
 
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">Notes (visible to approver)</label>
-          <textarea
+        <Field label="Notes (visible to the approver)">
+          <Textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder:text-slate-600 resize-none"
             placeholder="Why is this account needed?"
           />
-        </div>
+        </Field>
 
         {formError && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
-            <AlertCircle size={13} className="text-red-400" />
-            <p className="text-xs text-red-400">{formError}{submitError ? `: ${submitError}` : ''}</p>
-          </div>
+          <InlineNotice tone="neg" title={`${formError}.`}>
+            {submitError ?? 'Check the fields and try again.'}
+          </InlineNotice>
         )}
 
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800">Cancel</button>
-          <button
+        <div className={s.formFoot}>
+          <Button variant="quiet" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
-            disabled={submitting || !accountNumber || !name || !accountType}
-            className={clsx(
-              'flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium',
-              submitting || !accountNumber || !name || !accountType
-                ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                : 'bg-emerald-600 text-white hover:bg-emerald-500'
-            )}
+            disabled={submitting || !ready}
+            aria-busy={submitting || undefined}
           >
-            {submitting ? <Loader2 size={14} className="animate-spin" /> : <Shield size={14} />}
-            Request Account
-          </button>
+            {submitting ? 'Requesting…' : 'Request account'}
+          </Button>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

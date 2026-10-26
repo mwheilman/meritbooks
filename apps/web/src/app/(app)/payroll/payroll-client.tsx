@@ -1,39 +1,42 @@
 'use client';
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { clsx } from 'clsx';
-import {
-  Loader2,
-  AlertCircle,
-  Wallet,
-  ArrowUpDown,
-  ArrowUp,
-  ArrowDown,
-  CalendarClock,
-  EyeOff,
-  UploadCloud,
-  Info,
-  FlaskConical,
-  PlugZap,
-} from 'lucide-react';
-import { Button } from '@meritbooks/merit-ui';
-import { PageHeader, EmptyState } from '@/components/ui';
+import { useMemo, useState } from 'react';
+import { Button, Icon, Keyhints, Tabs, Tag, cx, useListKeynav } from '@meritbooks/merit-ui';
+import { PageHeader, EmptyState, TableSkeleton } from '@/components/ui';
 import { BuildStatusBadge } from '@/components/brand';
+import { useShellLine } from '@/components/layout/shell-context';
 import { useQuery } from '@/hooks';
 import { useMe } from '@/lib/hooks/use-me';
 import { formatMoney } from '@meritbooks/shared';
 import { fmtDate, type RunListItem, type RunsResponse, type RunStatus } from './types';
-import { RunStatusBadge } from './run-status';
+import { RUN_STEPS, RunPipeline, RunStatusBadge, runStage, type PipeStep } from './run-status';
 import { RunWizard } from './run-wizard';
 import { RunDetailDrawer } from './run-detail-drawer';
 import { ImportRegister } from './register-import';
 import { ImportRegisterCsv } from './register-csv-import';
+import s from './payroll.module.css';
 
 type SortKey = 'periodEnd' | 'payDate' | 'status' | 'grossCents' | 'netCents' | 'employeeCount';
 type SortDir = 'asc' | 'desc';
+type Filter = 'all' | 'flight' | 'done' | 'problem';
 
 const TERMINAL: RunStatus[] = ['PAID', 'POSTED', 'RECONCILED', 'REJECTED', 'VOID', 'RETURNED'];
 const AWAITING: RunStatus[] = ['PREVIEWED', 'PENDING_APPROVAL'];
+const PROBLEM: RunStatus[] = ['FAILED', 'RETURNED', 'REJECTED'];
+const COMPLETE: RunStatus[] = ['PAID', 'POSTED', 'RECONCILED', 'VOID'];
+
+const FILTERS: ReadonlyArray<{ value: Filter; label: string; test: (st: RunStatus) => boolean }> = [
+  { value: 'all', label: 'All runs', test: () => true },
+  { value: 'flight', label: 'In flight', test: (st) => !TERMINAL.includes(st) && !PROBLEM.includes(st) },
+  { value: 'done', label: 'Complete', test: (st) => COMPLETE.includes(st) },
+  { value: 'problem', label: 'Needs a look', test: (st) => PROBLEM.includes(st) },
+];
+
+function providerLabel(p: string | null): string {
+  if (!p) return '—';
+  if (p === 'mock') return 'Estimate';
+  return p.charAt(0).toUpperCase() + p.slice(1);
+}
 
 export function PayrollClient() {
   const me = useMe();
@@ -43,10 +46,10 @@ export function PayrollClient() {
   const { data, isLoading, error, refetch } = useQuery<RunsResponse>('/api/payroll/runs');
   const runs = useMemo(() => data?.runs ?? [], [data]);
 
-  // Is a licensed payroll provider (Check/Gusto) actually connected for this
-  // tenant? Until one is, running payroll end-to-end inside MeritBooks produces a
-  // NON-BINDING ESTIMATE (flat placeholder rates) — not a tax calculation, and no
-  // money moves or is filed. We surface that truth everywhere the run path shows.
+  // Is a licensed payroll provider actually connected for this tenant? Until one
+  // is, running payroll end-to-end inside MeritBooks produces a NON-BINDING
+  // ESTIMATE (flat placeholder rates) — not a tax calculation, and no money moves
+  // or is filed. We surface that truth everywhere the run path shows.
   const { data: capData } = useQuery<{ capabilities?: Array<{ capability: string; ready: boolean }> }>(
     '/api/integrations/connections',
     undefined,
@@ -60,6 +63,7 @@ export function PayrollClient() {
   const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'payDate', dir: 'desc' });
+  const [filter, setFilter] = useState<Filter>('all');
 
   const sorted = useMemo(() => {
     const copy = [...runs];
@@ -78,6 +82,9 @@ export function PayrollClient() {
     return copy;
   }, [runs, sort]);
 
+  const activeFilter = FILTERS.find((f) => f.value === filter) ?? FILTERS[0]!;
+  const visible = useMemo(() => sorted.filter((r) => activeFilter.test(r.status)), [sorted, activeFilter]);
+
   function toggleSort(key: SortKey) {
     setSort((prev) =>
       prev.key === key ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' },
@@ -95,28 +102,87 @@ export function PayrollClient() {
     .filter(Boolean)
     .sort()[0];
 
+  // The 32px context line carries the run-level facts (S20 grammar — no KPI strip).
+  useShellLine(
+    isLoading || error || !data
+      ? null
+      : [
+          { label: `Next pay date ${fmtDate(nextPayDate)}`, strong: !!nextPayDate },
+          { label: `${awaitingCount} awaiting approval`, strong: awaitingCount > 0 },
+          grouped ? 'Gross in flight hidden for your role' : `${formatMoney(inFlightGross)} gross in flight`,
+          `${runs.length} run${runs.length === 1 ? '' : 's'}`,
+        ],
+    `${isLoading}:${!!error}:${!!data}:${nextPayDate ?? ''}:${awaitingCount}:${grouped ? 'g' : inFlightGross}:${runs.length}`,
+  );
+
+  // Where the in-flight runs sit in the five-step pipeline.
+  const pipeSteps = useMemo<PipeStep[]>(() => {
+    const counts = RUN_STEPS.map(() => ({ n: 0, failed: 0 }));
+    for (const r of runs) {
+      if (TERMINAL.includes(r.status) && !PROBLEM.includes(r.status)) continue;
+      const st = runStage(r.status, false);
+      if (st.current === null) continue;
+      const c = counts[st.current];
+      if (!c) continue;
+      c.n += 1;
+      if (st.failed) c.failed += 1;
+    }
+    return RUN_STEPS.map((label, i) => {
+      const c = counts[i] ?? { n: 0, failed: 0 };
+      return {
+        label,
+        who: c.n === 0 ? 'None waiting' : c.failed > 0 ? `${c.n} run${c.n === 1 ? '' : 's'} · ${c.failed} stopped` : `${c.n} run${c.n === 1 ? '' : 's'}`,
+        state: c.failed > 0 ? 'attn' : c.n > 0 ? 'cur' : 'todo',
+      };
+    });
+  }, [runs]);
+
+  // J/K move the cursor, Enter opens the run (paused while any overlay is open).
+  const overlayOpen = wizardOpen || importOpen || csvImportOpen || !!detailId;
+  const showTable = !isLoading && !error && visible.length > 0;
+  const { setActiveIndex, rowProps } = useListKeynav({
+    count: showTable ? visible.length : 0,
+    onOpen: (i) => {
+      const r = visible[i];
+      if (r) setDetailId(r.id);
+    },
+    enabled: !overlayOpen,
+    owner: 'Payroll runs',
+  });
+
+  const totalGross = visible.reduce((t, r) => t + (r.grossCents ?? 0), 0);
+  const totalNet = visible.reduce((t, r) => t + (r.netCents ?? 0), 0);
+
+  const sortHead = (label: string, key: SortKey, numeric = false) => {
+    const on = sort.key === key;
+    return (
+      <th
+        scope="col"
+        className={numeric ? 'n' : undefined}
+        aria-sort={on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : undefined}
+      >
+        <button type="button" className={on ? 'th-sort' : 'mb-th-btn'} onClick={() => toggleSort(key)} aria-label={`Sort by ${label.toLowerCase()}`}>
+          {label}
+          {on ? (sort.dir === 'asc' ? ' ↑' : ' ↓') : ''}
+        </button>
+      </th>
+    );
+  };
+
   return (
-    <div className="space-y-6">
+    <div className={s.stack}>
       <PageHeader
+        eyebrow={['Payables', 'Payroll']}
         title="Payroll"
-        description="Run payroll at your processor, then import the register — we read the period totals and post the balanced, job-costed payroll entry to the ledger. That import is the production path today. Running payroll end to end inside the app requires a connected payroll provider."
+        description="Run payroll at your processor, then import the register. We read the period totals and post the balanced, job-costed payroll entry to the ledger."
         actions={
           canCreate ? (
-            // Kit verbs (32px, square): ONE primary — the production path — and two short
-            // secondaries, so the row holds on one line at 1280–1440px. The long
-            // explanations live in each button's tooltip and in the two cards below.
+            // ONE primary — the production path — and two secondaries. The long
+            // explanations live in each button's tooltip and in the two paths below.
             <>
               <Button
-                variant="primary"
-                icon="upload"
-                onClick={() => setImportOpen(true)}
-                title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
-              >
-                Import register
-              </Button>
-              <Button
-                icon="file-text"
                 onClick={() => setCsvImportOpen(true)}
+                icon="file-text"
                 title="Import a CSV or Excel payroll register — no AI. Map the columns, save the mapping, and post a balanced payroll entry."
               >
                 From spreadsheet
@@ -133,6 +199,14 @@ export function PayrollClient() {
               >
                 {providerReady ? 'Run payroll' : 'Estimate a run'}
               </Button>
+              <Button
+                variant="primary"
+                icon="upload"
+                onClick={() => setImportOpen(true)}
+                title="Drop the processor's payroll register (PDF or image) and post a balanced payroll entry to the ledger"
+              >
+                Import register
+              </Button>
             </>
           ) : undefined
         }
@@ -141,121 +215,172 @@ export function PayrollClient() {
       {/* Honest framing: which path is real, and what the run wizard is when no
           provider is connected. Always shown so no one mistakes the estimate for
           filed payroll. */}
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="card flex items-start gap-3 p-4">
-          <div className="mt-0.5 rounded-lg bg-emerald-500/10 p-2 text-emerald-400">
-            <UploadCloud size={16} />
+      <div className={s.paths}>
+        <section className={cx(s.path, s.pathLive)} aria-labelledby="pr-path-import">
+          <div className="eyebrow">
+            01<span className="sl">//</span>Production path
           </div>
-          <div>
-            <p className="text-sm font-medium text-white">Import a payroll register</p>
-            <p className="mt-0.5 text-xs text-slate-400">
-              The production path. Run payroll at ADP, Paychex, Gusto, QuickBooks — or a spreadsheet — then drop the
-              register here. We extract the period totals and post a balanced payroll entry you review first.
+          <h2 className="t-head" id="pr-path-import">Import a payroll register</h2>
+          <p>
+            Run payroll at your processor or in a spreadsheet, then drop the register here. We extract the period totals
+            and post a balanced payroll entry you review first.
+          </p>
+          <div className={s.pathFoot}>
+            <BuildStatusBadge status="live" label="Posts real entries to the ledger" />
+          </div>
+        </section>
+        <section className={s.path} aria-labelledby="pr-path-run">
+          <div className="eyebrow">
+            02<span className="sl">//</span>In the app
+          </div>
+          <h2 className="t-head" id="pr-path-run">Run payroll here</h2>
+          {providerReady ? (
+            <p>
+              A payroll provider is connected. The wizard computes gross-to-net through the provider, holds a
+              separation-of-duties approval, and only moves money when you explicitly release.
             </p>
-            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-2xs font-medium text-emerald-300">
-              <Info size={10} /> Real entries to the ledger
-            </span>
-          </div>
-        </div>
-        <div className="card flex items-start gap-3 p-4">
-          <div
-            className={clsx(
-              'mt-0.5 rounded-lg p-2',
-              providerReady ? 'bg-indigo-500/10 text-indigo-300' : 'bg-amber-500/10 text-amber-400',
-            )}
-          >
-            {providerReady ? <PlugZap size={16} /> : <FlaskConical size={16} />}
-          </div>
-          <div>
-            <p className="text-sm font-medium text-white">Run payroll in-app</p>
+          ) : (
+            <p>
+              No payroll provider is connected yet. The wizard runs as a <b className="ink">non-binding estimate</b> using
+              flat placeholder rates. It does not calculate real taxes, withhold, file or move any money. Use it to
+              preview the workflow only.
+            </p>
+          )}
+          <div className={s.pathFoot}>
             {providerReady ? (
-              <p className="mt-0.5 text-xs text-slate-400">
-                A payroll provider is connected. The wizard computes gross-to-net through the provider, holds a
-                separation-of-duties approval, and only moves money when you explicitly release.
-              </p>
-            ) : (
-              <p className="mt-0.5 text-xs text-slate-400">
-                No payroll provider is connected yet. The wizard runs as a{' '}
-                <span className="text-amber-300">non-binding estimate</span> using flat placeholder rates — it does not
-                calculate real taxes, withhold, file, or move any money. Use it to preview the workflow only.
-              </p>
-            )}
-            {providerReady ? (
-              <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-indigo-500/10 px-2 py-0.5 text-2xs font-medium text-indigo-300">
-                <Info size={10} /> Provider connected
-              </span>
+              <Tag tone="ai">Provider connected</Tag>
             ) : (
               <BuildStatusBadge
                 status="sandbox"
                 label="Sandbox — estimate only"
                 title="No payroll provider is connected — the in-app run wizard produces a non-binding estimate, not filed payroll and no money movement."
-                className="mt-2"
               />
             )}
           </div>
-        </div>
+        </section>
       </div>
 
       {data && runs.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <Stat label="Next pay date" value={fmtDate(nextPayDate)} icon={<CalendarClock size={14} className="text-indigo-400" />} />
-          <Stat label="Awaiting approval" value={String(awaitingCount)} tone={awaitingCount > 0 ? 'warn' : undefined} />
-          <Stat
-            label="Gross in flight"
-            value={grouped ? '••••' : formatMoney(inFlightGross)}
-            mono={!grouped}
-          />
-          <Stat label="Runs" value={String(runs.length)} />
-        </div>
+        <RunPipeline aggregate steps={pipeSteps} label="Payroll runs by step" />
       )}
 
       {grouped && runs.length > 0 && (
-        <div className="flex items-center gap-2 text-2xs text-slate-500">
-          <EyeOff size={12} /> Your role has grouped payroll visibility — individual pay amounts are hidden; you see run totals and status only.
-        </div>
+        <p className={s.note}>
+          <Icon name="eye" />
+          Your role has grouped payroll visibility. Individual pay amounts are hidden; you see run status and dates only.
+        </p>
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
-        </div>
+        <TableSkeleton rows={5} cols={7} />
       ) : error ? (
-        <div className="card p-6 text-center">
-          <AlertCircle className="mx-auto text-red-400 mb-2" size={20} />
-          <p className="text-sm text-red-400">{error}</p>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="t-head">Couldn&apos;t load payroll runs.</p>
+          <p className="ink-2">{error}</p>
+          <Button onClick={() => void refetch()}>Try again</Button>
         </div>
       ) : runs.length === 0 ? (
-        <div className="card">
-          <EmptyState
-            icon={Wallet}
-            title="No payroll runs yet"
-            description={
-              canCreate
-                ? 'Import a payroll register from your processor and we post the balanced, job-costed entry to the ledger. Runs and imports appear here once started.'
-                : 'No payroll runs have been created yet. Runs will appear here once a preparer starts one.'
-            }
-            action={canCreate ? { label: 'Import payroll register', onClick: () => setImportOpen(true) } : undefined}
-          />
-        </div>
+        <EmptyState
+          title="No payroll runs yet"
+          description={
+            canCreate
+              ? 'Import a payroll register from your processor and we post the balanced, job-costed entry to the ledger. Runs and imports appear here once started.'
+              : 'No payroll runs have been created yet. Runs will appear here once a preparer starts one.'
+          }
+          action={canCreate ? { label: 'Import payroll register', onClick: () => setImportOpen(true) } : undefined}
+        />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800">
-                <SortableTh label="Pay period" active={sort.key === 'periodEnd'} dir={sort.dir} onClick={() => toggleSort('periodEnd')} />
-                <SortableTh label="Pay date" active={sort.key === 'payDate'} dir={sort.dir} onClick={() => toggleSort('payDate')} />
-                <SortableTh label="Status" active={sort.key === 'status'} dir={sort.dir} onClick={() => toggleSort('status')} />
-                <SortableTh label="Employees" align="right" active={sort.key === 'employeeCount'} dir={sort.dir} onClick={() => toggleSort('employeeCount')} />
-                <SortableTh label="Gross" align="right" active={sort.key === 'grossCents'} dir={sort.dir} onClick={() => toggleSort('grossCents')} />
-                <SortableTh label="Net" align="right" active={sort.key === 'netCents'} dir={sort.dir} onClick={() => toggleSort('netCents')} />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/30">
-              {sorted.map((row) => (
-                <RunRow key={row.id} row={row} grouped={grouped} onClick={() => setDetailId(row.id)} />
-              ))}
-            </tbody>
-          </table>
+        <div className={s.stack}>
+          <div className={s.toolbar}>
+            <Tabs<Filter>
+              aria-label="Run status"
+              value={filter}
+              onChange={setFilter}
+              items={FILTERS.map((f) => ({
+                value: f.value,
+                label: f.label,
+                count: runs.filter((r) => f.test(r.status)).length,
+              }))}
+            />
+            <div className={s.grow} />
+            <span className="t-cap tnum">
+              {visible.length} of {runs.length} run{runs.length === 1 ? '' : 's'}
+            </span>
+          </div>
+
+          {visible.length === 0 ? (
+            <EmptyState
+              title="No runs match"
+              description={`No payroll runs are ${activeFilter.label.toLowerCase()} right now.`}
+              action={{ label: 'Show all runs', onClick: () => setFilter('all') }}
+            />
+          ) : (
+            <div>
+              <div className={s.tableWrap}>
+                <table className="tbl tbl-q" aria-label="Payroll runs">
+                  <colgroup>
+                    <col />
+                    <col style={{ width: 128 }} />
+                    <col style={{ width: 176 }} />
+                    <col style={{ width: 120 }} />
+                    <col style={{ width: 112 }} />
+                    <col style={{ width: 144 }} />
+                    <col style={{ width: 144 }} />
+                    <col style={{ width: 40 }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      {sortHead('Pay period', 'periodEnd')}
+                      {sortHead('Pay date', 'payDate')}
+                      {sortHead('Status', 'status')}
+                      <th scope="col">Provider</th>
+                      {sortHead('Employees', 'employeeCount', true)}
+                      {sortHead('Gross', 'grossCents', true)}
+                      {sortHead('Net', 'netCents', true)}
+                      <th scope="col"><span className="sr">Open</span></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visible.map((row, i) => {
+                      const { ref, 'data-active': active } = rowProps(i);
+                      return (
+                        <RunRow
+                          key={row.id}
+                          rowRef={ref}
+                          active={active}
+                          row={row}
+                          grouped={grouped}
+                          onClick={() => {
+                            setActiveIndex(i);
+                            setDetailId(row.id);
+                          }}
+                        />
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={4}>
+                        Total · <span className="tnum">{visible.length}</span> run{visible.length === 1 ? '' : 's'}
+                      </td>
+                      <td className="n" />
+                      <td className="n">{grouped ? '••••' : formatMoney(totalGross)}</td>
+                      <td className="n">{grouped ? '••••' : formatMoney(totalNet)}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <Keyhints
+                className={s.hints}
+                hints={[
+                  { chord: 'j k', label: 'Move' },
+                  { chord: 'enter', label: 'Open run' },
+                ]}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -299,89 +424,44 @@ export function PayrollClient() {
   );
 }
 
-function RunRow({ row, grouped, onClick }: { row: RunListItem; grouped: boolean; onClick: () => void }) {
-  return (
-    <tr className="hover:bg-slate-800/20 cursor-pointer" onClick={onClick}>
-      <td className="px-4 py-2.5 text-sm text-slate-200 whitespace-nowrap">
-        {fmtDate(row.periodStart)} <span className="text-slate-600">→</span> {fmtDate(row.periodEnd)}
-      </td>
-      <td className="px-4 py-2.5 text-sm text-slate-400 whitespace-nowrap">{fmtDate(row.payDate)}</td>
-      <td className="px-4 py-2.5">
-        <RunStatusBadge status={row.status} />
-      </td>
-      <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums text-slate-300">{row.employeeCount}</td>
-      <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums text-slate-200">
-        {grouped ? '••••' : formatMoney(row.grossCents ?? 0)}
-      </td>
-      <td className="px-4 py-2.5 text-right text-sm font-mono tabular-nums text-emerald-400">
-        {grouped ? '••••' : formatMoney(row.netCents ?? 0)}
-      </td>
-    </tr>
-  );
-}
-
-function SortableTh({
-  label,
-  align = 'left',
+function RunRow({
+  row,
+  grouped,
   active,
-  dir,
+  rowRef,
   onClick,
 }: {
-  label: string;
-  align?: 'left' | 'right';
+  row: RunListItem;
+  grouped: boolean;
   active: boolean;
-  dir: SortDir;
+  rowRef: (el: HTMLElement | null) => void;
   onClick: () => void;
 }) {
+  const attn = row.status === 'FAILED' || row.status === 'RETURNED' || row.status === 'REJECTED';
   return (
-    <th className={clsx('px-4 py-2.5', align === 'right' ? 'text-right' : 'text-left')}>
-      <button
-        onClick={onClick}
-        className={clsx(
-          'inline-flex items-center gap-1 text-2xs font-semibold uppercase tracking-wider transition-colors',
-          align === 'right' && 'flex-row-reverse',
-          active ? 'text-slate-300' : 'text-slate-500 hover:text-slate-300',
-        )}
-      >
-        {label}
-        {active ? (
-          dir === 'asc' ? <ArrowUp size={11} /> : <ArrowDown size={11} />
-        ) : (
-          <ArrowUpDown size={11} className="opacity-50" />
-        )}
-      </button>
-    </th>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-  mono,
-  icon,
-}: {
-  label: string;
-  value: string;
-  tone?: 'warn';
-  mono?: boolean;
-  icon?: ReactNode;
-}) {
-  return (
-    <div className="card p-3">
-      <p className="flex items-center gap-1.5 text-2xs uppercase tracking-wider text-slate-500 font-semibold">
-        {icon}
-        {label}
-      </p>
-      <p
-        className={clsx(
-          'text-lg font-semibold mt-1',
-          mono && 'font-mono tabular-nums',
-          tone === 'warn' ? 'text-amber-400' : 'text-white',
-        )}
-      >
-        {value}
-      </p>
-    </div>
+    <tr
+      ref={rowRef}
+      className={cx('q-row', active && 'is-cursor', attn && 'is-attn')}
+      aria-current={active ? 'true' : undefined}
+      style={{ cursor: 'pointer' }}
+      onClick={onClick}
+    >
+      <td>
+        <span className="l1 tnum">
+          {fmtDate(row.periodStart)} <span className="ink-3">→</span> {fmtDate(row.periodEnd)}
+        </span>
+      </td>
+      <td className="tnum">{fmtDate(row.payDate)}</td>
+      <td>
+        <RunStatusBadge status={row.status} />
+      </td>
+      <td className="ink-2">{providerLabel(row.provider)}</td>
+      <td className="n">{row.employeeCount}</td>
+      <td className="n">{grouped ? '••••' : formatMoney(row.grossCents ?? 0)}</td>
+      <td className="n">{grouped ? '••••' : formatMoney(row.netCents ?? 0)}</td>
+      <td className="n ink-3" aria-hidden="true">
+        <Icon name="right" />
+      </td>
+    </tr>
   );
 }

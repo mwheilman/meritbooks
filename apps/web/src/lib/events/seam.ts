@@ -27,16 +27,22 @@ type DB = SupabaseClient;
 export const SUPPORTED_SCHEMA_VERSIONS: Readonly<Record<string, readonly number[]>> = {
   JOB_BILLING: [1, 2],
   JOB_DEPOSIT_REQUEST: [1],
+  // migration 194 (seam part 2)
+  JOB_COMMITMENT: [1],
+  JOB_TIME: [1],
+  JOB_PROGRESS: [1, 2],
 };
 
 /** Projects → Books event types Books consumes today. */
-export const CONSUMED_PROJECTS_EVENT_TYPES = ['JOB_BILLING', 'JOB_PROGRESS', 'JOB_DEPOSIT_REQUEST', 'DEPT_INVOICE_ISSUE'] as const;
+export const CONSUMED_PROJECTS_EVENT_TYPES = [
+  'JOB_BILLING', 'JOB_PROGRESS', 'JOB_DEPOSIT_REQUEST', 'DEPT_INVOICE_ISSUE', 'JOB_COMMITMENT', 'JOB_TIME',
+] as const;
 
 /**
  * Accepted by Books (BOOKS-PROJECTS-INTERACTION.md §2) but not built yet: they wait,
  * pending, instead of being rejected. JOB_COST is Books → Projects (Projects drains it).
  */
-export const PLANNED_PROJECTS_EVENT_TYPES = ['JOB_COMMITMENT', 'JOB_TIME', 'JOB_MATERIAL', 'JOB_PAYABLE_REQUEST', 'JOB_COST'] as const;
+export const PLANNED_PROJECTS_EVENT_TYPES = ['JOB_MATERIAL', 'JOB_PAYABLE_REQUEST', 'JOB_COST'] as const;
 
 export type SeamErrorCode =
   | 'UNSUPPORTED_SCHEMA_VERSION'
@@ -58,6 +64,13 @@ export type SeamErrorCode =
   | 'INVOICE_FAILED'
   | 'GL_POST_FAILED'
   | 'DEPOSIT_FAILED'
+  | 'JOB_NOT_FOUND'
+  | 'VENDOR_NOT_FOUND'
+  | 'INVALID_PAYLOAD'
+  | 'INVALID_HOURS'
+  | 'COMMITMENT_FAILED'
+  | 'LABOR_FAILED'
+  | 'PROGRESS_FAILED'
   | 'CONSUMER_ERROR';
 
 export class SeamRejection extends Error {
@@ -124,6 +137,27 @@ export async function ackClaimedEvent(db: DB, eventRowId: string, token: string,
     error: null,
     error_code: null,
     ack_meta: ack.meta ?? null,
+    processed_at: new Date().toISOString(),
+  });
+}
+
+/**
+ * Ack a claimed NON-INVOICE event (JOB_COMMITMENT, JOB_TIME, JOB_PROGRESS v2) as processed:
+ * status + processed_at + ack_meta (the Books ids), error cleared. invoice_* stay null.
+ */
+export async function ackClaimedNonInvoiceEvent(
+  db: DB,
+  eventRowId: string,
+  token: string,
+  meta: Record<string, unknown>,
+  glEntryId: string | null = null,
+): Promise<boolean> {
+  return finalizeClaimedEvent(db, eventRowId, token, {
+    status: 'processed',
+    gl_entry_id: glEntryId,
+    error: null,
+    error_code: null,
+    ack_meta: meta,
     processed_at: new Date().toISOString(),
   });
 }

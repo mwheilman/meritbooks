@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { Loader2, Check } from 'lucide-react';
+import { useState, useEffect, useCallback, type CSSProperties } from 'react';
+import { Button, Field, InlineNotice, Input, Textarea } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks';
 
 /**
@@ -10,6 +10,9 @@ import { addToast } from '@/hooks';
  * ref customer_id), job form (JOB), the invoice drawer (INVOICE), or an
  * invoice-type manager (INVOICE_TYPE). Leaving a field blank clears the override
  * so it falls back up the cascade (invoice → type → job → customer → entity).
+ *
+ * merit-ui (kit classes + inline layout only): this component renders on ported and
+ * still-bridged pages alike, so it carries no Tailwind utilities.
  */
 const SLOT_LABELS: { slot: string; label: string; multiline?: boolean }[] = [
   { slot: 'customer_message', label: 'Invoice message', multiline: true },
@@ -19,21 +22,30 @@ const SLOT_LABELS: { slot: string; label: string; multiline?: boolean }[] = [
   { slot: 'payment_instructions', label: 'Payment instructions', multiline: true },
 ];
 
+const ROW: CSSProperties = { display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 32px', gap: 8, alignItems: 'end' };
+
 export function InvoiceTextOverrides({ scope, refId, title }: { scope: 'CUSTOMER' | 'JOB' | 'INVOICE_TYPE' | 'INVOICE'; refId: string; title?: string }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [savingSlot, setSavingSlot] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setLoadError(null);
     fetch(`/api/invoice-text?scope=${scope}&ref=${encodeURIComponent(refId)}`)
-      .then((r) => r.json())
-      .then((b) => { if (alive) setValues(b.values ?? {}); })
-      .catch(() => {})
+      .then(async (r) => {
+        const b = await r.json().catch(() => ({}));
+        if (!alive) return;
+        if (!r.ok) { setLoadError(b.error ?? 'The saved text could not be loaded.'); return; }
+        setValues(b.values ?? {});
+      })
+      .catch(() => { if (alive) setLoadError('Network error while loading the text.'); })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
-  }, [scope, refId]);
+  }, [scope, refId, attempt]);
 
   const saveSlot = useCallback(async (slot: string) => {
     setSavingSlot(slot);
@@ -48,28 +60,47 @@ export function InvoiceTextOverrides({ scope, refId, title }: { scope: 'CUSTOMER
     } finally { setSavingSlot(null); }
   }, [scope, refId, values]);
 
-  if (loading) return <div className="flex items-center gap-2 text-slate-400 text-sm py-3"><Loader2 size={14} className="animate-spin" /> Loading text…</div>;
+  if (loading) {
+    return (
+      <div aria-busy="true" style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
+        <span className="mb-skel" style={{ width: '40%' }} aria-hidden="true" />
+        <span className="mb-skel" style={{ width: '100%', height: 32 }} aria-hidden="true" />
+        <span className="mb-skel" style={{ width: '100%', height: 32 }} aria-hidden="true" />
+        <span className="sr" role="status">Loading text…</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <InlineNotice tone="neg" title="Couldn't load the invoice text.">
+        {loadError} <Button variant="quiet" onClick={() => setAttempt((a) => a + 1)}>Try again</Button>
+      </InlineNotice>
+    );
+  }
 
   return (
-    <div className="space-y-3">
-      {title && <div className="text-xs font-medium text-slate-400 uppercase tracking-wide">{title}</div>}
-      <p className="text-2xs text-slate-500">Anything set here overrides the default for this {scope.toLowerCase().replace('_', ' ')}. Leave blank to use the inherited text.</p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {title && <div className="eyebrow">{title}</div>}
+      <p className="t-cap">Anything set here overrides the default for this {scope.toLowerCase().replace('_', ' ')}. Leave blank to use the inherited text.</p>
       {SLOT_LABELS.map((f) => (
-        <div key={f.slot}>
-          <label className="block text-2xs text-slate-400 mb-1">{f.label}</label>
-          <div className="flex items-start gap-2">
+        <div key={f.slot} style={ROW}>
+          <Field label={f.label}>
             {f.multiline ? (
-              <textarea rows={2} value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))}
-                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-white" placeholder="Inherited" />
+              <Textarea rows={2} value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))} placeholder="Inherited" />
             ) : (
-              <input value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))}
-                className="flex-1 px-2.5 py-1.5 rounded-md bg-slate-800 border border-slate-700 text-sm text-white" placeholder="Inherited" />
+              <Input value={values[f.slot] ?? ''} onChange={(e) => setValues((v) => ({ ...v, [f.slot]: e.target.value }))} placeholder="Inherited" />
             )}
-            <button onClick={() => saveSlot(f.slot)} disabled={savingSlot === f.slot}
-              className="mt-0.5 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs bg-slate-700 text-slate-200 hover:bg-slate-600">
-              {savingSlot === f.slot ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-            </button>
-          </div>
+          </Field>
+          <Button
+            iconOnly
+            icon="check"
+            onClick={() => saveSlot(f.slot)}
+            disabled={savingSlot === f.slot}
+            aria-busy={savingSlot === f.slot || undefined}
+            aria-label={`Save ${f.label.toLowerCase()}`}
+            title={`Save ${f.label.toLowerCase()}`}
+          />
         </div>
       ))}
     </div>

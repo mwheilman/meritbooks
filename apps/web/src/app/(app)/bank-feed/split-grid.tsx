@@ -356,7 +356,14 @@ export function SplitGrid({ transaction, seedAccount, vendorName, notes, onUnspl
 
   // ── render ─────────────────────────────────────────────────────────────────
   if (stateLoading && !state) {
-    return <p className="t-cap" role="status">Loading the split…</p>;
+    return (
+      <div style={S.stack} aria-busy="true">
+        <span className="mb-skel" style={{ width: 120, height: 12 }} aria-hidden="true" />
+        <span className="mb-skel" style={{ height: 72 }} aria-hidden="true" />
+        <span className="mb-skel" style={{ height: 72 }} aria-hidden="true" />
+        <span className="sr" role="status">Loading the split</span>
+      </div>
+    );
   }
   if (stateError) {
     return (
@@ -662,7 +669,7 @@ function AccountPicker({ n, value, vendorId, onChange }: { n: number; value: Acc
         <div
           id={listId}
           role="listbox"
-          style={{ position: 'absolute', zIndex: 20, top: 34, left: 0, right: 0, maxHeight: 260, overflowY: 'auto', background: 'var(--white)', border: '1px solid var(--line-2)', boxShadow: '0 8px 24px rgba(10,22,40,.12)' }}
+          style={{ position: 'absolute', zIndex: 20, top: 34, left: 0, right: 0, maxHeight: 260, overflowY: 'auto', background: 'var(--white)', border: '1px solid var(--midnight)', boxShadow: 'var(--float)' }}
         >
           {isLoading && !data && <div className="t-cap" style={{ padding: 8 }}>Searching…</div>}
           {data && options.length === 0 && <div className="t-cap" style={{ padding: 8 }}>No accounts found</div>}

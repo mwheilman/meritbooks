@@ -1,0 +1,390 @@
+/* Chart of accounts — layout only; every visual token comes from the kit (system.css). */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.toolbar > :global(.select) {
+  width: auto;
+  min-width: 136px;
+}
+
+.grow {
+  flex: 1;
+  min-width: 16px;
+}
+
+.searchBox {
+  width: 280px;
+  max-width: 100%;
+}
+
+.period {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period > :global(.select) {
+  width: auto;
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+/* ── Tables (grouped + list) ──────────────────────────────────────── */
+.tableWrap {
+  border: 1px solid var(--line);
+  background: var(--white);
+  max-height: calc(100vh - 300px);
+  min-height: 240px;
+  overflow: auto;
+}
+
+.tableWrap > :global(.tbl) {
+  width: 100%;
+  min-width: 840px;
+}
+
+.viewBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.viewActs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.acctCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.acctCell > :global(.mb-trunc) {
+  min-width: 0;
+}
+
+.num {
+  flex: none;
+  min-width: 56px;
+  font-weight: 600;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Hierarchy rows: type (Canvas band) → sub-type → group → account. */
+.groupBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.groupBtn:focus-visible {
+  outline: 2px solid var(--electric);
+  outline-offset: 2px;
+}
+
+.typeRow > td {
+  background: var(--canvas);
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.subRow > td {
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.grpRow > td {
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.lvl1 {
+  padding-left: 48px !important;
+}
+
+.lvl2 {
+  padding-left: 72px !important;
+}
+
+.lvl3 {
+  padding-left: 104px !important;
+}
+
+.chev {
+  display: inline-flex;
+  color: var(--ink-3);
+  transition: transform var(--fast) var(--ease);
+}
+
+.chevOpen {
+  transform: rotate(90deg);
+}
+
+.inactive > td {
+  color: var(--ink-3);
+}
+
+.ledgerBtn {
+  opacity: 0;
+  transition: opacity var(--fast) var(--ease);
+}
+
+:global(.q-row):hover .ledgerBtn,
+:global(.q-row.is-cursor) .ledgerBtn,
+.ledgerBtn:focus-visible {
+  opacity: 1;
+}
+
+.hints {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 8px 0 0;
+}
+
+.loadingNote {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Static tree (account-tree.tsx) ───────────────────────────────── */
+.treeStats {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.tree {
+  border: 1px solid var(--line);
+  background: var(--white);
+  overflow-x: auto;
+}
+
+.treeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  transition: background-color var(--fast) var(--ease);
+}
+
+button.treeRow:hover {
+  background: var(--grey-100);
+}
+
+button.treeRow:focus-visible {
+  outline: 2px solid var(--electric);
+  outline-offset: -2px;
+}
+
+.treeType {
+  background: var(--canvas);
+  font-weight: 600;
+}
+
+.treeSub {
+  padding-left: 48px;
+  font-weight: 600;
+}
+
+.treeGroup {
+  padding-left: 72px;
+  color: var(--ink-2);
+}
+
+.treeAcct {
+  padding-left: 104px;
+  min-width: 480px;
+}
+
+.treeEnd {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── Request account form ─────────────────────────────────────────── */
+.form {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+}
+
+.formHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--electric);
+}
+
+.formBody {
+  padding: 24px;
+}
+
+.formBody > * + * {
+  margin-top: var(--s2);
+}
+
+.grid3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .grid3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+.checks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+
+.formFoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ── Hover peek ───────────────────────────────────────────────────── */
+.peek {
+  padding: 16px;
+}
+
+.peekHead {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.peekBal {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.peekBal b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.peekList {
+  list-style: none;
+  margin-top: 8px;
+}
+
+.peekList li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.peekState {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 16px;
+}
+
+/* ── GL detail dialog ─────────────────────────────────────────────── */
+.glHead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.glKv {
+  min-width: 220px;
+}
+
+.glWrap {
+  border: 1px solid var(--line);
+  max-height: max(200px, calc(100vh - 440px));
+  overflow: auto;
+}
+
+.glWrap > :global(.tbl) {
+  width: 100%;
+  min-width: 760px;
+}
+
+.glWrap :global(tfoot) td {
+  position: sticky;
+  bottom: 0;
+  background: var(--warm);
+  border-top: 1px solid var(--midnight);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.glState {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 0;
+}

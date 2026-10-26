@@ -1,7 +1,9 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { displayInvoiceStatus, summarizeDelivery, type DeliveryEvent } from '@/lib/invoices/delivery-state';
+import { summarizeDelivery, type DeliveryEvent } from '@/lib/invoices/delivery-state';
+import { deriveInvoiceStatus, hasReachedCustomer } from '@/lib/invoices/display-status';
+import { getOrgToday } from '@/lib/dates/org-today';
 import { requireAuthedContext } from '@/lib/api-handler';
 import { requirePermission } from '@/lib/rbac/require-permission';
 import { serviceWriter, assertOrgRefs, isWriteScopeError } from '@/lib/db/scoped-writer';
@@ -89,7 +91,20 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const events = (eventRows ?? []) as DeliveryEvent[];
   // Header status and Delivery come from the same facts (lib/invoices/delivery-state.ts).
   const delivery = summarizeDelivery(events, (inv as { sent_at?: string | null }).sent_at ?? null);
-  const display = displayInvoiceStatus(String(inv.status), delivery);
+  // The status word: THE derivation the list uses too (lib/invoices/display-status.ts) —
+  // overdue from the due date on the org's calendar, "Issued" only when never delivered.
+  const today = await getOrgToday(supabase, orgId);
+  const sentAtCol = (inv as { sent_at?: string | null }).sent_at ?? null;
+  const display = deriveInvoiceStatus(
+    {
+      status: String(inv.status),
+      dueDate: inv.due_date as string | null,
+      balanceCents: Number(inv.balance_cents ?? 0),
+      amountPaidCents: Number(inv.amount_paid_cents ?? 0),
+      sentToCustomer: hasReachedCustomer(events, sentAtCol),
+    },
+    today,
+  );
 
   // Customer payments applied to this invoice (the "cash-application detail" the
   // drawer surfaces, each with its own ledger-grounded Explain). payment_applications
@@ -167,8 +182,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     jobLabel: job ? `${job.job_number} · ${job.name}` : null,
     lines,
     delivery,
-    displayStatus: display.status,
+    displayStatus: display.key,
+    displayStatusLabel: display.label,
+    displayStatusDetail: display.detail,
     displayStatusHint: display.hint,
+    daysOverdue: display.daysOverdue,
     payments,
   });
 }

@@ -1,0 +1,67 @@
+/* Recurring journal entries (a tab of /journal-entries) — layout only, kit tokens only. */
+
+.stack > * + * {
+  margin-top: var(--s2);
+}
+
+.section {
+  border: 1px solid var(--line);
+  background: var(--white);
+}
+
+.sectionAttn {
+  border-color: var(--warn);
+  box-shadow: inset 3px 0 var(--warn);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 48px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+
+.sectionTitle h2 {
+  font: 600 var(--t-15) / var(--lh-15) var(--f-text);
+  color: var(--ink);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.scroll > :global(.tbl) {
+  width: 100%;
+  min-width: 840px;
+}
+
+.cellRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.state {
+  border: 1px solid var(--line-2);
+  background: var(--white);
+  padding: 32px 24px;
+}
+
+.state > * + * {
+  margin-top: 8px;
+}
+
+.how {
+  max-width: 96ch;
+}

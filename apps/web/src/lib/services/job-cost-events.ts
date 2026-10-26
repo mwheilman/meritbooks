@@ -31,6 +31,17 @@ export interface JobCostEventInput {
   sourceRef: string;
   glEntryId?: string | null;
   memo?: string | null;
+  /**
+   * Additive enrichment keys (seam v2, BOOKS-SEAM-CHANGES B / JOB_COST row; Projects 1103
+   * resolves them — an unresolvable value is kept verbatim in its *_ref column). Omitted from
+   * the payload when absent, so the FROZEN key set is unchanged for callers that don't send them.
+   */
+  costCodeId?: string | null;
+  costCode?: string | null;
+  commitmentLineId?: string | null;
+  vendorId?: string | null;
+  employeeId?: string | null;
+  description?: string | null;
 }
 
 export interface EmitOptions {
@@ -91,6 +102,12 @@ export async function emitJobCostEvent(_db: DB, input: JobCostEventInput, opts: 
     source_ref: input.sourceRef,
     gl_entry_id: input.glEntryId ?? null,
     memo: input.memo ?? null,
+    ...(input.costCodeId ? { cost_code_id: input.costCodeId } : {}),
+    ...(input.costCode ? { cost_code: input.costCode } : {}),
+    ...(input.commitmentLineId ? { commitment_line_id: input.commitmentLineId } : {}),
+    ...(input.vendorId ? { vendor_id: input.vendorId } : {}),
+    ...(input.employeeId ? { employee_id: input.employeeId } : {}),
+    ...(input.description ? { description: input.description } : {}),
   };
 
   const { error } = await db.schema('core').from('events').insert({

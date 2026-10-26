@@ -36,8 +36,11 @@ export const GET = apiQueryHandler(intelligenceListQuery, async (q, { userId, or
     if (ids.length > 0) {
       const { data } = await supabase.from('document_intelligence').select('*').eq('org_id', orgId).in('document_id', ids);
       rows = (data ?? []) as IntelligenceDto[];
-    } else if (q.status) {
-      const { data } = await supabase.from('document_intelligence').select('*').eq('org_id', orgId).eq('status', q.status).order('created_at', { ascending: false }).limit(200);
+    } else if (q.status || q.doc_class) {
+      let sq = supabase.from('document_intelligence').select('*').eq('org_id', orgId);
+      if (q.status) sq = sq.eq('status', q.status);
+      if (q.doc_class) sq = sq.eq('doc_class', q.doc_class);
+      const { data } = await sq.order('created_at', { ascending: false }).limit(200);
       rows = (data ?? []) as IntelligenceDto[];
     }
     const docIds = rows.map((r) => r.document_id);
@@ -53,12 +56,16 @@ export const GET = apiQueryHandler(intelligenceListQuery, async (q, { userId, or
       links = (l.data ?? []) as LinkDto[];
     }
 
-    const [needs, pend, deferred, unread, total] = await Promise.all([
+    const [needs, pend, deferred, unread, total, allDocs, unfiled] = await Promise.all([
       supabase.from('document_intelligence').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'needs_review'),
       supabase.from('document_proposals').select('id', { count: 'exact', head: true }).eq('org_id', orgId).eq('status', 'pending').neq('mode', 'route'),
       supabase.from('document_intelligence').select('id', { count: 'exact', head: true }).eq('org_id', orgId).not('next_retry_at', 'is', null),
       supabase.from('documents').select('id', { count: 'exact', head: true }).eq('org_id', orgId).or('entity_type.is.null,entity_type.eq.location'),
       supabase.from('document_intelligence').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      // The band tiles: every stored file, and the ones not linked to a record (the same
+      // `entity_type IS NULL` rule as GET /api/documents?linked=unfiled).
+      supabase.from('documents').select('id', { count: 'exact', head: true }).eq('org_id', orgId),
+      supabase.from('documents').select('id', { count: 'exact', head: true }).eq('org_id', orgId).is('entity_type', null),
     ]);
 
     const data = await maskForeignDuplicates(supabase, rows.map(presentIntel));
@@ -71,6 +78,8 @@ export const GET = apiQueryHandler(intelligenceListQuery, async (q, { userId, or
         proposals_pending: pend.count ?? 0,
         ai_deferred: deferred.count ?? 0,
         not_analyzed: Math.max(0, (unread.count ?? 0) - (total.count ?? 0)),
+        documents: allDocs.count ?? 0,
+        unfiled: unfiled.count ?? 0,
       },
     });
   } catch (e) {

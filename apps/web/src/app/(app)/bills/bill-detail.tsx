@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import {
-  X, Loader2, Check, ShieldAlert, Briefcase, UserCheck, CalendarClock,
-  DollarSign, Ban, AlertCircle,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { useState, useCallback } from 'react';
+import { Button, Field, InlineNotice, Input, PanelSection, Select, Tag, cx } from '@meritbooks/merit-ui';
 import { StatusBadge, CurrencyTag } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
+import { DetailDrawer, DetailTable } from '@/components/detail-drawer';
 import { AttachmentsPanel } from '@/components/documents/attachments-panel';
 import { ExplainPanel } from '@/components/explain-panel';
+import s from './bills.module.css';
 
 interface DetailLine {
   id: string;
@@ -91,11 +89,7 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
   );
   const employees = teamData?.data ?? [];
 
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  // Escape closes the drawer (handled by DetailDrawer).
 
   const post = useCallback(async (payload: Record<string, unknown>, label: string) => {
     setBusy(label);
@@ -127,272 +121,292 @@ export function BillDetail({ billId, onClose, onChanged }: { billId: string; onC
   const billCcy = (bill?.currency ?? 'USD').toUpperCase();
   const homeCcy = (data?.homeCurrency ?? 'USD').toUpperCase();
   const isForeignBill = billCcy !== homeCcy;
+  const vendorName = bill ? (bill.vendor?.display_name ?? bill.vendor?.name ?? 'Vendor') : 'Bill';
+
+  const canSchedule = !!bill && (bill.status === 'APPROVED' || bill.status === 'SCHEDULED');
+  const canPay = !!bill && ['APPROVED', 'SCHEDULED', 'PARTIALLY_PAID'].includes(bill.status);
+  const canVoid = !!bill && bill.status !== 'VOIDED' && bill.status !== 'PAID' && bill.amount_paid_cents === 0;
+  const isFinal = !!bill && (bill.status === 'PAID' || bill.status === 'VOIDED');
 
   return (
-    <>
-      <div className="fixed inset-0 bg-black/40 z-40" onClick={onClose} />
-      <div className="fixed top-0 right-0 h-full w-[540px] max-w-full bg-surface-900 border-l border-slate-800 z-50 flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-white">Bill detail</h2>
-            {bill && <StatusBadge status={bill.status} />}
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:text-slate-200 hover:bg-white/[0.04]"><X size={18} /></button>
+    <DetailDrawer
+      open
+      onClose={onClose}
+      title={bill ? vendorName : 'Bill'}
+      subtitle={bill ? [bill.bill_number ?? 'No bill number', bill.location?.short_code, `billed ${bill.bill_date}`].filter(Boolean).join(' · ') : null}
+      isLoading={isLoading && !data}
+      headerRight={bill ? <StatusBadge status={bill.status} /> : undefined}
+      width="lg"
+    >
+      {error || !bill ? (
+        <div className="wg-state" role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <span className="t-head">This bill didn&apos;t load</span>
+          <p>{error ?? 'Bill not found'}</p>
+          <Button onClick={() => void refetch()}>Try again</Button>
         </div>
+      ) : (
+        <>
+          {/* Summary */}
+          <dl className={s.summary}>
+            <dt className="ink-2">Total</dt>
+            <dd>
+              <span className={s.due}>
+                <CurrencyTag code={billCcy} homeCurrency={homeCcy} onlyForeign />
+                <span className={s.summaryTotal}>{formatMoney(bill.total_cents, { currency: billCcy })}</span>
+              </span>
+            </dd>
+            <dt className="ink-2">Paid</dt>
+            <dd>{formatMoney(bill.amount_paid_cents, { currency: billCcy })}</dd>
+            <dt className={s.strong}>Balance due</dt>
+            <dd className={s.strong}>{formatMoney(balance, { currency: billCcy })}</dd>
+            <dt className="ink-2">Due</dt>
+            <dd>{bill.due_date}</dd>
+            {bill.scheduled_payment_date && (
+              <>
+                <dt className="ink-2">Scheduled to pay</dt>
+                <dd>{bill.scheduled_payment_date}</dd>
+              </>
+            )}
+            {isForeignBill && (
+              <dd className="t-cap" style={{ gridColumn: '1 / -1', textAlign: 'left' }}>
+                Amounts in {billCcy} · reported in {homeCcy}
+                {bill.fx_rate ? ` at rate ${bill.fx_rate}` : ''}
+              </dd>
+            )}
+          </dl>
 
-        {isLoading ? (
-          <div className="flex-1 flex items-center justify-center"><Loader2 className="w-6 h-6 text-emerald-400 animate-spin" /></div>
-        ) : error || !bill ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-2 px-6 text-center">
-            <AlertCircle className="w-8 h-8 text-red-400" />
-            <p className="text-sm text-red-400">{error ?? 'Bill not found'}</p>
-          </div>
-        ) : (
-          <>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-              {/* Summary */}
-              <div className="rounded-lg bg-slate-800/40 p-4 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-200 font-medium">{bill.vendor?.display_name ?? bill.vendor?.name ?? 'Vendor'}</span>
-                  <span className="text-sm font-mono text-slate-400">{bill.bill_number ?? '--'}</span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>{bill.location?.short_code ?? '--'} · billed {bill.bill_date}</span>
-                  <span>due {bill.due_date}</span>
-                </div>
-                <div className="flex items-center justify-between pt-1">
-                  <span className="text-2xs text-slate-500 uppercase tracking-wider">Total</span>
-                  <span className="inline-flex items-center gap-2">
-                    <CurrencyTag code={billCcy} homeCurrency={homeCcy} onlyForeign />
-                    <span className="text-lg font-mono font-semibold text-white">{formatMoney(bill.total_cents, { currency: billCcy })}</span>
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500">Paid {formatMoney(bill.amount_paid_cents, { currency: billCcy })}</span>
-                  <span className={clsx('font-mono', balance > 0 ? 'text-amber-400' : 'text-emerald-400')}>Balance {formatMoney(balance, { currency: billCcy })}</span>
-                </div>
-                {isForeignBill && (
-                  <div className="text-2xs text-slate-500 pt-0.5">
-                    Amounts in {billCcy} · reported in {homeCcy}
-                    {bill.fx_rate ? ` at rate ${bill.fx_rate}` : ''}
-                  </div>
-                )}
-              </div>
-
-              {bill.status === 'ON_HOLD' && (
-                <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-3 space-y-2">
-                  <div className="flex items-start gap-2">
-                    <ShieldAlert size={14} className="text-red-400 mt-0.5" />
-                    <p className="text-xs text-red-400">{bill.payment_hold_reason ?? 'On hold for vendor compliance. Resolve the vendor docs, or release this bill with an override.'}</p>
-                  </div>
-                  {!showRelease ? (
-                    <button onClick={() => setShowRelease(true)} className="text-2xs font-medium text-red-300 hover:text-red-200 underline">
-                      Release hold (override)
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <input value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="Reason for the override…"
-                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white" />
-                      <button disabled={!holdReason || busy !== null}
-                        onClick={() => post({ action: 'release_hold', reason: holdReason }, 'Release hold')}
-                        className="px-2.5 py-1.5 rounded-md text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-40">Release</button>
-                      <button onClick={() => { setShowRelease(false); setHoldReason(''); }} className="text-2xs text-slate-400 hover:text-slate-200">Cancel</button>
-                    </div>
-                  )}
-                  <p className="text-[10px] text-slate-500">One-time release for this bill. Audit-logged.</p>
-                </div>
-              )}
-              {bill.status === 'VOIDED' && bill.void_reason && (
-                <div className="px-3 py-2 rounded-lg bg-slate-800/60 text-xs text-slate-400">Voided: {bill.void_reason}</div>
-              )}
-
-              {/* AP policy evaluation — deterministic engine vs the ACTIVE ruleset */}
-              {data?.policy?.active && (data.policy.violations.length > 0 || data.policy.requiredApprovalTier) && (
-                <div className={clsx(
-                  'rounded-lg border p-3 space-y-2',
-                  data.policy.blocked ? 'border-red-500/30 bg-red-500/10' : 'border-amber-500/25 bg-amber-500/[0.05]'
-                )}>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ShieldAlert size={14} className={data.policy.blocked ? 'text-red-400' : 'text-amber-400'} />
-                      <span className="text-xs font-semibold text-slate-200">
-                        AP policy: {data.policy.active.name} v{data.policy.active.version}
-                      </span>
-                    </div>
-                    {data.policy.requiredApprovalTier && (
-                      <span className="text-2xs font-mono text-slate-300 bg-slate-800/70 rounded px-2 py-0.5">
-                        Requires {data.policy.requiredApprovalTier}
-                      </span>
-                    )}
-                  </div>
-                  {data.policy.violations.length === 0 ? (
-                    <p className="text-[11px] text-emerald-300">No policy violations.</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {data.policy.violations.map((v, i) => (
-                        <li key={i} className="flex items-start gap-2 text-[11px]">
-                          <span className={clsx(
-                            'mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[9px] font-semibold',
-                            v.severity === 'BLOCK' ? 'bg-red-500/20 text-red-300' : 'bg-amber-500/20 text-amber-300'
-                          )}>{v.severity}</span>
-                          <span className="text-slate-300">{v.message}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {data.policy.blocked && (
-                    <p className="text-[10px] text-red-300/80">
-                      This bill is BLOCKED by policy. Approval requires an audited override reason.
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {/* Approver routing */}
-              <div>
-                <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Routed approver</label>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-md bg-slate-800/60 border border-slate-700">
-                  <UserCheck size={14} className="text-slate-500" />
-                  <span className="text-sm text-slate-200">
-                    {bill.status === 'PENDING' || bill.status === 'ON_HOLD'
-                      ? (data?.approver.type ? APPROVER_LABEL[data.approver.type] : 'Accounting')
-                      : APPROVER_LABEL[data?.approver.type ?? ''] ?? 'Accounting'}
-                    {data?.approver.name && <span className="text-slate-500 ml-1">· {data.approver.name}</span>}
-                  </span>
-                </div>
-                {(bill.status === 'PENDING' || bill.status === 'ON_HOLD') && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <select value={overrideType} onChange={(e) => { setOverrideType(e.target.value); setOverrideRef(''); }}
-                      className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
-                      <option value="">Re-route to…</option>
-                      <option value="ACCOUNTING">Accounting</option>
-                      <option value="RESPONSIBLE_PARTY">Responsible party</option>
-                      <option value="PM_LEADER">PM / Leader</option>
-                    </select>
-                    {(overrideType === 'RESPONSIBLE_PARTY' || overrideType === 'PM_LEADER') && (
-                      <select value={overrideRef} onChange={(e) => setOverrideRef(e.target.value)}
-                        className="flex-1 px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-md text-xs text-white">
-                        <option value="">Person…</option>
-                        {employees.map((e) => <option key={e.id} value={e.id}>{e.fullName}</option>)}
-                      </select>
-                    )}
-                    <button
-                      onClick={() => post({ action: 'override_approver', approver_type: overrideType, approver_ref: overrideRef || null }, 'Re-route')}
-                      disabled={!overrideType || busy !== null}
-                      className="px-2.5 py-1.5 rounded-md text-xs bg-slate-700 text-slate-200 hover:bg-slate-600 disabled:opacity-40"
-                    >
-                      Set
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Lines */}
-              <div>
-                <label className="block text-2xs text-slate-500 uppercase tracking-wider font-semibold mb-2">Lines</label>
-                <div className="border border-slate-800 rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <tbody className="divide-y divide-slate-800/30">
-                      {data?.lines.map((l) => (
-                        <tr key={l.id}>
-                          <td className="px-3 py-2">
-                            <p className="text-sm text-slate-200">{l.description || l.account?.name || '--'}</p>
-                            <p className="text-2xs text-slate-500 font-mono">
-                              {l.account ? `${l.account.account_number} · ${l.account.name}` : ''}
-                            </p>
-                            {l.job && (
-                              <span className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded text-2xs bg-brand-500/10 text-brand-400">
-                                <Briefcase size={9} /> {l.job.job_number} · {l.job.name}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-right text-sm font-mono text-slate-200 whitespace-nowrap">{formatMoney(l.amount_cents, { currency: billCcy })}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {data && data.attributions.length > 0 && (
-                  <p className="text-2xs text-slate-500 mt-2">
-                    {data.attributions.filter((a) => a.lifecycle === 'CLEARED').length} of {data.attributions.length} job cost(s) cleared to Projects
-                  </p>
-                )}
-              </div>
-
-              {/* Ledger-grounded "why this bill posted the way it did" */}
-              <ExplainPanel kind="BILL" id={bill.id} />
-
-              {/* Retained source documents for this bill */}
-              <AttachmentsPanel entityType="bill" entityId={bill.id} defaultDocType="BILL" title="Documents" />
-            </div>
-
-            {/* Footer actions */}
-            <div className="px-6 py-4 border-t border-slate-800 space-y-3">
-              {showVoid ? (
-                <div className="space-y-2">
-                  <input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding…"
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white" />
-                  <div className="flex gap-2">
-                    <button onClick={() => setShowVoid(false)} className="flex-1 px-3 py-2 rounded-md text-sm text-slate-400 hover:bg-slate-800">Cancel</button>
-                    <button disabled={!voidReason || busy !== null}
-                      onClick={async () => { if (await post({ action: 'void', reason: voidReason }, 'Void')) onClose(); }}
-                      className="flex-1 px-3 py-2 rounded-md text-sm bg-red-600 text-white hover:bg-red-500 disabled:opacity-40">Confirm void</button>
-                  </div>
+          {bill.status === 'ON_HOLD' && (
+            <PanelSection title="Payment hold">
+              <InlineNotice tone="neg" title="On hold.">
+                {bill.payment_hold_reason ?? 'On hold for vendor compliance. Resolve the vendor docs, or release this bill with an override.'}
+              </InlineNotice>
+              {!showRelease ? (
+                <div className={s.inlineForm}>
+                  <Button variant="quiet" onClick={() => setShowRelease(true)}>
+                    Release hold (override)
+                  </Button>
                 </div>
               ) : (
-                <div className="flex flex-wrap items-center gap-2">
-                  {bill.status === 'PENDING' && (
-                    <button disabled={busy !== null}
-                      onClick={() => post({ action: 'approve' }, 'Approve')}
-                      className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-50">
-                      {busy === 'Approve' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve &amp; post
-                    </button>
-                  )}
-
-                  {(bill.status === 'APPROVED' || bill.status === 'SCHEDULED') && (
-                    <div className="flex items-center gap-2 flex-1">
-                      <input type="date" value={scheduleDate} onChange={(e) => setScheduleDate(e.target.value)}
-                        className="flex-1 px-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
-                      <button disabled={!scheduleDate || busy !== null}
-                        onClick={() => post({ action: 'schedule', scheduled_payment_date: scheduleDate }, 'Schedule')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-40">
-                        <CalendarClock size={14} /> {bill.status === 'SCHEDULED' ? 'Reschedule' : 'Schedule'}
-                      </button>
-                    </div>
-                  )}
-
-                  {['APPROVED', 'SCHEDULED', 'PARTIALLY_PAID'].includes(bill.status) && (
-                    <div className="flex items-center gap-2 flex-1">
-                      <div className="relative flex-1">
-                        <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">$</span>
-                        <input type="number" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} placeholder={(balance / 100).toFixed(2)}
-                          className="w-full pl-6 pr-2 py-2 bg-slate-800 border border-slate-700 rounded-md text-sm text-white font-mono" />
-                      </div>
-                      <button disabled={busy !== null}
-                        onClick={() => post({ action: 'pay', amount_cents: Math.round(parseFloat(payAmount || String(balance / 100)) * 100) }, 'Payment')}
-                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm bg-emerald-600 text-white hover:bg-emerald-500 disabled:opacity-40">
-                        <DollarSign size={14} /> Record payment
-                      </button>
-                    </div>
-                  )}
-
-                  {bill.status !== 'VOIDED' && bill.status !== 'PAID' && bill.amount_paid_cents === 0 && (
-                    <button onClick={() => setShowVoid(true)} disabled={busy !== null}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10">
-                      <Ban size={14} /> Void
-                    </button>
-                  )}
-
-                  {(bill.status === 'PAID' || bill.status === 'VOIDED') && (
-                    <p className="text-xs text-slate-500 w-full text-center">No further actions for {bill.status.toLowerCase()} bills.</p>
-                  )}
+                <div className={s.inlineForm}>
+                  <Field label="Reason for the override">
+                    <Input value={holdReason} onChange={(e) => setHoldReason(e.target.value)} placeholder="Why this bill can be paid now" autoFocus />
+                  </Field>
+                  <Button
+                    variant="danger"
+                    disabled={!holdReason || busy !== null}
+                    onClick={() => post({ action: 'release_hold', reason: holdReason }, 'Release hold')}
+                  >
+                    {busy === 'Release hold' ? 'Releasing…' : 'Release hold'}
+                  </Button>
+                  <Button variant="quiet" onClick={() => { setShowRelease(false); setHoldReason(''); }}>
+                    Cancel
+                  </Button>
                 </div>
               )}
+              <p className="t-cap" style={{ marginTop: 8 }}>One-time release for this bill. Audit-logged.</p>
+            </PanelSection>
+          )}
+          {bill.status === 'VOIDED' && bill.void_reason && (
+            <PanelSection>
+              <InlineNotice title="Voided.">{bill.void_reason}</InlineNotice>
+            </PanelSection>
+          )}
+
+          {/* AP policy evaluation — deterministic engine vs the ACTIVE ruleset */}
+          {data?.policy?.active && (data.policy.violations.length > 0 || data.policy.requiredApprovalTier) && (
+            <PanelSection
+              title="AP policy"
+              meta={data.policy.requiredApprovalTier ? <Tag tone="warn">Requires {data.policy.requiredApprovalTier}</Tag> : undefined}
+            >
+              <InlineNotice
+                tone={data.policy.blocked ? 'neg' : data.policy.violations.length > 0 ? 'warn' : 'default'}
+                title={`${data.policy.active.name} v${data.policy.active.version}.`}
+              >
+                {data.policy.violations.length === 0 ? (
+                  'No policy violations.'
+                ) : (
+                  <ul className={s.violations}>
+                    {data.policy.violations.map((v, i) => (
+                      <li key={i}>
+                        <Tag tone={v.severity === 'BLOCK' ? 'neg' : 'warn'}>{v.severity === 'BLOCK' ? 'Blocks' : 'Warns'}</Tag>
+                        <span>{v.message}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {data.policy.blocked && (
+                  <p style={{ marginTop: 8 }}>
+                    <b>Blocked by policy.</b> Approval requires an audited override reason.
+                  </p>
+                )}
+              </InlineNotice>
+            </PanelSection>
+          )}
+
+          {/* Approver routing */}
+          <PanelSection title="Routed approver">
+            <div className="mb-detail-rows">
+              <div className="mb-detail-row">
+                <span className="ink-2">Approver</span>
+                <span>
+                  {bill.status === 'PENDING' || bill.status === 'ON_HOLD'
+                    ? (data?.approver.type ? APPROVER_LABEL[data.approver.type] : 'Accounting')
+                    : APPROVER_LABEL[data?.approver.type ?? ''] ?? 'Accounting'}
+                  {data?.approver.name && <span className="ink-2"> · {data.approver.name}</span>}
+                </span>
+              </div>
             </div>
-          </>
-        )}
-      </div>
-    </>
+            {(bill.status === 'PENDING' || bill.status === 'ON_HOLD') && (
+              <div className={s.inlineForm}>
+                <Select
+                  aria-label="Re-route to"
+                  value={overrideType}
+                  onChange={(e) => { setOverrideType(e.target.value); setOverrideRef(''); }}
+                >
+                  <option value="">Re-route to…</option>
+                  <option value="ACCOUNTING">Accounting</option>
+                  <option value="RESPONSIBLE_PARTY">Responsible party</option>
+                  <option value="PM_LEADER">PM / Leader</option>
+                </Select>
+                {(overrideType === 'RESPONSIBLE_PARTY' || overrideType === 'PM_LEADER') && (
+                  <Select aria-label="Person" value={overrideRef} onChange={(e) => setOverrideRef(e.target.value)}>
+                    <option value="">Person…</option>
+                    {employees.map((e) => <option key={e.id} value={e.id}>{e.fullName}</option>)}
+                  </Select>
+                )}
+                <Button
+                  onClick={() => post({ action: 'override_approver', approver_type: overrideType, approver_ref: overrideRef || null }, 'Re-route')}
+                  disabled={!overrideType || busy !== null}
+                >
+                  {busy === 'Re-route' ? 'Re-routing…' : 'Re-route'}
+                </Button>
+              </div>
+            )}
+          </PanelSection>
+
+          {/* Lines */}
+          <PanelSection
+            title="Lines"
+            meta={<span className="t-cap tnum">{data?.lines.length ?? 0}</span>}
+          >
+            <DetailTable columns={[{ key: 'line', label: 'Line' }, { key: 'amount', label: 'Amount', align: 'right' }]}>
+              {data?.lines.map((l) => (
+                <tr key={l.id}>
+                  <td className={s.lineCell}>
+                    <span className="l1">{l.description || l.account?.name || '—'}</span>
+                    {l.account && <span className="l2 tnum">{l.account.account_number} · {l.account.name}</span>}
+                    {l.job && (
+                      <Tag tone="ai" style={{ marginTop: 4 }}>
+                        Job {l.job.job_number} · {l.job.name}
+                      </Tag>
+                    )}
+                  </td>
+                  <td className={cx('n', s.lineCell)}>{formatMoney(l.amount_cents, { currency: billCcy })}</td>
+                </tr>
+              ))}
+            </DetailTable>
+            {data && data.attributions.length > 0 && (
+              <p className="t-cap" style={{ marginTop: 8 }}>
+                {data.attributions.filter((a) => a.lifecycle === 'CLEARED').length} of {data.attributions.length} job cost(s) cleared to Projects
+              </p>
+            )}
+          </PanelSection>
+
+          {/* Ledger-grounded "why this bill posted the way it did" */}
+          <PanelSection>
+            <ExplainPanel kind="BILL" id={bill.id} />
+          </PanelSection>
+
+          {/* Retained source documents for this bill */}
+          <PanelSection>
+            <AttachmentsPanel entityType="bill" entityId={bill.id} defaultDocType="BILL" title="Documents" />
+          </PanelSection>
+
+          {/* Footer actions (sticky at the bottom of the drawer) */}
+          <div className={s.foot}>
+            {showVoid ? (
+              <div className={s.footRow}>
+                <Field label="Reason for voiding" className={s.grow}>
+                  <Input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Why this bill is void" autoFocus />
+                </Field>
+                <Button onClick={() => setShowVoid(false)}>Cancel</Button>
+                <Button
+                  variant="danger"
+                  disabled={!voidReason || busy !== null}
+                  onClick={async () => { if (await post({ action: 'void', reason: voidReason }, 'Void')) onClose(); }}
+                >
+                  {busy === 'Void' ? 'Voiding…' : 'Void bill'}
+                </Button>
+              </div>
+            ) : (
+              <>
+                {bill.status === 'PENDING' && (
+                  <div className={s.footRow}>
+                    <Button variant="primary" disabled={busy !== null} onClick={() => post({ action: 'approve' }, 'Approve')} aria-busy={busy === 'Approve' || undefined}>
+                      {busy === 'Approve' ? 'Approving…' : 'Approve & post'}
+                    </Button>
+                  </div>
+                )}
+
+                {canSchedule && (
+                  <div className={s.footRow}>
+                    <Input
+                      type="date"
+                      aria-label="Payment date"
+                      className="tnum"
+                      value={scheduleDate}
+                      onChange={(e) => setScheduleDate(e.target.value)}
+                    />
+                    <Button
+                      variant="primary"
+                      disabled={!scheduleDate || busy !== null}
+                      onClick={() => post({ action: 'schedule', scheduled_payment_date: scheduleDate }, 'Schedule')}
+                    >
+                      {busy === 'Schedule' ? 'Scheduling…' : bill.status === 'SCHEDULED' ? 'Reschedule' : 'Schedule payment'}
+                    </Button>
+                  </div>
+                )}
+
+                {canPay && (
+                  <div className={s.footRow}>
+                    <span className={s.money}>
+                      <span aria-hidden="true">$</span>
+                      <Input
+                        type="number"
+                        aria-label="Payment amount"
+                        value={payAmount}
+                        onChange={(e) => setPayAmount(e.target.value)}
+                        placeholder={(balance / 100).toFixed(2)}
+                      />
+                    </span>
+                    <Button
+                      variant={canSchedule ? 'default' : 'primary'}
+                      disabled={busy !== null}
+                      onClick={() => post({ action: 'pay', amount_cents: Math.round(parseFloat(payAmount || String(balance / 100)) * 100) }, 'Payment')}
+                    >
+                      {busy === 'Payment' ? 'Recording…' : 'Record payment'}
+                    </Button>
+                  </div>
+                )}
+
+                {canVoid && (
+                  <div className={s.footRow}>
+                    <span className={s.grow} />
+                    <Button variant="quiet" onClick={() => setShowVoid(true)} disabled={busy !== null}>
+                      Void bill
+                    </Button>
+                  </div>
+                )}
+
+                {isFinal && (
+                  <p className="t-cap">No further actions for {bill.status.toLowerCase()} bills.</p>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </DetailDrawer>
   );
 }

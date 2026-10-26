@@ -11,13 +11,14 @@
  *   RATABLY, SUBSCRIPTION, CASH         → defer → credit Deferred Revenue; the
  *                                          rev-rec engine recognizes separately
  *
- * Method resolves: per-job override → per-revenue-type → company default. This is
- * the same precedence the rev-rec engine uses, so billing and recognition never
+ * Method resolves through lib/rev-rec/method.ts: per-job override → per-revenue-type →
+ * legacy job_type map → company default. This is the same precedence the rev-rec engine uses, so billing and recognition never
  * disagree about a stream's treatment (which would double- or under-count).
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { RevRecMethod } from '../services/rev-rec';
+import { resolveJobRevRecMethod } from '@/lib/rev-rec/method';
 
 type DB = SupabaseClient;
 
@@ -27,47 +28,21 @@ export function recognizesAtBilling(method: RevRecMethod): boolean {
 }
 
 /**
- * Resolve the rev-rec method for a billing event:
- *   1. the job's override (core.jobs.rev_rec_method_override), if a job is given
- *   2. the per-revenue-type method (revenue_type_methods) for the revenue account
- *   3. the company default (core.locations.rev_rec_method)
+ * Resolve the rev-rec method for a billing event — delegates to THE resolver
+ * (lib/rev-rec/method.ts, A5) so billing uses exactly the precedence recognition uses:
+ *   1. the job's override  2. the per-revenue-type method for the BILLED line's revenue account
+ *   3. the legacy job_type map  4. the company default.
  */
 export async function resolveBillingRevRecMethod(
   db: DB,
   args: { orgId: string; locationId: string; revenueAccountId: string; jobId?: string }
 ): Promise<RevRecMethod> {
-  // 1. per-job override
-  if (args.jobId) {
-    const { data: job } = await db
-      .schema('core')
-      .from('jobs')
-      .select('rev_rec_method_override')
-      .eq('org_id', args.orgId)
-      .eq('id', args.jobId)
-      .maybeSingle();
-    const override = (job as { rev_rec_method_override: RevRecMethod | null } | null)?.rev_rec_method_override;
-    if (override) return override;
-  }
-
-  // 2. per-revenue-type method
-  const { data: rt } = await db
-    .from('revenue_type_methods')
-    .select('method')
-    .eq('org_id', args.orgId)
-    .eq('location_id', args.locationId)
-    .eq('revenue_account_id', args.revenueAccountId)
-    .maybeSingle();
-  const byType = (rt as { method: RevRecMethod } | null)?.method;
-  if (byType) return byType;
-
-  // 3. company default
-  const { data: loc } = await db
-    .schema('core')
-    .from('locations')
-    .select('rev_rec_method')
-    .eq('id', args.locationId)
-    .maybeSingle();
-  return (loc as { rev_rec_method: RevRecMethod } | null)?.rev_rec_method ?? 'PCT_COSTS_INCURRED';
+  return resolveJobRevRecMethod(db, {
+    orgId: args.orgId,
+    locationId: args.locationId,
+    jobId: args.jobId ?? null,
+    revenueAccountId: args.revenueAccountId,
+  });
 }
 
 /** True when a bill against this revenue type should credit Deferred Revenue. */

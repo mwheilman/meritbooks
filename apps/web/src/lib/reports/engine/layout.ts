@@ -55,7 +55,7 @@ export function matchesSelector(a: AccountMeta, s: Selector): boolean {
   if (!hasCriteria) return false;
   if (s.types?.length && !s.types.includes(a.type)) return false;
   if (s.subTypes?.length && !s.subTypes.includes(a.subType)) return false;
-  if (s.groupIds?.length && !s.groupIds.includes(a.groupId)) return false;
+  if (s.groupIds?.length && !s.groupIds.includes(a.sourceGroupId ?? a.groupId)) return false;
   if (s.roles?.length && !a.roles.some((r) => s.roles!.includes(r))) return false;
   if (s.accountIds?.length && !s.accountIds.includes(a.id)) return false;
   if (s.ranges?.length && !s.ranges.some((r) => inRange(a.number, r.from, r.to))) return false;
@@ -181,7 +181,7 @@ export function standardBalanceSheet(): Layout {
       { id: 'tle', kind: 'subtotal', label: 'Total liabilities and equity', of: [{ id: 'tl', sign: 1 }, { id: 'eq', sign: 1 }], emphasis: 'grand' },
       { id: 'sp2', kind: 'spacer' },
       { id: 'wc', kind: 'formula', label: 'Working capital (current assets − current liabilities)', expr: '{ca} - {cl}', format: 'amount' },
-      { id: 'cr', kind: 'formula', label: 'Current ratio', expr: '{ca} / {cl} * 100', format: 'percent' },
+      { id: 'cr', kind: 'formula', label: 'Current ratio (current assets ÷ current liabilities)', expr: '{ca} / {cl}', format: 'ratio' },
     ],
   };
 }

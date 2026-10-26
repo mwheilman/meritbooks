@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Sparkles, Loader2, X, AlertTriangle, Lightbulb, Check, HelpCircle } from 'lucide-react';
+import { Button, Conf, Field, InlineNotice, Input, Select, Status, Tag, Textarea, cx } from '@meritbooks/merit-ui';
+import { useActiveCompany } from '@/lib/hooks/use-active-company';
+import { isSpecificCompany } from '@/lib/company-scope';
+import { AccountPicker } from './je-account-picker';
+import s from './je.module.css';
 
 interface LocationOption { id: string; name: string; short_code: string }
 
@@ -31,8 +35,16 @@ interface EditLine { account_id: string | null; account_number: string; account_
 const fmt = (cents: number) => (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const toCents = (s: string) => Math.round((Number(String(s).replace(/[$,\s]/g, '')) || 0) * 100);
 
+const PREDICTION_LABEL: Record<string, string> = {
+  CAPEX: 'Looks like a capital expense',
+  PREPAID: 'Looks like a prepaid expense',
+  DEFERRED_REVENUE: 'Looks like deferred revenue',
+};
+
 export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+  const { activeCompanyId } = useActiveCompany();
   const [locations, setLocations] = useState<LocationOption[]>([]);
+  const [locLoading, setLocLoading] = useState(true);
   const [locationId, setLocationId] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().split('T')[0]);
   const [description, setDescription] = useState('');
@@ -54,8 +66,12 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
         const arr = Array.isArray(d) ? d : [];
         setLocations(arr);
         if (arr.length === 1) setLocationId(arr[0].id);
+        // Otherwise start on the company the header is scoped to.
+        else if (isSpecificCompany(activeCompanyId) && arr.some((l) => l.id === activeCompanyId)) setLocationId(activeCompanyId);
       })
-      .catch(() => setLocations([]));
+      .catch(() => setLocations([]))
+      .finally(() => setLocLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const compose = useCallback(async () => {
@@ -92,8 +108,8 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
   }, [locationId, description]);
 
   const totals = useMemo(() => {
-    const d = lines.reduce((s, l) => s + toCents(l.debit), 0);
-    const c = lines.reduce((s, l) => s + toCents(l.credit), 0);
+    const d = lines.reduce((sum, l) => sum + toCents(l.debit), 0);
+    const c = lines.reduce((sum, l) => sum + toCents(l.credit), 0);
     return { d, c, balanced: d === c && d > 0 };
   }, [lines]);
 
@@ -140,118 +156,190 @@ export function JeAiComposer({ onClose, onSuccess }: { onClose: () => void; onSu
     }
   }, [totals.balanced, allResolved, locationId, entryDate, memo, lines, decisionId, onSuccess]);
 
+  const confidencePct = proposal ? Math.round(proposal.confidence * 100) : 0;
+
   return (
-    <div className="rounded-xl border border-emerald-500/30 bg-slate-900/60 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <Sparkles size={16} className="text-emerald-400" />
-          <h3 className="text-sm font-semibold text-white">Compose with AI</h3>
-          <span className="text-2xs text-slate-500">advisory — you review and post</span>
+    <section className={s.form} aria-label="Compose a journal entry with AI">
+      <div className={s.formHead}>
+        <div className={s.formHeadMain}>
+          <h2 className="t-section">Compose with AI</h2>
+          <span className="t-cap">Advisory — you review every line and post it yourself.</span>
         </div>
-        <button onClick={onClose} aria-label="Close AI composer" className="text-slate-500 hover:text-slate-300"><X size={16} /></button>
+        <Button variant="quiet" iconOnly icon="x" onClick={onClose} aria-label="Close AI composer" />
       </div>
 
-      <div className="grid grid-cols-3 gap-3 mb-3">
-        <div className="col-span-2">
-          <label className="block text-xs text-slate-400 mb-1">Company</label>
-          <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white">
-            <option value="">Select a company…</option>
-            {locations.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.short_code})</option>)}
-          </select>
+      <div className={s.formBody}>
+        <div className={s.grid3}>
+          <Field label="Company">
+            <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={locLoading}>
+              <option value="">{locLoading ? 'Loading companies…' : 'Select a company…'}</option>
+              {locations.map((l) => <option key={l.id} value={l.id}>{l.name} ({l.short_code})</option>)}
+            </Select>
+          </Field>
+          <Field label="Entry date">
+            <Input type="date" className="tnum" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+          </Field>
         </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Entry date</label>
-          <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)}
-            className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
+
+        <Field label="Describe the transaction in plain English" error={error || undefined}>
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            rows={3}
+            placeholder="e.g. Paid $1,200 for a 12-month business insurance policy by check from operating checking."
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); if (!composing) void compose(); }
+            }}
+          />
+        </Field>
+
+        <div className={s.formActs}>
+          <Button variant={proposal ? 'default' : 'primary'} chord="mod+enter" onClick={compose} disabled={composing} aria-busy={composing || undefined}>
+            {composing ? 'Composing…' : proposal ? 'Compose again' : 'Compose entry'}
+          </Button>
         </div>
-      </div>
 
-      <label className="block text-xs text-slate-400 mb-1">Describe the transaction in plain English</label>
-      <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
-        placeholder="e.g. Paid $1,200 for a 12-month business insurance policy by check from operating checking."
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
-
-      <div className="mt-3 flex items-center gap-3">
-        <button onClick={compose} disabled={composing}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors">
-          {composing ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />} Compose entry
-        </button>
-        {error && <span className="text-xs text-rose-400 flex items-center gap-1"><AlertTriangle size={13} /> {error}</span>}
-      </div>
-
-      {proposal && (
-        <div className="mt-5 space-y-3">
-          {proposal.clarifyingQuestion && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
-              <HelpCircle size={15} className="mt-0.5 shrink-0" />
-              <span><span className="font-medium">Before you post: </span>{proposal.clarifyingQuestion}</span>
-            </div>
-          )}
-          {proposal.prediction.type !== 'NONE' && (
-            <div className="flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm text-sky-200">
-              <Lightbulb size={15} className="mt-0.5 shrink-0" />
-              <span><span className="font-medium">{proposal.prediction.type.replace('_', ' ')}: </span>{proposal.prediction.rationale}</span>
-            </div>
-          )}
-          {proposal.notes && <p className="text-xs text-slate-400 italic">{proposal.notes}</p>}
-          {proposal.unresolvedAccounts.length > 0 && (
-            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-              The AI referenced account(s) not in your chart: {proposal.unresolvedAccounts.join(', ')}. Adjust before posting.
-            </div>
-          )}
-
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Memo</label>
-            <input value={memo} onChange={(e) => setMemo(e.target.value)}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white" />
+        {composing && !proposal && (
+          <div className={cx('wg-loading', s.peekState)} aria-busy="true">
+            <span className="bar-l" style={{ width: '60%' }} aria-hidden="true" />
+            <span className="bar-l" style={{ width: '80%' }} aria-hidden="true" />
+            <span className="bar-l" style={{ width: '45%' }} aria-hidden="true" />
+            <span className="sr" role="status">Drafting the entry</span>
           </div>
+        )}
 
-          <div className="rounded-xl border border-slate-800 overflow-hidden">
-            <div className="grid grid-cols-[1fr_110px_110px] gap-2 px-3 py-2 bg-slate-800/60 text-2xs uppercase tracking-wider text-slate-500">
-              <span>Account</span><span className="text-right">Debit</span><span className="text-right">Credit</span>
-            </div>
-            {lines.map((l, i) => (
-              <div key={i} className="grid grid-cols-[1fr_110px_110px] gap-2 px-3 py-2 items-center border-t border-slate-800">
-                <div className="min-w-0">
-                  <p className={`text-sm truncate ${l.account_id ? 'text-slate-200' : 'text-rose-300'}`}>{l.account_label}</p>
-                  <input value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })}
-                    placeholder="line memo" aria-label={`Line ${i + 1} memo`} className="mt-0.5 w-full bg-transparent text-2xs text-slate-500 placeholder:text-slate-600 focus:outline-none" />
-                </div>
-                <input value={l.debit} onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
-                  aria-label={`Line ${i + 1} debit amount`}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
-                <input value={l.credit} onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
-                  aria-label={`Line ${i + 1} credit amount`}
-                  className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-right text-white font-mono" placeholder="0.00" />
-              </div>
-            ))}
-            <div className="grid grid-cols-[1fr_110px_110px] gap-2 px-3 py-2 border-t border-slate-700 bg-slate-800/40 text-sm font-mono">
-              <span className={`flex items-center gap-1.5 ${totals.balanced ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {totals.balanced ? <><Check size={13} /> Balanced</> : 'Out of balance'}
-              </span>
-              <span className="text-right text-slate-200">{fmt(totals.d)}</span>
-              <span className="text-right text-slate-200">{fmt(totals.c)}</span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button onClick={post} disabled={posting || !totals.balanced || !allResolved}
-              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
-              {posting ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />} Post entry
-            </button>
-            <span className="text-2xs text-slate-500">Confidence {(proposal.confidence * 100).toFixed(0)}%</span>
-            {gateway && (
-              <span className="text-2xs text-slate-500" title={`Budget: ${gateway.budgetState}`}>
-                · metered ${(gateway.costCents / 100).toFixed(4)}
-              </span>
+        {proposal && (
+          <>
+            {proposal.clarifyingQuestion && (
+              <InlineNotice tone="warn" title="Before you post:">{proposal.clarifyingQuestion}</InlineNotice>
             )}
-            {decisionId && <span className="text-2xs text-slate-500">· logged for audit</span>}
-            {gateway?.message && <span className="text-2xs text-amber-400">· {gateway.message}</span>}
-            {postError && <span className="text-xs text-rose-400">{postError}</span>}
-          </div>
-        </div>
-      )}
-    </div>
+            {proposal.prediction.type !== 'NONE' && (
+              <InlineNotice tone="info" title={`${PREDICTION_LABEL[proposal.prediction.type] ?? proposal.prediction.type.replace('_', ' ')}.`}>
+                {proposal.prediction.rationale}
+              </InlineNotice>
+            )}
+            {proposal.notes && <p className="ink-2">{proposal.notes}</p>}
+            {proposal.unresolvedAccounts.length > 0 && (
+              <InlineNotice tone="neg" title="Account not in your chart.">
+                The AI referenced {proposal.unresolvedAccounts.join(', ')}. Pick a real account on each flagged line before posting.
+              </InlineNotice>
+            )}
+
+            <Field label="Memo">
+              <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
+            </Field>
+
+            <div className={s.lines}>
+              <table className="tbl" aria-label="Proposed lines">
+                <colgroup>
+                  <col />
+                  <col style={{ width: 220 }} />
+                  <col style={{ width: 140 }} />
+                  <col style={{ width: 140 }} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th scope="col">Account</th>
+                    <th scope="col">Line memo</th>
+                    <th scope="col" className="n">Debit</th>
+                    <th scope="col" className="n">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((l, i) => (
+                    <tr key={i}>
+                      <td>
+                        <div className={s.lineAcct}>
+                          <AccountPicker
+                            value={l.account_id ?? ''}
+                            label={l.account_id ? l.account_label : ''}
+                            ariaLabel={`Line ${i + 1} account`}
+                            invalid={!l.account_id}
+                            locationId={locationId}
+                            onChange={(id, label, acct) => updateLine(i, { account_id: id, account_label: label, account_number: acct.account_number })}
+                          />
+                          {!l.account_id && (
+                            <span className={s.cellRow}>
+                              <Tag tone="neg">Not in chart</Tag>
+                              <span className="t-cap mb-trunc">AI suggested {l.account_label}</span>
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <Input value={l.memo} onChange={(e) => updateLine(i, { memo: e.target.value })} placeholder="—" aria-label={`Line ${i + 1} memo`} />
+                      </td>
+                      <td>
+                        <span className={s.money}>
+                          <span aria-hidden="true">$</span>
+                          <input
+                            value={l.debit}
+                            onChange={(e) => updateLine(i, { debit: e.target.value, credit: '' })}
+                            aria-label={`Line ${i + 1} debit amount`}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="input input--money"
+                            placeholder="0.00"
+                          />
+                        </span>
+                      </td>
+                      <td>
+                        <span className={s.money}>
+                          <span aria-hidden="true">$</span>
+                          <input
+                            value={l.credit}
+                            onChange={(e) => updateLine(i, { credit: e.target.value, debit: '' })}
+                            aria-label={`Line ${i + 1} credit amount`}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            className="input input--money"
+                            placeholder="0.00"
+                          />
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td>{totals.balanced ? <Status kind="ready">Balanced</Status> : <Status kind="blocked">Out of balance</Status>}</td>
+                    <td className="t-cap">Totals</td>
+                    <td className="n">${fmt(totals.d)}</td>
+                    <td className="n">${fmt(totals.c)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            {postError && <InlineNotice tone="neg" title="Not posted.">{postError}</InlineNotice>}
+
+            <div className={s.formFoot}>
+              <div className={s.meta}>
+                <Conf score={confidencePct} label={`AI confidence ${confidencePct} of 100`} />
+                {gateway && (
+                  <span className="t-cap tnum" title={`Budget: ${gateway.budgetState}`}>
+                    Metered ${(gateway.costCents / 100).toFixed(4)}
+                  </span>
+                )}
+                {decisionId && <span className="t-cap">Logged for audit</span>}
+                {gateway?.message && <Tag tone="warn">{gateway.message}</Tag>}
+              </div>
+              <div className={s.formActs}>
+                <Button variant="quiet" onClick={onClose}>Cancel</Button>
+                <Button
+                  variant="primary"
+                  icon="check"
+                  onClick={post}
+                  disabled={posting || !totals.balanced || !allResolved}
+                  aria-busy={posting || undefined}
+                >
+                  {posting ? 'Posting…' : 'Post entry'}
+                </Button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </section>
   );
 }

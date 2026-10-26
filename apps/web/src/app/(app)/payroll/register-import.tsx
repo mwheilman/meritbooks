@@ -16,13 +16,20 @@
  */
 
 import { useState, useRef, useEffect, useMemo } from 'react';
-import {
-  UploadCloud, Loader2, X, FileText, Sparkles, AlertTriangle, CheckCircle2, Info, ChevronDown, Search, Scale,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+import { Button, Dialog, Field, Icon, InlineNotice, Input, Select, Tag, cx } from '@meritbooks/merit-ui';
 import { formatMoney, dollarsToCents, centsToDollars } from '@meritbooks/shared';
 import { useQuery, addToast } from '@/hooks';
 import { api } from '@/lib/api-client';
+import {
+  BalanceNotice,
+  DoneState,
+  ErrorState,
+  JournalLinesTable,
+  RegisterFigures,
+  WorkingState,
+  type AccountOption,
+} from './register-review';
+import s from './payroll.module.css';
 
 // ── Types mirroring the parse API ────────────────────────────────────────────
 interface ProposedLine {
@@ -59,7 +66,6 @@ interface ParseResponse {
 }
 
 interface LocationOption { id: string; name: string; short_code: string }
-interface AccountOption { id: string; accountNumber: string; name: string; accountType: string; isActive: boolean; approvalStatus: string }
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPT = '.pdf,image/png,image/jpeg,image/webp';
@@ -80,67 +86,7 @@ interface LineDraft {
   suggestedAccountId: string | null;
 }
 
-// ── Inline account picker (searches this company's approved COA) ─────────────
-function AccountPicker({
-  value, accounts, onChange, placeholder, invalid,
-}: {
-  value: string;
-  accounts: AccountOption[];
-  onChange: (id: string) => void;
-  placeholder: string;
-  invalid: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, []);
-
-  const selected = accounts.find((a) => a.id === value);
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? accounts.filter((a) => a.accountNumber.toLowerCase().includes(q) || a.name.toLowerCase().includes(q))
-    : accounts;
-
-  return (
-    <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
-        className={clsx('w-full text-left px-2 py-1.5 rounded-lg border text-xs truncate relative',
-          selected ? 'bg-slate-800 border-slate-700 text-white' : invalid ? 'bg-slate-800/50 border-amber-500/50 text-slate-400' : 'bg-slate-800/50 border-slate-700/50 text-slate-500')}>
-        {selected ? `${selected.accountNumber} · ${selected.name}` : placeholder}
-        <ChevronDown size={10} className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" />
-      </button>
-      {open && (
-        <div className="absolute z-50 top-full mt-1 left-0 w-72 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden">
-          <div className="p-2 border-b border-slate-800">
-            <div className="relative">
-              <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search accounts..." autoFocus
-                className="w-full pl-7 pr-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-emerald-500/50" />
-            </div>
-          </div>
-          <div className="max-h-44 overflow-y-auto">
-            {filtered.length === 0 ? (
-              <p className="px-3 py-3 text-xs text-slate-500 text-center">{accounts.length === 0 ? 'Select a company first' : 'No matches'}</p>
-            ) : filtered.slice(0, 40).map((a) => (
-              <button key={a.id} type="button" onClick={() => { onChange(a.id); setOpen(false); setSearch(''); }}
-                className="w-full text-left px-3 py-1.5 text-xs hover:bg-slate-800 flex items-center gap-2">
-                <span className="font-mono text-slate-500 w-12 shrink-0">{a.accountNumber}</span>
-                <span className="text-slate-300 truncate">{a.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Main modal ───────────────────────────────────────────────────────────────
+// ── Main dialog ──────────────────────────────────────────────────────────────
 export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onClose: () => void; onPosted: () => void }) {
   const [phase, setPhase] = useState<'idle' | 'parsing' | 'review' | 'error' | 'done'>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +216,17 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
   const employeeWithheldCents = Math.max(0, grossWagesCents - netPayCents);
   const hasSummary = grossWagesCents > 0 || netPayCents > 0;
 
+  // Why Post is disabled, in plain words (shown beside the button).
+  const blocker = !locationId
+    ? 'Choose a company.'
+    : !payDate
+    ? 'Enter a pay date.'
+    : !balanced
+    ? 'The entry must balance.'
+    : !allAccountsPicked
+    ? 'Choose an account for every line with an amount.'
+    : null;
+
   const confirmPost = async () => {
     setSaving(true);
     const lines = drafts
@@ -292,253 +249,169 @@ export function ImportRegister({ open, onClose, onPosted }: { open: boolean; onC
     onPosted();
   };
 
+  const actions =
+    phase === 'review' ? (
+      <>
+        {blocker && <span className="t-cap">{blocker}</span>}
+        <Button onClick={onClose} disabled={saving}>Cancel</Button>
+        <Button variant="primary" icon="check" onClick={() => void confirmPost()} disabled={!canPost} aria-busy={saving || undefined}>
+          {saving ? 'Posting…' : 'Post payroll entry'}
+        </Button>
+      </>
+    ) : phase === 'done' ? (
+      <Button variant="primary" onClick={onClose}>Done</Button>
+    ) : (
+      <Button onClick={onClose}>{phase === 'error' ? 'Close' : 'Cancel'}</Button>
+    );
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 backdrop-blur-sm p-4 sm:p-8">
-      <div className="w-full max-w-3xl bg-surface-900 border border-slate-800 rounded-2xl shadow-2xl my-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <div>
-            <h2 className="text-sm font-semibold text-white flex items-center gap-2"><UploadCloud size={16} className="text-emerald-400" /> Import payroll register</h2>
-            <p className="text-2xs text-slate-500 mt-0.5">For payroll you ran at an outside processor — drop the register and we propose a balanced payroll entry for you to review and confirm.</p>
-          </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400"><X size={16} /></button>
-        </div>
+    <Dialog
+      open={open}
+      onClose={() => { if (!saving) onClose(); }}
+      title="Import a payroll register"
+      width={880}
+      className={s.tallDialog}
+      dismissOnScrim={phase === 'idle' || phase === 'error' || phase === 'done'}
+      footNote={
+        phase === 'review' ? (
+          <Button variant="quiet" icon="left" onClick={() => { setPhase('idle'); setDrafts([]); }} disabled={saving}>
+            Upload a different register
+          </Button>
+        ) : (
+          'The AI proposes. Nothing posts until you confirm a balanced entry.'
+        )
+      }
+      actions={actions}
+    >
+      <div className={s.body}>
+        {/* Idle: dropzone */}
+        {phase === 'idle' && (
+          <>
+            <p className="ink-2">
+              For payroll you ran at an outside processor. Drop the register and we propose a balanced payroll entry
+              for you to review and confirm.
+            </p>
+            <button
+              type="button"
+              onClick={() => inputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              className={cx(s.drop, dragOver && s.dropOver)}
+              aria-label="Choose a payroll register file, or drop one here"
+            >
+              <span className={s.dropIcon} aria-hidden="true"><Icon name="upload" /></span>
+              <span className="t-head">Drop a payroll register here, or browse</span>
+              <span className="t-cap">PDF, PNG, JPEG or WebP · up to 10 MB</span>
+            </button>
+            <input ref={inputRef} type="file" accept={ACCEPT} className={s.hidden}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }} />
+            <p className="t-cap">
+              Running payroll in the app through a connected provider instead? Close this and use Run payroll.
+            </p>
+          </>
+        )}
 
-        <div className="p-5 space-y-4">
-          {/* Idle: dropzone */}
-          {phase === 'idle' && (
-            <>
-              <div
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={onDrop}
-                className={clsx('cursor-pointer rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors',
-                  dragOver ? 'border-emerald-500 bg-emerald-500/5' : 'border-slate-700 hover:border-slate-600 bg-slate-800/20')}>
-                <UploadCloud size={28} className="mx-auto text-slate-500 mb-3" />
-                <p className="text-sm text-slate-300">Drop a payroll register here, or <span className="text-emerald-400">browse</span></p>
-                <p className="text-2xs text-slate-500 mt-1">PDF, PNG, JPEG, or WebP · up to 10MB</p>
+        {/* Parsing */}
+        {phase === 'parsing' && (
+          <WorkingState
+            title={`Reading ${fileName ?? 'the register'}…`}
+            detail="Extracting the period totals and proposing a balanced payroll entry."
+          />
+        )}
+
+        {/* Error */}
+        {phase === 'error' && <ErrorState message={error} onRetry={() => { setPhase('idle'); setError(null); }} />}
+
+        {/* Done */}
+        {phase === 'done' && (
+          <DoneState entryNumber={postedEntryNumber} onAnother={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} />
+        )}
+
+        {/* Review */}
+        {phase === 'review' && (
+          <>
+            {fileName && (
+              <div className={s.meta}>
+                <Icon name="file-text" />
+                <span className={s.metaStrong}>{fileName}</span>
+                <Tag tone="ai">Proposed by AI</Tag>
               </div>
-              <input ref={inputRef} type="file" accept={ACCEPT} className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); e.target.value = ''; }} />
-              <div className="flex items-start gap-2 text-2xs text-slate-500">
-                <Info size={12} className="mt-0.5 shrink-0" />
-                <span>The AI proposes — it never posts. Nothing is written until you confirm the balanced entry. Running payroll in-app with a connected provider instead? Use <span className="text-slate-300">Run payroll</span>.</span>
-              </div>
-            </>
-          )}
+            )}
+            {docNote && <InlineNotice>{docNote}</InlineNotice>}
+            {!registerFoots && (
+              <InlineNotice tone="warn" title="The register doesn’t foot.">
+                Gross minus withholdings and deductions is off from net pay by{' '}
+                <b className="tnum">{formatMoney(Math.abs(footingDelta))}</b>. Check the extracted amounts before posting.
+              </InlineNotice>
+            )}
+            {unresolvedRoles.length > 0 && (
+              <InlineNotice tone="warn" title="Some lines have no account role.">
+                No role is mapped for {unresolvedRoles.join(', ')}. Choose an account for each line below, or map the role
+                on the Account roles screen.
+              </InlineNotice>
+            )}
 
-          {/* Parsing */}
-          {phase === 'parsing' && (
-            <div className="py-16 text-center">
-              <Loader2 size={28} className="mx-auto text-emerald-400 animate-spin mb-3" />
-              <p className="text-sm text-slate-300">Reading {fileName ?? 'register'}…</p>
-              <p className="text-2xs text-slate-500 mt-1">Extracting the period totals and proposing a balanced payroll entry.</p>
-            </div>
-          )}
-
-          {/* Error */}
-          {phase === 'error' && (
-            <div className="py-12 text-center">
-              <AlertTriangle size={24} className="mx-auto text-red-400 mb-2" />
-              <p className="text-sm text-red-400">{error}</p>
-              <button onClick={() => { setPhase('idle'); setError(null); }} className="mt-3 px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Try another file</button>
-            </div>
-          )}
-
-          {/* Done */}
-          {phase === 'done' && (
-            <div className="py-12 text-center">
-              <CheckCircle2 size={28} className="mx-auto text-emerald-400 mb-2" />
-              <p className="text-sm text-emerald-300">Payroll register posted{postedEntryNumber ? ` — entry ${postedEntryNumber}` : ''}.</p>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                <button onClick={() => { setPhase('idle'); setDrafts([]); setPostedEntryNumber(null); }} className="px-3 py-1.5 border border-slate-700 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Import another</button>
-                <button onClick={onClose} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-xs font-medium text-white">Done</button>
-              </div>
-            </div>
-          )}
-
-          {/* Review */}
-          {phase === 'review' && (
-            <div className="space-y-4">
-              {fileName && (
-                <div className="flex items-center gap-2 text-2xs text-slate-500">
-                  <FileText size={12} /> <span className="text-slate-400">{fileName}</span>
-                  <Sparkles size={11} className="text-indigo-400" /> <span className="text-indigo-300/80">AI-proposed</span>
-                </div>
-              )}
-              {docNote && (
-                <div className="flex items-start gap-2 rounded-lg bg-slate-800/40 px-3 py-2 text-2xs text-slate-400">
-                  <Info size={12} className="mt-0.5 shrink-0 text-slate-500" /> {docNote}
-                </div>
-              )}
-              {!registerFoots && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
-                  <AlertTriangle size={13} className="text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-2xs text-amber-200/90">
-                    The register does not foot — gross minus withholdings and deductions is off from net pay by
-                    {' '}<span className="font-mono">{formatMoney(Math.abs(footingDelta))}</span>. Check the extracted amounts before posting.
-                  </p>
-                </div>
-              )}
-              {unresolvedRoles.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 border border-amber-500/30 px-3 py-2">
-                  <AlertTriangle size={13} className="text-amber-400 mt-0.5 shrink-0" />
-                  <p className="text-2xs text-amber-200/90">
-                    No account role is mapped for: <span className="font-mono">{unresolvedRoles.join(', ')}</span>. Pick an account for each line below (or map the role on the Account Roles screen).
-                  </p>
-                </div>
-              )}
-
-              {/* Extracted register summary — what we read, in plain English, and how
-                  it becomes the balanced entry below. */}
-              {hasSummary && (
-                <div className="rounded-xl border border-slate-800 bg-slate-800/20 p-3">
-                  <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-slate-500">
-                    <span className="font-semibold uppercase tracking-wider text-slate-400">Register totals</span>
-                    {reg?.payDate && <span>Pay date {reg.payDate}</span>}
+            {/* Extracted register summary — what we read, in plain English, and how
+                it becomes the balanced entry below. */}
+            {hasSummary && (
+              <section>
+                <div className={s.sectionHead}>
+                  <span className="eyebrow">Register totals</span>
+                  <span className={s.meta}>
+                    {reg?.payDate && <span className="tnum">Pay date {reg.payDate}</span>}
                     {(reg?.periodStart || reg?.periodEnd) && (
-                      <span>
-                        Period {reg?.periodStart ?? '—'} → {reg?.periodEnd ?? '—'}
-                      </span>
+                      <span className="tnum">Period {reg?.periodStart ?? '—'} → {reg?.periodEnd ?? '—'}</span>
                     )}
                     {typeof reg?.employeeCount === 'number' && reg.employeeCount > 0 && (
-                      <span>{reg.employeeCount} employee{reg.employeeCount === 1 ? '' : 's'}</span>
+                      <span className="tnum">{reg.employeeCount} employee{reg.employeeCount === 1 ? '' : 's'}</span>
                     )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <SummaryTile label="Gross wages" value={formatMoney(grossWagesCents)} tone="debit" />
-                    <SummaryTile label="Withheld & deductions" value={formatMoney(employeeWithheldCents)} />
-                    <SummaryTile label="Employer taxes" value={formatMoney(employerTaxCents)} tone="debit" />
-                    <SummaryTile label="Net pay (take-home)" value={formatMoney(netPayCents)} tone="net" />
-                  </div>
-                  <p className="mt-2 text-2xs text-slate-500">
-                    Posts as: DR gross wages + DR employer taxes → CR net pay (to cash / in-transit) + CR the tax &amp;
-                    deduction liabilities. Review the account for every line below before posting.
-                  </p>
+                  </span>
                 </div>
-              )}
-
-              {reg && reg.lowConfidenceFields.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg bg-slate-800/40 px-3 py-2 text-2xs text-slate-400">
-                  <Info size={12} className="mt-0.5 shrink-0 text-amber-400/80" />
-                  Double-check these fields — the extraction was low-confidence: <span className="font-mono text-slate-300">{reg.lowConfidenceFields.join(', ')}</span>.
+                <div style={{ marginTop: 8 }}>
+                  <RegisterFigures gross={grossWagesCents} withheld={employeeWithheldCents} employerTax={employerTaxCents} net={netPayCents} />
                 </div>
-              )}
+                <p className="t-cap" style={{ marginTop: 8 }}>
+                  Posts as: debit gross wages and employer taxes; credit net pay (to cash or in transit) and the tax and
+                  deduction liabilities. Check the account on every line before posting.
+                </p>
+              </section>
+            )}
 
-              {/* Header inputs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Company</label>
-                  <select value={locationId} onChange={(e) => setLocationId(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700">
-                    <option value="">Select company…</option>
-                    {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-2xs uppercase text-slate-500 mb-1">Pay date</label>
-                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)}
-                    className="w-full px-2 py-1.5 rounded-lg text-xs text-white bg-slate-800 border border-slate-700" />
-                </div>
-              </div>
+            {reg && reg.lowConfidenceFields.length > 0 && (
+              <InlineNotice tone="warn" title="Double-check these fields.">
+                The extraction was low-confidence on {reg.lowConfidenceFields.join(', ')}.
+              </InlineNotice>
+            )}
 
-              {/* Lines */}
-              <div className="card overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-slate-800 text-2xs uppercase tracking-wider text-slate-500">
-                      <th className="text-left px-3 py-2 font-semibold">Line</th>
-                      <th className="text-left px-3 py-2 font-semibold w-56">Account</th>
-                      <th className="text-right px-3 py-2 font-semibold w-24">Debit</th>
-                      <th className="text-right px-3 py-2 font-semibold w-24">Credit</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800/40">
-                    {drafts.map((d) => (
-                      <tr key={d.key} className="align-top">
-                        <td className="px-3 py-2">
-                          <span className="text-xs text-slate-200">{d.label}</span>
-                          {d.degraded && <span className="block text-2xs text-amber-400/80 mt-0.5">Unmapped — verify account</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          <AccountPicker value={d.accountId} accounts={usableAccounts}
-                            invalid={inputToCents(d.amountInput) > 0 && !d.accountId}
-                            placeholder={!locationId ? 'Pick a company first' : loadingAccts ? 'Loading…' : 'Select account'}
-                            onChange={(id) => patchLine(d.key, { accountId: id })} />
-                        </td>
-                        <td className="px-3 py-1.5 text-right">
-                          {d.side === 'DR' ? (
-                            <input type="number" min="0" step="0.01" value={d.amountInput}
-                              onChange={(e) => patchLine(d.key, { amountInput: e.target.value })}
-                              className="w-20 px-2 py-1 rounded-lg text-xs text-emerald-300 font-mono text-right bg-slate-800 border border-slate-700" />
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-                        <td className="px-3 py-1.5 text-right">
-                          {d.side === 'CR' ? (
-                            <input type="number" min="0" step="0.01" value={d.amountInput}
-                              onChange={(e) => patchLine(d.key, { amountInput: e.target.value })}
-                              className="w-20 px-2 py-1 rounded-lg text-xs text-red-300 font-mono text-right bg-slate-800 border border-slate-700" />
-                          ) : <span className="text-slate-700">—</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t border-slate-800 text-xs font-mono">
-                      <td className="px-3 py-2 text-slate-400" colSpan={2}>Totals</td>
-                      <td className="px-3 py-2 text-right text-emerald-300">{formatMoney(totalDebits)}</td>
-                      <td className="px-3 py-2 text-right text-red-300">{formatMoney(totalCredits)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-
-              {/* Balance banner — the Post button is gated on debits == credits. */}
-              <div className={clsx('flex items-center gap-2 rounded-lg px-3 py-2 text-xs',
-                totalDebits === 0
-                  ? 'bg-slate-800/40 border border-slate-700 text-slate-400'
-                  : balanced
-                  ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-300'
-                  : 'bg-red-500/10 border border-red-500/30 text-red-300')}>
-                <Scale size={14} className="shrink-0" />
-                {totalDebits === 0
-                  ? <span>Enter the register amounts above to build the balanced entry.</span>
-                  : balanced
-                  ? <span>Balanced — debits equal credits at <span className="font-mono">{formatMoney(totalDebits)}</span>.</span>
-                  : <span>Out of balance by <span className="font-mono">{formatMoney(Math.abs(imbalance))}</span> — debits <span className="font-mono">{formatMoney(totalDebits)}</span> vs credits <span className="font-mono">{formatMoney(totalCredits)}</span>. Fix the amounts before posting.</span>}
-              </div>
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-1">
-                <button onClick={() => { setPhase('idle'); setDrafts([]); }} className="text-2xs text-slate-500 hover:text-slate-300">Upload a different register</button>
-                <button onClick={() => void confirmPost()} disabled={!canPost}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-lg text-xs font-medium text-white flex items-center gap-1.5">
-                  {saving ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
-                  Confirm &amp; post payroll entry
-                </button>
-              </div>
+            {/* Header inputs */}
+            <div className={s.grid2}>
+              <Field label="Company">
+                <Select value={locationId} onChange={(e) => setLocationId(e.target.value)}>
+                  <option value="">Choose a company…</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Pay date">
+                <Input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+              </Field>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
-// ── Register summary tile ─────────────────────────────────────────────────────
-function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: 'debit' | 'net' }) {
-  return (
-    <div className="rounded-lg bg-slate-900/40 px-2.5 py-2">
-      <p className="text-2xs uppercase tracking-wider text-slate-500">{label}</p>
-      <p
-        className={clsx(
-          'mt-0.5 font-mono text-sm font-semibold tabular-nums',
-          tone === 'net' ? 'text-emerald-400' : tone === 'debit' ? 'text-slate-200' : 'text-slate-300',
+            <JournalLinesTable
+              drafts={drafts}
+              accounts={usableAccounts}
+              locationId={locationId}
+              loadingAccounts={loadingAccts}
+              totalDebits={totalDebits}
+              totalCredits={totalCredits}
+              amountCents={inputToCents}
+              onPatch={patchLine}
+            />
+
+            <BalanceNotice totalDebits={totalDebits} totalCredits={totalCredits} />
+          </>
         )}
-      >
-        {value}
-      </p>
-    </div>
+      </div>
+    </Dialog>
   );
 }

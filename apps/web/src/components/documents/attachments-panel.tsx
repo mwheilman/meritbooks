@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * AttachmentsPanel — a reusable "documents on this record" panel.
+ * AttachmentsPanel — a reusable "documents on this record" panel (merit-ui).
  *
  * Drop it onto ANY record page (a bill, invoice, lease, loan, policy, journal entry,
  * vendor, customer, job, …) to show that record's retained source documents and add
@@ -10,21 +10,17 @@
  *
  *   <AttachmentsPanel entityType="BILL" entityId={bill.id} defaultDocType="BILL" />
  *
- * States: loading, empty, error, populated. Upload is multipart (FormData → POST).
- * Download opens a short-lived signed URL. Delete confirms first.
+ * States: loading, empty, error (with Try again), populated. Upload is multipart
+ * (FormData → POST) from the Attach button or by dropping files on the panel.
+ * Open uses a short-lived signed URL. Remove asks first (inline, so it never fights
+ * the drawer it sits in for Escape or focus).
+ *
+ * Kit classes + a CSS module only — it renders the same inside a bridged (legacy)
+ * page and a ported one.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { clsx } from 'clsx';
-import {
-  Loader2,
-  AlertCircle,
-  Paperclip,
-  Upload,
-  Download,
-  Trash2,
-  FileText,
-} from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type DragEvent } from 'react';
+import { Button, Tag, cx } from '@meritbooks/merit-ui';
 import { addToast } from '@/hooks/use-toast';
 import {
   DOC_TYPE_LABEL,
@@ -33,6 +29,7 @@ import {
   type DocType,
   type DocumentRow,
 } from '@/lib/documents/schema';
+import s from './attachments-panel.module.css';
 
 interface AttachmentsPanelProps {
   entityType: string;
@@ -54,6 +51,9 @@ export function AttachmentsPanel({
   const [docs, setDocs] = useState<DocumentRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [over, setOver] = useState(false);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
@@ -115,8 +115,10 @@ export function AttachmentsPanel({
   }
 
   async function remove(doc: DocumentRow) {
-    if (!confirm(`Remove "${doc.file_name}"? This deletes the stored file.`)) return;
+    setRemoving(true);
     const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' });
+    setRemoving(false);
+    setConfirmId(null);
     if (res.ok) {
       addToast('success', 'Document removed');
       void load();
@@ -126,88 +128,98 @@ export function AttachmentsPanel({
     }
   }
 
+  const onDrop = (e: DragEvent<HTMLElement>) => {
+    e.preventDefault();
+    setOver(false);
+    if (!uploading && e.dataTransfer.files?.length) void onFiles(e.dataTransfer.files);
+  };
+
   return (
-    <div className={clsx('card p-4', className)}>
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2">
-          <Paperclip size={15} className="text-slate-400" />
-          <h3 className="text-sm font-semibold text-white">{title}</h3>
-          {docs && docs.length > 0 && (
-            <span className="text-[11px] text-slate-500">{docs.length}</span>
-          )}
+    <section
+      className={cx(s.panel, over && s.over, className)}
+      aria-label={title}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={onDrop}
+    >
+      <div className={s.head}>
+        <div className={s.title}>
+          <h3 className="t-head">{title}</h3>
+          {docs && docs.length > 0 && <span className="tag tnum">{docs.length}</span>}
         </div>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg inline-flex items-center gap-1.5"
-        >
-          {uploading ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+        <Button icon="upload" onClick={() => inputRef.current?.click()} disabled={uploading} aria-busy={uploading || undefined}>
           {uploading ? 'Uploading…' : 'Attach'}
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"
           multiple
-          className="hidden"
+          className="sr"
+          tabIndex={-1}
+          aria-hidden="true"
           onChange={(e) => onFiles(e.target.files)}
         />
       </div>
 
       {docs === null ? (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="w-5 h-5 text-emerald-400 animate-spin" />
+        <div className={cx('wg-loading', s.skel)} aria-busy="true">
+          <span className="bar-l" style={{ width: '70%' }} aria-hidden="true" />
+          <span className="bar-l" style={{ width: '45%' }} aria-hidden="true" />
+          <span className="t-cap" role="status">Loading documents…</span>
         </div>
       ) : error ? (
-        <div className="py-6 text-center">
-          <AlertCircle className="w-5 h-5 mx-auto text-red-400 mb-1" />
-          <p className="text-xs text-red-400">{error}</p>
+        <div className={s.state} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <p className="ink-2">Couldn&apos;t load the documents: {error}</p>
+          <Button variant="quiet" onClick={() => void load()}>
+            Try again
+          </Button>
         </div>
       ) : docs.length === 0 ? (
-        <div className="py-8 text-center">
-          <FileText className="w-7 h-7 mx-auto text-slate-600 mb-2" />
-          <p className="text-xs text-slate-400 mb-0.5">No documents attached</p>
-          <p className="text-[11px] text-slate-600">Attach the bill, contract, or supporting file for this record.</p>
+        <div className={s.state}>
+          <span className="t-head">No documents yet</span>
+          <p className="t-cap">Attach the bill, contract or supporting file for this record — or drop it here.</p>
         </div>
       ) : (
-        <div className="space-y-1.5">
+        <ul className={s.list}>
           {docs.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex items-center justify-between gap-3 rounded-lg bg-slate-950/40 px-3 py-2"
-            >
-              <button
-                type="button"
-                onClick={() => download(doc)}
-                className="flex items-center gap-2 min-w-0 text-left group"
-              >
-                <FileText size={14} className="text-slate-500 shrink-0" />
-                <span className="text-xs text-white truncate group-hover:text-emerald-300">{doc.file_name}</span>
-                <span className="text-[10px] text-slate-600 shrink-0">{DOC_TYPE_LABEL[doc.doc_type]}</span>
-                <span className="text-[10px] text-slate-600 shrink-0 font-mono">{formatBytes(doc.size_bytes)}</span>
-              </button>
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => download(doc)}
-                  title="Download"
-                  className="p-1.5 text-slate-500 hover:text-emerald-300 rounded"
-                >
-                  <Download size={13} />
+            <li key={doc.id}>
+              <div className={s.item}>
+                <button type="button" onClick={() => download(doc)} className={s.file} title={`Open ${doc.file_name}`}>
+                  <span className={s.name}>{doc.file_name}</span>
+                  <span className={cx('t-cap', s.meta)}>{DOC_TYPE_LABEL[doc.doc_type]}</span>
+                  <span className={cx('t-cap tnum', s.meta)}>{formatBytes(doc.size_bytes)}</span>
                 </button>
-                <button
-                  type="button"
-                  onClick={() => remove(doc)}
-                  title="Remove"
-                  className="p-1.5 text-slate-500 hover:text-red-400 rounded"
-                >
-                  <Trash2 size={13} />
-                </button>
+                <span className={s.acts}>
+                  <Button variant="quiet" onClick={() => download(doc)}>
+                    Open
+                  </Button>
+                  <Button variant="quiet" onClick={() => setConfirmId(doc.id)} disabled={removing}>
+                    Remove
+                  </Button>
+                </span>
               </div>
-            </div>
+              {confirmId === doc.id && (
+                <div className={s.confirm} role="alertdialog" aria-label={`Remove ${doc.file_name}`}>
+                  <span className="ink-2">Remove &ldquo;{doc.file_name}&rdquo;? This deletes the stored file.</span>
+                  <span className={s.acts}>
+                    <Button onClick={() => setConfirmId(null)} disabled={removing}>
+                      Keep it
+                    </Button>
+                    <Button variant="danger" onClick={() => void remove(doc)} disabled={removing} aria-busy={removing || undefined}>
+                      {removing ? 'Removing…' : 'Remove file'}
+                    </Button>
+                  </span>
+                </div>
+              )}
+            </li>
           ))}
-        </div>
+        </ul>
       )}
-    </div>
+    </section>
   );
 }

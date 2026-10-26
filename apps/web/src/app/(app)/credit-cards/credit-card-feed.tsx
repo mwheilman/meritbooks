@@ -1,9 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Check, Flag, Pencil, Receipt, Bell, Clock, Inbox, AlertCircle, Loader2, Search, ChevronRight } from 'lucide-react';
-import { clsx } from 'clsx';
-import { StatusBadge, ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
+import { Button, Icon, InlineNotice, Pip, Search, Tabs, type PipKind } from '@meritbooks/merit-ui';
+import { ConfidenceBar, EmptyState, TableSkeleton } from '@/components/ui';
 import { formatMoney } from '@meritbooks/shared';
 import { useQuery, useMutation, useDebounce, addToast } from '@/hooks';
 import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
@@ -14,6 +13,7 @@ import { isSpecificCompany } from '@/lib/company-scope';
 import { FlagDialog, useFlagTransaction } from '../bank-feed/flag-dialog';
 import { SplitTag } from '../bank-feed/split-grid';
 import type { SplitSummary } from '@/lib/bank/splits/types';
+import s from './credit-cards.module.css';
 
 interface CCRow {
   id: string;
@@ -55,40 +55,33 @@ const TAB_CONFIG = [
   { key: 'FLAGGED', label: 'Flagged' },
 ] as const;
 
+/** Receipt-chase state as pip shape + word (never colour alone). */
 function ReceiptBadge({ status, chaseCount }: { status: string; chaseCount: number }) {
   // Payments, refunds and credits are not purchases — no receipt badge at all.
-  if (status === 'NOT_APPLICABLE') return <span className="text-2xs text-slate-500" aria-label="No receipt needed for a payment or credit">—</span>;
+  if (status === 'NOT_APPLICABLE') {
+    return (
+      <span className="ink-3" aria-label="No receipt needed for a payment or credit">
+        —
+      </span>
+    );
+  }
+  let pip: PipKind = 'open';
+  let word = 'No receipt';
   if (status === 'MATCHED') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-emerald-500/10 text-emerald-400">
-        <Receipt size={10} />
-        Matched
-      </span>
-    );
-  }
-  if (status === 'NOT_REQUIRED') {
-    return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-slate-500/10 text-slate-400">
-        <Receipt size={10} />
-        Not needed
-      </span>
-    );
-  }
-  if (status === 'PENDING') {
-    return (
-      <span className={clsx(
-        'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium',
-        chaseCount >= 4 ? 'bg-red-500/10 text-red-400' : 'bg-amber-500/10 text-amber-400',
-      )}>
-        <Bell size={10} />
-        Asked {chaseCount}×
-      </span>
-    );
+    pip = 'ready';
+    word = 'Matched';
+  } else if (status === 'NOT_REQUIRED') {
+    pip = 'closed';
+    word = 'Not needed';
+  } else if (status === 'PENDING') {
+    // Four or more asks is overdue; fewer is at risk.
+    pip = chaseCount >= 4 ? 'overdue' : 'risk';
+    word = `Asked ${chaseCount}×`;
   }
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-2xs font-medium bg-blue-500/10 text-blue-400">
-      <Clock size={10} />
-      No receipt
+    <span className="mb-sev">
+      <Pip kind={pip} />
+      <span className="tnum">{word}</span>
     </span>
   );
 }
@@ -160,165 +153,170 @@ export function CreditCardFeed() {
 
   const transactions = data?.data ?? [];
   const counts = data?.counts ?? null;
+  const peekAccount = peek ? (peek.item.final_account ?? peek.item.ai_account) : null;
 
   return (
-    <div className="space-y-4">
-      {/* Status tabs */}
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-surface-900 border border-slate-800 w-fit">
-        {TAB_CONFIG.map((tab) => {
+    <div className={s.feed}>
+      {/* Status tabs — count and amount per status */}
+      <Tabs
+        aria-label="Card transactions by status"
+        value={activeTab}
+        onChange={setActiveTab}
+        items={TAB_CONFIG.map((tab) => {
           const stats = counts?.[tab.key] ?? null;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={clsx(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-                activeTab === tab.key
-                  ? 'bg-slate-800 text-white font-medium'
-                  : 'text-slate-400 hover:text-slate-300'
-              )}
-            >
-              <span>{tab.label}</span>
-              <span className={clsx(
-                'text-2xs font-mono tabular-nums',
-                activeTab === tab.key ? 'text-brand-400' : 'text-slate-600'
-              )}>
-                {stats ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}` : '--'}
-              </span>
-            </button>
-          );
+          return {
+            value: tab.key as string,
+            label: tab.label,
+            count: stats ? `${stats.count} · ${formatMoney(stats.amount_cents, { compact: true })}` : '—',
+          };
         })}
-      </div>
+      />
 
       {/* Search */}
-      <div className="relative max-w-md">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-        <input
-          type="text"
+      <div className="mb-toolbar">
+        <Search
+          className={s.search}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by vendor or description..."
+          placeholder="Search by vendor or description"
           aria-label="Search credit card transactions by vendor or description"
-          className="input pl-9"
         />
+        <span className="sp" />
+        {data && !isLoading && (
+          <span className="t-cap tnum">
+            {data.pagination.total} transaction{data.pagination.total === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
 
       {/* Table */}
       {isLoading ? (
         <TableSkeleton rows={6} cols={8} />
       ) : error ? (
-        <div className="card p-8 text-center">
-          <AlertCircle size={24} className="mx-auto text-red-400 mb-2" />
-          <p className="text-sm text-red-400 font-medium mb-1">Failed to load</p>
-          <p className="text-xs text-slate-500">{error}</p>
+        <div className={`surface ${s.state}`}>
+          <InlineNotice tone="neg" title="Card transactions didn’t load.">
+            {error}{' '}
+            <Button variant="quiet" onClick={() => refetch()}>
+              Try again
+            </Button>
+          </InlineNotice>
         </div>
       ) : transactions.length === 0 ? (
         <EmptyState
-          icon={Inbox}
-          title="No credit card transactions"
-          description="No transactions match your filters. Try a different status or company."
+          title="No card transactions here"
+          description={
+            debouncedSearch || activeTab !== 'all'
+              ? 'Nothing matches this status or search. Try another tab or clear the search.'
+              : 'Card charges appear here once a card account syncs or a card statement is imported.'
+          }
+          action={debouncedSearch || activeTab !== 'all' ? { label: 'Show all', onClick: () => { setSearch(''); setActiveTab('all'); } } : undefined}
         />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[900px]">
+        <div className={`mb-scroll-x ${s.tableWrap}`}>
+          <table className="tbl tbl-q" aria-label="Card transactions" style={{ minWidth: 1040 }}>
+            <colgroup>
+              <col style={{ width: 120 }} />
+              <col />
+              <col style={{ width: 168 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 216 }} />
+              <col style={{ width: 96 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 120 }} />
+              <col style={{ width: 112 }} />
+            </colgroup>
             <thead>
-              <tr className="border-b border-slate-800">
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Description</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Card</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">Company</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500">GL Category</th>
-                <th className="px-4 py-3 text-left text-2xs font-semibold uppercase tracking-wider text-slate-500 w-20">Conf.</th>
-                <th className="px-4 py-3 text-right text-2xs font-semibold uppercase tracking-wider text-slate-500">Amount</th>
-                <th className="px-4 py-3 text-center text-2xs font-semibold uppercase tracking-wider text-slate-500">Receipt</th>
-                <th className="w-24 px-4 py-3"></th>
+              <tr>
+                <th>Date</th>
+                <th>Description</th>
+                <th>Card</th>
+                <th>Company</th>
+                <th>GL account</th>
+                <th>Confidence</th>
+                <th className="n">Amount</th>
+                <th>Receipt</th>
+                <th><span className="sr">Actions</span></th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/30">
+            <tbody>
               {transactions.map((txn) => {
                 const account = txn.final_account ?? txn.ai_account;
                 const vendor = txn.ai_vendor?.display_name ?? txn.ai_vendor?.name ?? null;
                 const isPosted = txn.status === 'POSTED' || txn.status === 'APPROVED';
+                const cantApprove = (!account && txn.split?.status !== 'DRAFT') || isPosted;
                 return (
-                  <tr key={txn.id} {...rowHandlers(txn as unknown as CCLike)} onClick={() => setSelectedTxn(txn as unknown as CCLike)} className="row-clickable">
-                    <td className="px-4 py-3 text-sm text-slate-400 font-mono tabular-nums whitespace-nowrap">
-                      {txn.transaction_date}
+                  <tr
+                    key={txn.id}
+                    {...rowHandlers(txn as unknown as CCLike)}
+                    onClick={() => setSelectedTxn(txn as unknown as CCLike)}
+                    className={`q-row ${s.row}${selectedTxn?.id === txn.id ? ' is-cursor' : ''}`}
+                    aria-current={selectedTxn?.id === txn.id ? 'true' : undefined}
+                  >
+                    <td className="tnum ink-2">{txn.transaction_date}</td>
+                    <td>
+                      <span className="l1" title={txn.description}>{txn.description}</span>
+                      {vendor && <span className="l2">{vendor}</span>}
                     </td>
-                    <td className="px-4 py-3">
-                      <p className="text-sm text-slate-200 truncate max-w-[200px]">{txn.description}</p>
-                      {vendor && <p className="text-2xs text-slate-500 mt-0.5">{vendor}</p>}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td>
                       {txn.bank_account ? (
-                        <div>
-                          <p className="text-sm text-slate-300">{txn.bank_account.account_name}</p>
-                          <p className="text-2xs text-slate-500 font-mono">·{txn.bank_account.account_mask}</p>
-                        </div>
+                        <>
+                          <span className="l1">{txn.bank_account.account_name}</span>
+                          <span className="l2 tnum">••{txn.bank_account.account_mask}</span>
+                        </>
                       ) : (
-                        <span className="text-sm text-slate-600">--</span>
+                        <span className="ink-3">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       {txn.location ? (
-                        <span className="text-2xs font-mono text-slate-500 bg-slate-800 px-1 py-0.5 rounded">
-                          {txn.location.short_code}
-                        </span>
+                        <span className="code" title={txn.location.name}>{txn.location.short_code}</span>
                       ) : (
-                        <span className="text-sm text-slate-600">--</span>
+                        <span className="ink-3">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       {txn.split ? (
                         <SplitTag split={txn.split} />
                       ) : account ? (
-                        <span className="text-xs font-mono text-slate-400">
-                          {account.account_number} · {account.name}
+                        <span className="l1" title={`${account.account_number} · ${account.name}`}>
+                          <span className="code">{account.account_number}</span>
+                          {account.name}
                         </span>
                       ) : (
-                        <span className="text-xs text-amber-400 italic">Uncategorized</span>
+                        <span className="mb-sev">
+                          <Pip kind="soft" />
+                          Uncategorized
+                        </span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {txn.ai_confidence != null && <ConfidenceBar value={txn.ai_confidence} />}
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm font-mono tabular-nums text-slate-200">
-                      {formatMoney(Math.abs(txn.amount_cents))}
-                    </td>
-                    <td className="px-4 py-3 text-center">
+                    <td>{txn.ai_confidence != null ? <ConfidenceBar value={txn.ai_confidence} /> : <span className="ink-3">—</span>}</td>
+                    <td className="n tnum">{formatMoney(Math.abs(txn.amount_cents))}</td>
+                    <td>
                       <ReceiptBadge status={txn.receiptStatus} chaseCount={txn.chaseCount} />
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
+                    <td className="n">
+                      <span className="mb-row-acts">
+                        <Button
+                          variant="quiet"
+                          iconOnly
+                          icon="check"
                           onClick={(e) => { e.stopPropagation(); handleApprove(txn); }}
-                          disabled={(!account && txn.split?.status !== 'DRAFT') || approvingId === txn.id || isPosted}
-                          className={clsx(
-                            'p-1.5 rounded-md transition-colors',
-                            (!account && txn.split?.status !== 'DRAFT') || isPosted
-                              ? 'text-slate-700 cursor-not-allowed'
-                              : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'
-                          )}
-                          title="Approve"
+                          disabled={cantApprove || approvingId === txn.id}
+                          aria-busy={approvingId === txn.id || undefined}
+                          title={isPosted ? 'Already posted' : !account && txn.split?.status !== 'DRAFT' ? 'Pick a GL account first' : 'Approve'}
                           aria-label={`Approve transaction ${txn.description}`}
-                        >
-                          {approvingId === txn.id ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                        </button>
-                        <button
+                        />
+                        <Button
+                          variant="quiet"
+                          iconOnly
+                          icon="flag"
                           onClick={(e) => { e.stopPropagation(); setFlaggingTxn(txn); }}
                           disabled={isPosted || txn.status === 'FLAGGED'}
-                          className={clsx(
-                            'p-1.5 rounded-md transition-colors',
-                            isPosted || txn.status === 'FLAGGED'
-                              ? 'text-slate-700 cursor-not-allowed'
-                              : 'text-slate-500 hover:text-amber-400 hover:bg-amber-500/10'
-                          )}
                           title={txn.status === 'FLAGGED' ? 'Already flagged' : 'Flag'}
                           aria-label={`Flag transaction ${txn.description}`}
-                        >
-                          <Flag size={14} />
-                        </button>
-                        <ChevronRight size={14} className="row-chevron" />
-                      </div>
+                        />
+                        <Icon name="right" className={s.chev} />
+                      </span>
                     </td>
                   </tr>
                 );
@@ -333,14 +331,14 @@ export function CreditCardFeed() {
         onOpen={peek ? () => { const t = peek.item; close(); setSelectedTxn(t); } : undefined}
       >
         {peek && (
-          <div className="p-3">
-            <div className="text-sm font-semibold text-white truncate mb-1">{peek.item.description}</div>
-            <div className="rounded-md bg-slate-800/40 px-3 py-2 flex items-center justify-between">
-              <span className="text-2xs text-slate-500">{peek.item.transaction_date}</span>
-              <span className="text-sm font-mono text-white">{formatMoney(Math.abs(peek.item.amount_cents))}</span>
+          <div className={s.peek}>
+            <div className="t-head mb-trunc">{peek.item.description}</div>
+            <div className={s.peekRow}>
+              <span className="t-cap tnum">{peek.item.transaction_date}</span>
+              <span className="tnum">{formatMoney(Math.abs(peek.item.amount_cents))}</span>
             </div>
-            <div className="mt-2 text-2xs text-slate-500">
-              {(peek.item.final_account ?? peek.item.ai_account) ? `${(peek.item.final_account ?? peek.item.ai_account)!.account_number} · ${(peek.item.final_account ?? peek.item.ai_account)!.name}` : 'Uncategorized'}
+            <div className="t-cap mb-trunc">
+              {peekAccount ? `${peekAccount.account_number} · ${peekAccount.name}` : 'Uncategorized'}
             </div>
           </div>
         )}

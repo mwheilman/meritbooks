@@ -1,26 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import {
-  Sparkles,
-  Upload,
-  FileText,
-  Loader2,
-  X,
-  AlertTriangle,
-  CheckCircle2,
-  Inbox,
-  Cpu,
-  Bot,
-  Mail,
-  Clock,
-  ExternalLink,
-} from 'lucide-react';
-import { clsx } from 'clsx';
+  Button,
+  Conf,
+  Dialog,
+  Field,
+  Icon,
+  InlineNotice,
+  Input,
+  Keyhints,
+  Panel,
+  PanelSection,
+  QueueTable,
+  Select,
+  Tag,
+  cx,
+  type QueueColumn,
+} from '@meritbooks/merit-ui';
 import { formatMoney } from '@meritbooks/shared';
+import { EmptyState, PageHeader } from '@/components/ui';
 import { useQuery, addToast } from '@/hooks';
 import { BillsTabs } from '../bills-tabs';
 import { InboxAddressCard } from '@/components/inbound-email/inbox-address-card';
+import s from './intake.module.css';
 
 // ── Shapes mirrored from lib/ap/doc-intelligence ──────────────
 interface ExtractedLine {
@@ -98,27 +101,16 @@ interface VendorOption { id: string; name: string; display_name: string | null; 
 interface AccountOption { id: string; account_number: string; name: string }
 
 // ── Small presentational helpers ──────────────────────────────
-function confidenceTone(c: number): string {
-  if (c >= 0.85) return 'text-emerald-400';
-  if (c >= 0.6) return 'text-amber-400';
-  return 'text-red-400';
-}
-function confidenceBarTone(c: number): string {
-  if (c >= 0.85) return 'bg-emerald-500';
-  if (c >= 0.6) return 'bg-amber-500';
-  return 'bg-red-500';
-}
 
+/** AI confidence (0–1) as the kit meter + number. */
 function ConfidenceBar({ value }: { value: number }) {
   const pct = Math.round(Math.max(0, Math.min(1, value)) * 100);
-  return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 w-16 rounded-full bg-slate-800 overflow-hidden">
-        <div className={clsx('h-full rounded-full', confidenceBarTone(value))} style={{ width: `${pct}%` }} />
-      </div>
-      <span className={clsx('text-[11px] font-mono tabular-nums', confidenceTone(value))}>{pct}%</span>
-    </div>
-  );
+  return <Conf score={pct} label={`AI confidence ${pct} of 100`} />;
+}
+
+function readerLabel(d: Draft): string {
+  if (d.proposal.parseState === 'PENDING_PARSE') return 'Not read yet';
+  return d.proposal.extracted.providerName === 'azure-doc-intelligence' ? 'Azure OCR' : 'AI vision';
 }
 
 function centsFromDollarInput(v: string): number {
@@ -142,43 +134,43 @@ async function openSourceDocument(documentId: string): Promise<void> {
   }
 }
 
-/** Small source chip: distinguishes an emailed invoice from an uploaded one, and
- *  flags one that arrived but hasn't been machine-read yet (PENDING_PARSE). */
+/** Source tags: distinguishes an emailed invoice from an uploaded one, flags an
+ *  unverified sender, one that arrived but hasn't been machine-read yet
+ *  (PENDING_PARSE), and a possible duplicate. */
 function SourceBadges({ proposal }: { proposal: DraftProposal }) {
   const isEmail = proposal.source === 'email';
   const pending = proposal.parseState === 'PENDING_PARSE';
-  if (!isEmail && !pending) return null;
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-      {isEmail && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-indigo-800/60 bg-indigo-950/40 px-2 py-0.5 text-[10px] text-indigo-300">
-          <Mail size={10} /> Email{proposal.inbound?.fromName ? ` from ${proposal.inbound.fromName}` : ''}
-        </span>
+    <span className={s.tags}>
+      {isEmail ? (
+        <Tag
+          title={[
+            proposal.inbound?.fromName ? `From ${proposal.inbound.fromName}` : proposal.inbound?.from,
+            proposal.inbound?.toAddress ? `to ${proposal.inbound.toAddress}` : null,
+          ].filter(Boolean).join(' ')}
+        >
+          Email
+        </Tag>
+      ) : (
+        <Tag>Upload</Tag>
       )}
       {isEmail && proposal.inbound?.senderVerified === false && (
-        <span
-          className="inline-flex items-center gap-1 rounded-full border border-red-800/60 bg-red-950/40 px-2 py-0.5 text-[10px] text-red-300"
+        <Tag
+          tone="neg"
           title={`${proposal.inbound.senderAuth ?? 'The sending mail server did not pass SPF, DKIM or DMARC.'} The From address may be forged — confirm the vendor and the bank details before approving.`}
         >
-          <AlertTriangle size={10} aria-hidden /> Sender not verified
-        </span>
+          Sender not verified
+        </Tag>
       )}
-      {isEmail && proposal.inbound?.toAddress && (
-        <span className="text-[10px] text-slate-500 truncate max-w-[220px]" title={proposal.inbound.toAddress}>
-          to {proposal.inbound.toAddress}
-        </span>
-      )}
-      {pending && (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-800/60 bg-amber-950/40 px-2 py-0.5 text-[10px] text-amber-300">
-          <Clock size={10} /> Awaiting AI parse
-        </span>
-      )}
-    </div>
+      {pending && <Tag tone="warn">Not read yet</Tag>}
+      {proposal.duplicateWarning && <Tag tone="warn">Possible duplicate</Tag>}
+    </span>
   );
 }
 
 export function IntakeQueueClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [cursorId, setCursorId] = useState<string | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
 
   const {
@@ -191,7 +183,7 @@ export function IntakeQueueClient() {
   const { data: vendorData } = useQuery<{ data: VendorOption[] }>('/api/vendors?per_page=200');
   const { data: accountData } = useQuery<{ data: AccountOption[] }>('/api/accounts/search');
 
-  const drafts = draftsResp?.drafts ?? [];
+  const drafts = useMemo(() => draftsResp?.drafts ?? [], [draftsResp]);
   const locations = locData ?? [];
   const vendors = vendorData?.data ?? [];
   const accounts = accountData?.data ?? [];
@@ -206,8 +198,10 @@ export function IntakeQueueClient() {
   }, []);
   useEffect(() => {
     if (!linkedDraft || drafts.length === 0) return;
-    if (drafts.some((d) => d.id === linkedDraft)) setSelectedId(linkedDraft);
-    else addToast('info', 'That draft has already been reviewed or is no longer in the queue.');
+    if (drafts.some((d) => d.id === linkedDraft)) {
+      setSelectedId(linkedDraft);
+      setCursorId(linkedDraft);
+    } else addToast('info', 'That draft has already been reviewed or is no longer in the queue.');
     setLinkedDraft(null);
   }, [linkedDraft, drafts]);
 
@@ -221,140 +215,121 @@ export function IntakeQueueClient() {
     void refetch();
   }, [refetch]);
 
-  return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <Bot size={20} className="text-indigo-400" />
-            <h1 className="text-xl font-semibold text-white">AP Intake Queue</h1>
-          </div>
-          <p className="text-sm text-slate-400 mt-1 max-w-2xl">
-            Drop or receive vendor invoices — the machine reads each one and drafts a bill for your
-            review. You confirm the vendor and GL coding, then approve. Nothing posts to the ledger
-            until you do.
-          </p>
-        </div>
-        <button
-          onClick={() => setUploadOpen(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-sm font-medium text-white"
-        >
-          <Upload size={16} /> Upload document
-        </button>
-      </div>
+  const columns = useMemo<QueueColumn<Draft>[]>(
+    () => [
+      {
+        id: 'doc',
+        header: 'Document',
+        cell: (d) => (
+          <>
+            <span className="l1">{d.proposal.extracted.vendorName || 'Unknown vendor'}</span>
+            <span className="l2" title={d.proposal.fileName}>
+              {[locationName(d.proposal.locationId), d.proposal.fileName, readerLabel(d)].join(' · ')}
+            </span>
+          </>
+        ),
+      },
+      { id: 'source', header: 'Source', width: 176, cell: (d) => <SourceBadges proposal={d.proposal} /> },
+      { id: 'conf', header: 'Read', width: 88, cell: (d) => <ConfidenceBar value={d.confidence ?? d.proposal.extracted.totalConfidence} /> },
+      { id: 'amount', header: 'Amount', width: 120, numeric: true, cell: (d) => formatMoney(d.proposal.extracted.totalCents) },
+    ],
+    [locationName],
+  );
 
-      <div className="mb-6">
-        <BillsTabs />
-      </div>
+  return (
+    <div className={s.stack}>
+      <PageHeader
+        title="AP intake"
+        description="Drop or receive vendor invoices. Merit reads each one and drafts a bill; you confirm the vendor and GL coding, then approve. Nothing posts to the ledger until you do."
+        actions={
+          <Button variant="primary" icon="upload" onClick={() => setUploadOpen(true)}>
+            Upload invoice
+          </Button>
+        }
+      />
+
+      <BillsTabs />
 
       {/* Where emailed bills come from (FPB-ap-intake). */}
-      <div className="mb-6">
-        <InboxAddressCard purpose="ap" variant="compact" />
-      </div>
+      <InboxAddressCard purpose="ap" variant="compact" />
 
-      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+      <div className={s.split}>
         {/* Queue list */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500 font-medium px-1">
-            <span>Waiting for review</span>
-            <span className="text-slate-400">{drafts.length}</span>
+        <section className={s.queue} aria-label="Drafts waiting for review">
+          <div className={s.queueHead}>
+            <span className="eyebrow">Waiting for review</span>
+            <span className="tnum b">{isLoading ? '—' : drafts.length}</span>
           </div>
 
           {isLoading ? (
-            <div className="space-y-3">
-              {[0, 1, 2].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-slate-900 border border-slate-800 animate-pulse" />
-              ))}
+            <div className={cx('wg-loading', s.skel)} aria-busy="true">
+              <span className="bar-l" style={{ width: '80%' }} aria-hidden="true" />
+              <span className="bar-l" style={{ width: '65%' }} aria-hidden="true" />
+              <span className="bar-l" style={{ width: '72%' }} aria-hidden="true" />
+              <span className="t-cap" role="status">Loading the intake queue…</span>
             </div>
           ) : error ? (
-            <div className="rounded-xl border border-red-900/50 bg-red-950/30 p-4 text-sm text-red-300">
-              <div className="flex items-center gap-2 font-medium">
-                <AlertTriangle size={16} /> Couldn&apos;t load the queue
-              </div>
-              <p className="mt-1 text-red-400/80">{error}</p>
-              <button onClick={() => void refetch()} className="mt-2 text-xs underline text-red-300">
-                Retry
-              </button>
+            <div className={s.state} role="alert">
+              <Tag tone="neg">Not loaded</Tag>
+              <p className="t-head">Couldn&apos;t load the queue.</p>
+              <p className="ink-2">{error}</p>
+              <Button onClick={() => void refetch()}>Try again</Button>
             </div>
           ) : drafts.length === 0 ? (
-            <div className="rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
-              <Inbox size={28} className="mx-auto text-slate-600" />
-              <p className="mt-3 text-sm text-slate-400">No documents waiting.</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Upload an invoice and it will appear here as a draft.
-              </p>
-            </div>
+            <EmptyState
+              title="Nothing waiting"
+              description="Upload an invoice, or email it to the AP inbox above — it appears here as a draft bill to review."
+              action={{ label: 'Upload invoice', onClick: () => setUploadOpen(true) }}
+            />
           ) : (
-            drafts.map((d) => {
-              const ex = d.proposal.extracted;
-              const conf = d.confidence ?? ex.totalConfidence;
-              return (
-                <button
-                  key={d.id}
-                  onClick={() => setSelectedId(d.id)}
-                  className={clsx(
-                    'w-full text-left rounded-xl border p-4 transition-colors',
-                    selectedId === d.id
-                      ? 'border-emerald-600 bg-slate-900'
-                      : 'border-slate-800 bg-slate-900 hover:border-slate-700',
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-white truncate">
-                        {ex.vendorName || 'Unknown vendor'}
-                      </p>
-                      <p className="text-xs text-slate-500 truncate">{locationName(d.proposal.locationId)}</p>
-                    </div>
-                    <span className="font-mono text-sm text-white tabular-nums shrink-0">
-                      {formatMoney(ex.totalCents)}
-                    </span>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between">
-                    <ConfidenceBar value={conf} />
-                    <span className="inline-flex items-center gap-1 text-[10px] text-slate-500">
-                      <Cpu size={11} />
-                      {d.proposal.parseState === 'PENDING_PARSE'
-                        ? 'Not read yet'
-                        : ex.providerName === 'azure-doc-intelligence'
-                          ? 'Azure OCR'
-                          : 'AI vision'}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500 truncate">
-                    <FileText size={11} /> {d.proposal.fileName}
-                  </div>
-                  <SourceBadges proposal={d.proposal} />
-                  {d.proposal.duplicateWarning && (
-                    <div className="mt-2 flex items-center gap-1 text-[11px] text-amber-400">
-                      <AlertTriangle size={11} /> Possible duplicate
-                    </div>
-                  )}
-                </button>
-              );
-            })
+            <>
+              <div className={s.queueScroll}>
+                <QueueTable<Draft>
+                  aria-label="Drafts waiting for review"
+                  columns={columns}
+                  rows={drafts}
+                  getRowId={(d) => d.id}
+                  rowState={(d) => ({
+                    attn: !!d.proposal.duplicateWarning || (d.proposal.source === 'email' && d.proposal.inbound?.senderVerified === false),
+                  })}
+                  cursorId={cursorId ?? selectedId}
+                  onCursorChange={(id) => setCursorId(id)}
+                  onOpen={(d) => { setCursorId(d.id); setSelectedId(d.id); }}
+                  openOnClick
+                  flush
+                />
+              </div>
+              <Keyhints
+                className={s.hints}
+                hints={[
+                  { chord: 'j k', label: 'Move' },
+                  { chord: 'enter', label: 'Review draft' },
+                ]}
+              />
+            </>
           )}
-        </div>
+        </section>
 
         {/* Review panel */}
         <div>
           {selected ? (
-            <ReviewPanel
-              key={selected.id}
-              draft={selected}
-              vendors={vendors}
-              accounts={accounts}
-              onDone={afterDisposition}
-              onClose={() => setSelectedId(null)}
-            />
+            <div className={s.panelWrap}>
+              <ReviewPanel
+                key={selected.id}
+                draft={selected}
+                companyName={locationName(selected.proposal.locationId)}
+                reader={readerLabel(selected)}
+                vendors={vendors}
+                accounts={accounts}
+                onDone={afterDisposition}
+                onClose={() => setSelectedId(null)}
+              />
+            </div>
           ) : (
-            <div className="rounded-xl border border-dashed border-slate-800 bg-slate-900/40 h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8">
-              <Sparkles size={28} className="text-slate-600" />
-              <p className="mt-3 text-sm text-slate-400">Select a draft to review it side by side.</p>
-              <p className="text-xs text-slate-500 mt-1">
-                Extracted fields on the left, the bill you&apos;ll create on the right.
-              </p>
+            <div className={cx('wg-state', s.placeholder)}>
+              <span className="wg-empty-mark" aria-hidden="true"><Icon name="file-text" /></span>
+              <span className="t-head">Pick a draft to review it side by side</span>
+              <p>What AI read on the left, the bill you&apos;ll create on the right. J and K move, Enter opens.</p>
             </div>
           )}
         </div>
@@ -387,6 +362,7 @@ function UploadModal({
   const [locationId, setLocationId] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [over, setOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = useCallback(
@@ -422,72 +398,68 @@ function UploadModal({
     [locationId, onUploaded],
   );
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-          <div className="flex items-center gap-2">
-            <Upload size={16} className="text-emerald-400" />
-            <h2 className="text-base font-semibold text-white">Upload invoice</h2>
-          </div>
-          <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Close">
-            <X size={18} />
-          </button>
-        </div>
-        <div className="space-y-5 p-6">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Company</label>
-            <select
-              value={locationId}
-              onChange={(e) => setLocationId(e.target.value)}
-              disabled={busy}
-              className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white disabled:opacity-50"
-            >
-              <option value="">Select...</option>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          </div>
+  const onDrop = (e: DragEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    setOver(false);
+    const f = e.dataTransfer.files?.[0];
+    if (f && !busy) void submit(f);
+  };
 
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-            className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-700 bg-slate-950/40 py-10 text-slate-400 hover:border-emerald-600 hover:text-emerald-300 disabled:opacity-50"
-          >
-            {busy ? (
-              <>
-                <Loader2 size={22} className="animate-spin" />
-                <span className="text-sm">Reading the document…</span>
-              </>
-            ) : (
-              <>
-                <FileText size={22} />
-                <span className="text-sm">Choose a PDF or image</span>
-                <span className="text-[11px] text-slate-500">Max 10MB · PDF, PNG, JPG, WebP</span>
-              </>
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) void submit(f);
-            }}
-          />
-          {err && <p className="text-xs text-red-400">{err}</p>}
-        </div>
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Upload an invoice"
+      footNote="Max 10 MB · PDF, PNG, JPG, WebP"
+      actions={<Button onClick={onClose}>{busy ? 'Close' : 'Cancel'}</Button>}
+    >
+      <div className={s.dialogBody}>
+        <Field label="Company">
+          <Select value={locationId} onChange={(e) => setLocationId(e.target.value)} disabled={busy} data-autofocus>
+            <option value="">Select…</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <button
+          type="button"
+          disabled={busy}
+          aria-busy={busy || undefined}
+          onClick={() => fileRef.current?.click()}
+          className={cx(s.drop, over && s.dropOver)}
+          onDragOver={(e) => { e.preventDefault(); if (!busy) setOver(true); }}
+          onDragLeave={() => setOver(false)}
+          onDrop={onDrop}
+        >
+          {busy ? (
+            <span className="t-head" role="status">Reading the document…</span>
+          ) : (
+            <>
+              <span className={s.dropIcon} aria-hidden="true"><Icon name="file-text" /></span>
+              <span className="t-head">Choose a PDF or image</span>
+              <span className="t-cap">Or drop it here.</span>
+            </>
+          )}
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg,image/webp,image/gif"
+          className="sr"
+          tabIndex={-1}
+          aria-hidden="true"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void submit(f);
+          }}
+        />
+        {err && <InlineNotice tone="neg" title="Not uploaded.">{err}</InlineNotice>}
       </div>
-    </div>
+    </Dialog>
   );
 }
 
@@ -501,12 +473,16 @@ interface EditableLine {
 
 function ReviewPanel({
   draft,
+  companyName,
+  reader,
   vendors,
   accounts,
   onDone,
   onClose,
 }: {
   draft: Draft;
+  companyName: string;
+  reader: string;
   vendors: VendorOption[];
   accounts: AccountOption[];
   onDone: () => void;
@@ -631,88 +607,94 @@ function ReviewPanel({
     }
   }, [draft.id, onDone]);
 
-  const fieldRow = (label: string, extractedValue: string, confidence: number, editable: React.ReactNode) => (
-    <div className="grid grid-cols-2 gap-4 py-2 border-b border-slate-800/60">
-      <div>
-        <p className="text-[11px] uppercase tracking-wide text-slate-500">{label}</p>
-        <p className="text-sm text-slate-300 mt-0.5">{extractedValue || '—'}</p>
-        <div className="mt-1">
-          <ConfidenceBar value={confidence} />
-        </div>
+  const fieldRow = (label: string, extractedValue: string, confidence: number, editable: ReactNode) => (
+    <div className={s.fieldRow}>
+      <div className={s.extracted}>
+        <span className="t-cap">{label}</span>
+        <span className="l1">{extractedValue || '—'}</span>
+        <ConfidenceBar value={confidence} />
       </div>
-      <div className="flex items-center">{editable}</div>
+      <div>{editable}</div>
     </div>
   );
 
-  const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-white';
+  const isEmail = draft.proposal.source === 'email';
+  const sourceDocumentId = draft.proposal.sourceDocumentId;
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <FileText size={16} className="text-indigo-400" />
-            <h2 className="text-base font-semibold text-white">Review extracted bill</h2>
-          </div>
-          <p className="text-xs text-slate-500 mt-0.5">{draft.proposal.fileName}</p>
+    <Panel
+      eyebrow={['Review', companyName]}
+      title={ex.vendorName || 'Unknown vendor'}
+      meta={`${draft.proposal.fileName} · read by ${reader}`}
+      onClose={onClose}
+      foot={
+        <div className={s.foot}>
+          <Button onClick={() => void reject()} disabled={busy !== null} aria-busy={busy === 'reject' || undefined}>
+            {busy === 'reject' ? 'Rejecting…' : 'Reject draft'}
+          </Button>
+          <span />
+          <Button
+            variant="primary"
+            onClick={() => void approve()}
+            disabled={busy !== null || !canApprove}
+            aria-busy={busy === 'approve' || undefined}
+          >
+            {busy === 'approve' ? 'Creating bill…' : 'Approve into bill'}
+          </Button>
         </div>
-        <button onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-800 hover:text-white" aria-label="Close">
-          <X size={18} />
-        </button>
+      }
+    >
+      <div className={s.notices}>
+        {/* Inbound (email) provenance + source-document access. */}
+        {(isEmail || sourceDocumentId) && (
+          <InlineNotice tone="info">
+            <div className={s.prov}>
+              <span>
+                {isEmail && draft.proposal.inbound ? (
+                  <>
+                    Received by email from <b>{draft.proposal.inbound.from}</b>
+                    {draft.proposal.inbound.toAddress ? <> to {draft.proposal.inbound.toAddress}</> : null}
+                  </>
+                ) : (
+                  'Uploaded document'
+                )}
+                {isEmail && draft.proposal.inbound?.subject && (
+                  <span className="l2">Subject: {draft.proposal.inbound.subject}</span>
+                )}
+              </span>
+              {sourceDocumentId && (
+                <Button icon="eye" onClick={() => void openSourceDocument(sourceDocumentId)}>
+                  View original
+                </Button>
+              )}
+            </div>
+          </InlineNotice>
+        )}
+
+        {isEmail && draft.proposal.inbound?.senderVerified === false && (
+          <InlineNotice tone="neg" title="Sender not verified.">
+            {draft.proposal.inbound.senderAuth ?? 'The sending mail server did not pass SPF, DKIM or DMARC.'} The From
+            address may be forged — confirm the vendor and the bank details before approving.
+          </InlineNotice>
+        )}
+
+        {/* Degrade-safe state: the document arrived but AI hasn't read it yet. */}
+        {draft.proposal.parseState === 'PENDING_PARSE' && (
+          <InlineNotice tone="warn" title="Not read yet.">
+            This invoice was received and stored, but AI hasn&apos;t read it
+            {draft.proposal.extracted.notes ? ` (${draft.proposal.extracted.notes})` : ''}. Open the original
+            above and enter the fields to process it now, or leave it here and it will be read once AI is back.
+          </InlineNotice>
+        )}
+
+        {draft.proposal.duplicateWarning && (
+          <InlineNotice tone="warn" title="Possible duplicate.">{draft.proposal.duplicateWarning}</InlineNotice>
+        )}
       </div>
 
-      {/* Inbound (email) provenance + source-document access. */}
-      {(draft.proposal.source === 'email' || draft.proposal.sourceDocumentId) && (
-        <div className="mx-5 mt-4 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2.5 text-xs">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2 text-slate-400">
-              {draft.proposal.source === 'email' ? <Mail size={13} className="shrink-0 text-indigo-400" /> : <FileText size={13} className="shrink-0" />}
-              <span className="truncate">
-                {draft.proposal.source === 'email' && draft.proposal.inbound
-                  ? <>Received by email from <span className="text-slate-200">{draft.proposal.inbound.from}</span></>
-                  : 'Uploaded document'}
-              </span>
-            </div>
-            {draft.proposal.sourceDocumentId && (
-              <button
-                onClick={() => void openSourceDocument(draft.proposal.sourceDocumentId!)}
-                className="inline-flex shrink-0 items-center gap-1 rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-300 hover:bg-slate-800"
-              >
-                <ExternalLink size={11} /> View original
-              </button>
-            )}
-          </div>
-          {draft.proposal.source === 'email' && draft.proposal.inbound?.subject && (
-            <p className="mt-1 truncate text-slate-500">Subject: {draft.proposal.inbound.subject}</p>
-          )}
-        </div>
-      )}
-
-      {/* Degrade-safe state: the document arrived but AI hasn't read it yet. */}
-      {draft.proposal.parseState === 'PENDING_PARSE' && (
-        <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2.5 text-xs text-amber-300">
-          <Clock size={14} className="mt-0.5 shrink-0" />
-          <span>
-            Awaiting AI parse — this invoice was received and stored, but hasn&apos;t been read yet
-            {draft.proposal.extracted.notes ? ` (${draft.proposal.extracted.notes})` : ''}. Open the
-            original above and enter the fields to process it now, or leave it here and the machine
-            will read it once AI is back.
-          </span>
-        </div>
-      )}
-
-      {draft.proposal.duplicateWarning && (
-        <div className="mx-5 mt-4 flex items-start gap-2 rounded-lg border border-amber-900/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
-          <AlertTriangle size={14} className="mt-0.5 shrink-0" />
-          <span>{draft.proposal.duplicateWarning}</span>
-        </div>
-      )}
-
-      <div className="px-5 py-4">
-        <div className="grid grid-cols-2 gap-4 pb-2 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-          <span className="flex items-center gap-1">
-            <Bot size={12} /> Extracted (AI)
-          </span>
+      <PanelSection>
+        <div className={cx('eyebrow', s.cols)}>
+          <span>Read by AI</span>
           <span>Bill to create</span>
         </div>
 
@@ -720,120 +702,97 @@ function ReviewPanel({
           'Vendor',
           ex.vendorName,
           ex.vendorNameConfidence,
-          <select value={vendorId} onChange={(e) => setVendorId(e.target.value)} className={inputCls}>
+          <Select aria-label="Vendor" value={vendorId} onChange={(e) => setVendorId(e.target.value)} invalid={!vendorId}>
             <option value="">Select vendor…</option>
             {vendors.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.display_name ?? v.name}
               </option>
             ))}
-          </select>,
+          </Select>,
         )}
 
         {fieldRow(
           'Invoice #',
           ex.invoiceNumber ?? '',
           ex.invoiceNumberConfidence,
-          <input value={billNumber} onChange={(e) => setBillNumber(e.target.value)} className={inputCls} placeholder="Invoice number" />,
+          <Input aria-label="Invoice number" className="tnum" value={billNumber} onChange={(e) => setBillNumber(e.target.value)} placeholder="Invoice number" />,
         )}
 
         {fieldRow(
           'Invoice date',
           ex.invoiceDate ?? '',
           ex.invoiceDateConfidence,
-          <input type="date" value={billDate} onChange={(e) => setBillDate(e.target.value)} className={inputCls} />,
+          <Input aria-label="Invoice date" type="date" className="tnum" value={billDate} onChange={(e) => setBillDate(e.target.value)} />,
         )}
 
         {fieldRow(
           'Due date',
           ex.dueDate ?? '',
           ex.dueDateConfidence,
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />,
+          <Input aria-label="Due date" type="date" className="tnum" value={dueDate} onChange={(e) => setDueDate(e.target.value)} invalid={!dueDate} />,
         )}
+      </PanelSection>
 
-        {/* Lines */}
-        <div className="mt-4">
-          <p className="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Line items · GL coding</p>
-          <div className="space-y-2">
-            {lines.map((l, i) => (
-              <div key={i} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <input
-                    value={l.description}
-                    onChange={(e) => updateLine(i, { description: e.target.value })}
-                    className="flex-1 bg-transparent text-sm text-white outline-none"
-                    placeholder="Description"
-                  />
-                  <span className="font-mono text-sm text-white tabular-nums">{formatMoney(l.amountCents)}</span>
-                </div>
-                <select
-                  value={l.accountId}
-                  onChange={(e) => updateLine(i, { accountId: e.target.value })}
-                  className={clsx(inputCls, 'mt-2', !l.accountId && 'border-amber-700')}
-                >
-                  <option value="">Select GL account…</option>
-                  {accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.account_number} · {a.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ))}
+      {/* Lines */}
+      <PanelSection title="Line items · GL coding" meta={<span className="t-cap tnum">{lines.length}</span>}>
+        {lines.map((l, i) => (
+          <div key={i} className={s.lineCard}>
+            <div className={s.lineTop}>
+              <Input
+                aria-label={`Line ${i + 1} description`}
+                value={l.description}
+                onChange={(e) => updateLine(i, { description: e.target.value })}
+                placeholder="Description"
+              />
+              <span className="tnum b">{formatMoney(l.amountCents)}</span>
+            </div>
+            <Select
+              aria-label={`Line ${i + 1} GL account`}
+              value={l.accountId}
+              onChange={(e) => updateLine(i, { accountId: e.target.value })}
+              invalid={!l.accountId}
+            >
+              <option value="">Select GL account…</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.account_number} · {a.name}
+                </option>
+              ))}
+            </Select>
           </div>
-        </div>
+        ))}
 
         {/* Totals */}
-        <div className="mt-4 space-y-1.5 text-sm">
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Lines subtotal</span>
-            <span className="font-mono tabular-nums text-slate-200">{formatMoney(linesTotal)}</span>
-          </div>
-          <div className="flex items-center justify-between text-slate-400">
-            <span>Tax</span>
-            <input
+        <dl className={s.totals}>
+          <dt className="ink-2">Lines subtotal</dt>
+          <dd className="tnum">{formatMoney(linesTotal)}</dd>
+          <dt className="ink-2">Tax</dt>
+          <dd>
+            <Input
+              aria-label="Tax"
               value={taxDollars}
               onChange={(e) => setTaxDollars(e.target.value)}
-              className="w-28 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-right font-mono text-sm text-white"
+              className={cx('input--money', s.taxInput)}
               inputMode="decimal"
             />
+          </dd>
+          <dt className={s.grand}>Total</dt>
+          <dd className={cx('tnum', s.grand)}>{formatMoney(grandTotal)}</dd>
+        </dl>
+        {grandTotal !== ex.totalCents && (
+          <div style={{ marginTop: 8 }}>
+            <InlineNotice tone="warn">
+              AI read a total of {formatMoney(ex.totalCents)} — your edits changed it.
+            </InlineNotice>
           </div>
-          <div className="flex items-center justify-between border-t border-slate-800 pt-2 text-white">
-            <span className="font-medium">Total</span>
-            <span className="font-mono tabular-nums font-semibold">{formatMoney(grandTotal)}</span>
-          </div>
-          {grandTotal !== ex.totalCents && (
-            <p className="text-[11px] text-amber-400">
-              Extracted total was {formatMoney(ex.totalCents)} — your edits changed it.
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-3 border-t border-slate-800 px-5 py-4">
-        <button
-          onClick={() => void reject()}
-          disabled={busy !== null}
-          className="rounded-lg border border-slate-700 px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-        >
-          {busy === 'reject' ? 'Rejecting…' : 'Reject'}
-        </button>
-        <button
-          onClick={() => void approve()}
-          disabled={busy !== null || !canApprove}
-          className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
-        >
-          {busy === 'approve' ? (
-            <>
-              <Loader2 size={15} className="animate-spin" /> Creating bill…
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={15} /> Approve into bill
-            </>
-          )}
-        </button>
-      </div>
-    </div>
+        )}
+        {!canApprove && (
+          <p className="t-cap" style={{ marginTop: 8 }}>
+            To approve: pick a vendor, a due date, and a GL account for every line.
+          </p>
+        )}
+      </PanelSection>
+    </Panel>
   );
 }

@@ -672,6 +672,206 @@ departments they own and refuses others (403), company-level lines included. Cli
   apply % growth to a row, and paste a block from Excel (tab / newline separated) — every edit saves as cents and a locked
   version renders read-only with the reason.
 
+### 4.12 Wave 4C amendment — cash workspace: direct 13-week forecast, scenarios, accuracy (migration 192, 2026-10-26)
+
+Audit rows FP-09 (rolling forecast — the cash side), FP-10 (scenarios — the cash side), **FP-11** (13-week cash forecast
+with payroll / recurring / debt / tax overlays, AI pay dates, accuracy — P0), **FP-12** (daily cash position + minimum-cash
+alerts), R17, R18; benchmark B3–B7, B9, B10, U8, AI5, AI8 (`docs/audit-2026-10/E-REPORTING-BENCHMARK.md`). Replaces the
+AR/AP-only `lib/cash/forecast.ts` projection and the back-calculated `lib/cash/trend.ts` curve on `/cash`. CA-02, CA-03,
+CA-06, CA-07, CA-08, CA-09 (§1.4) are served by this slice.
+
+**Engine (`lib/cash/forecast/**`, pure, integer cents, no I/O).** Every source becomes a dated `ForecastItem`
+(company, direction, category, expected date, probability-weighted cents, gross cents, probability, certainty
+COMMITTED / EXPECTED / ESTIMATED, source document, counterparty) and the engine buckets items into 13 Monday-anchored
+weeks and 91 days, per company and combined.
+
+| Category | Source (read through the caller's RLS client) | Timing rule |
+|---|---|---|
+| Opening balance | Canonical **book cash** (`lib/cash/book-cash`, GL cash accounts by flag / role) as of today; the bank-feed balance (`bank_accounts`, non-card, non-LOC) is shown beside it with its freshness. Non-finance readers whose current month isn't released start from the bank-feed balance, labelled. | as of today (org timezone) |
+| AR collections | Open invoices (SENT / PARTIALLY_PAID / OVERDUE, balance > 0) | Due date + the customer's **amount-weighted median days-late** from paid history (payment_applications × customer_payments); no history → the org-wide profile; no org history → due date. Past-due items land no earlier than today. Probability by age bucket × customer reliability (1 − written-off share), × 0.5 when disputed. Expected cents = round(balance × p); the remainder is reported as **at risk**, never counted. |
+| Recurring billing | Active `recurring_invoice_templates` (`templateRunAmountCents`) | Each future run date (after the last generated run) + the template's terms, then the customer's days-late |
+| Deposits & other receipts | Manual items (category DEPOSIT / OTHER_IN) | As entered |
+| AP | Open bills (PENDING / APPROVED / SCHEDULED / PARTIALLY_PAID / ON_HOLD, balance > 0) | SCHEDULED → `scheduled_payment_date`; on a waiting pay-run proposal (PAY_RUN agent run, PAUSED) → its pay-by date; else due date (past due → today). ON_HOLD is flagged. |
+| Payroll + payroll taxes | Active `pay_schedules` × the mean of the last 3 non-cancelled `payroll_runs` on that schedule | Future runs already on file (DRAFT…PROCESSING, pay date ≥ today) count as COMMITTED; otherwise next pay dates step from the latest run by frequency (weekly 7d, biweekly 14d, semimonthly 15th/last, monthly same day). Net = gross − employee tax; taxes = employee tax + employer tax (or gross × the company's employer-tax bps when runs carry none). |
+| Debt service | `debt_schedule_lines` of ACTIVE instruments, not yet posted (`debt:payment:{id}:{period}`) | Scheduled date |
+| Leases | ACTIVE `leases` × `lease_schedule_lines` | ARREARS → the line date; ADVANCE → the first day of that period |
+| Subscriptions | ACTIVE / KEPT / UNDER_REVIEW `subscriptions` | `next_renewal_date` stepping by cadence |
+| Taxes | `sales_tax_filings` history per jurisdiction (next period by frequency, amount = mean of the last 3 remitted) + estimated income tax if configured (company setting, quarterly 15 Apr / 15 Jun / 15 Sep / 15 Jan) | Due date |
+| Budgeted opex run-rate | Current published budget (`public.budgets`) for OPEX + COGS accounts, or the trailing-3-month posted actual (setting), **minus what other sources already count** | Spread evenly over the month's days |
+| Capex, line draws / paydowns, transfers | Manual items (CAPEX / LINE_DRAW / LINE_PAYDOWN / TRANSFER_IN / TRANSFER_OUT) and scenario adjustments | As entered |
+
+**No double counting (dedupe rules, AC-CF3).** (1) Run-rate excludes accounts whose family another source carries — payroll
+(wage / payroll-tax / benefit roles and names) when a pay schedule is active, rent / lease when a lease is active,
+interest when debt service is scheduled, depreciation / amortization (non-cash) always, income tax always; (2) for each
+month the run-rate for an account is reduced by that month's open-bill lines and manual OUT items coded to the account,
+floored at zero; (3) a subscription renewal within ±7 days of an open bill to the same vendor for an amount within 10%
+is dropped (the bill wins); (4) a recurring-invoice run is skipped when an invoice for that run already exists
+(`recurringSourceRef`); (5) a payroll run on file suppresses the projected run for the same schedule and pay date.
+
+**Intercompany.** In the combined view an item whose counterparty is another company in scope — a customer whose
+`related_location_id` is a company in scope, a vendor whose name matches a company in scope, a TRANSFER manual item — is
+excluded (it nets to zero for the group) and counted under "Intercompany excluded"; a single-company view keeps it.
+
+**Confidence band.** Per week the closing balance carries an 80% band: ± 1.28 × √(Σ item variance through that week) where
+a receipt with probability p has variance p(1−p)·gross², an ESTIMATED item (run-rate, projected payroll, taxes) has a
+10% coefficient of variation (5% for payroll), COMMITTED items none; widened by the trailing accuracy MAPE × the cumulative
+absolute weekly net flow once four or more weeks have been scored against snapshots.
+
+**Scenarios & overrides (192).** `cash_forecast_scenarios` (BASE / DOWNSIDE / UPSIDE / CUSTOM; per company or all) with
+`cash_forecast_adjustments`: DELAY_RECEIPTS (customer or all, ± days), RECEIPT_HAIRCUT (bps), DELAY_DISBURSEMENTS (vendor
+or all, ± days), REMOVE_ITEM (item key), PAYROLL_GROWTH (bps on projected — never committed — payroll), LINE_DRAW /
+LINE_PAYDOWN (instrument, date, amount; moves liquidity headroom). `cash_forecast_items` holds manual one-offs with a
+note, optional weekly / monthly recurrence and an optional scenario (null = every scenario). Presets: Downside = receipts
++14 days and −10%, payroll +3%; Upside = receipts −7 days.
+
+**Thresholds, alerts, recommendations.** `cash_settings` per company: minimum cash (falls back to
+`core.locations.minimum_cash_cents`), alerts on / off, employer-tax bps, estimated tax, run-rate basis (BUDGET /
+TRAILING_3M / OFF). The first week a company's projected closing falls below its minimum raises a **critical in-app
+notification** (lib/notify, deduped per company × week) to the tenant's finance admins, and the forecast shows a
+recommendation: a transfer from companies whose projected low point exceeds their own minimum (largest surplus first,
+never below the donor's minimum), then a draw on the company's available lines, then the uncovered remainder.
+**Liquidity headroom** = cash + available lines: `cash_liquidity_lines` (commitment, borrowing base, drawn override) →
+else a LINE_OF_CREDIT bank account's available balance → else LINE_OF_CREDIT instrument original − current balance;
+availability = min(commitment, borrowing base) − drawn, floored at zero. Recommendations are advice only — nothing moves
+money.
+
+**Accuracy (192).** `cash_forecast_snapshots` (append-only): the weekly job **`cash.forecast_snapshot`** (Mondays) stores,
+per company and combined, the base forecast's weekly inflows / outflows by category and closing balance. Accuracy compares
+each week's actual cash movement (posted GL cash lines, internal cash-to-cash transfers removed, categorized by
+`gl_entries.source_module`) with the snapshot taken at the start of that week (lead 1) and four weeks before (lead 4).
+Week accuracy = 1 − |A − F| ÷ |A| (n/m when A = 0); MAPE = mean |A − F| ÷ |A| over meaningful weeks; accuracy % = max(0, 1 −
+MAPE). "Snapshot now" is available to editors.
+
+**Runway & metrics.** Trailing burn = mean monthly decline in book cash over the last 3 complete months (a cash-generative
+company reads "Cash-generative", never a negative runway); forecast burn = −(13-week net change) ÷ 3; runway months = cash
+÷ burn; zero-cash date when the forecast crosses zero; liquidity = cash + available lines; cash conversion cycle trend =
+registry metrics DSO + DIO − DPO (12 month-ends, governed). Charts (ChartCard): weekly closing balance with band and
+minimum-cash ticks; inflows / outflows stacked by category; opening → closing waterfall by category; top 10 receipts and
+disbursements.
+
+**History (fixes the trend).** Daily / weekly historical cash is the posted **book cash** at each date from GL cash
+lines (not rewound from today's bank balance); the bank-feed series (rewound from the current feed balance through
+`bank_transactions`) is drawn beside it and the **difference is shown per point** as the reconciling gap.
+
+**Governance.** View = `cash.position:view` / `cash.forecast:view` (legacy `cash_position:view`, `forecast:view`);
+create / edit scenarios, items, settings, snapshot = `cash.forecast:edit` (legacy `forecast:edit`). Every write is the
+service role after the permission check and the client-scope assert (171 / 189 pattern); members read only; every new
+table has client-scope RLS (163) and the Projects-only seat deny. GL-derived history (book-cash series, trailing burn,
+CCC, accuracy actuals) is governed (Wave 3D): a non-finance reader sees only released months.
+
+#### Acceptance criteria (Wave 4C)
+- **AC-CF1 Receipt timing.** A customer who historically pays 10 days late (amount-weighted median) has an open invoice due
+  on day D expected on D + 10; a customer with no history uses the org profile; expected cents = balance × probability
+  (rounded), and the at-risk remainder is reported, never counted; a disputed invoice halves the probability.
+- **AC-CF2 Schedules land in the right weeks.** Biweekly payroll from a last pay date steps 14 days; semimonthly lands on
+  the 15th and the month end; a payroll run on file replaces the projection for that date; debt lines already posted are
+  skipped; an ADVANCE lease lands on the first of the period and an ARREARS lease on the line date.
+- **AC-CF3 No double counting.** With a $10,000 monthly opex budget and a $4,000 open bill coded to that account in the
+  month, the run-rate for the month is $6,000; payroll / rent / interest / depreciation accounts contribute nothing to the
+  run-rate when their source is active; a subscription matched by a bill is dropped.
+- **AC-CF4 Intercompany.** A receivable from a customer linked to another company in scope appears in that company's
+  forecast and not in the combined forecast; the combined total equals Σ companies − intercompany items.
+- **AC-CF5 Scenario math.** Delaying a customer's receipts by 14 days moves exactly those items 14 days; a 10% haircut
+  multiplies receipts by 0.9 (rounded per item); payroll growth changes projected payroll only; removing an item removes
+  exactly it; the base scenario is unchanged by any other scenario's adjustments.
+- **AC-CF6 Weeks tie.** For every company and the combined view: opening + Σ inflows − Σ outflows = closing for each week,
+  week N's opening = week N−1's closing, and the daily drill of a week sums to the week.
+- **AC-CF7 Accuracy.** For a snapshot forecasting $100 of receipts in a week that actually received $80, week accuracy is
+  75% and the MAPE over weeks is the mean of the absolute percentage errors; a zero-actual week is n/m and excluded.
+- **AC-CF8 Minimum cash.** The first week below minimum raises one notification per company × week (re-running is a
+  no-op); the transfer recommendation never takes a donor below its own minimum.
+- **AC-CF9 Security.** Members can't write any 192 table; anon reads nothing; a company outside the caller's client scope
+  is refused (403) on every write; snapshots can't be updated or deleted outside the purge GUC — PGlite test.
+- **AC-CF10 History.** The historical book-cash point for a date equals the posted GL cash balance at that date; the
+  bank series ends at the current feed balance; the difference per point is book − bank.
+- **AC-CF11 UI.** `/cash` (merit-ui) has Position · 13-week forecast · Scenarios · Accuracy · Settings; every panel has
+  loading / empty / error states; a week or day click opens its items; ← → walk weeks; CSV export of the forecast.
+
+### 4.13 Wave 4A amendment — FP&A workspace on the metric registry (migration 191, 2026-10-26)
+
+Audit rows **FP-01** (registry on screen), **FP-03** (analytics screens), **FP-04** (group views, league table, share
+bars), FP-19 (vertical packs), FP-16 (AI commentary, draft only); partner-portal parity M1–M7, M11, M14 and exceed
+X1, X2, X5–X8, X11 (`docs/audit-2026-10/D-PARTNER-PORTAL-REPORTING.md` §3). Replaces `/fpna`'s 16 hand-drawn tiles and
+its localStorage layout with the 3B registry (`lib/metrics/**`), the 3B analytics (`lib/analytics/**`), the 3A engine
+(`runReport` / `runDrill`), the 3C chart kit (`components/charts/**`) and 3D governance (route-guard). No figure on
+`/fpna` is computed anywhere else: every number is a registry evaluation, an analytics function over the same dataset,
+or an engine statement.
+
+**Surfaces (`/fpna`, merit-ui; `density-report` for owner / CFO, `density-cockpit` for finance staff).** One header
+(scope · period picker with compare · Export PDF · Add to pack · Summarize this view) and eight tabs addressable in the
+URL (`?tab=`): **Dashboard** (KPI cards from the catalog) · **Performance** (revenue / GP / EBITDA monthly combo with
+prior year dashed, budget ticks, unclosed months hatched; YoY table Month · FYTD · TTM; CAGR 1/3/5-yr TTM-to-TTM;
+margins trend; seasonality index) · **Budget vs actual** (variance bars by account group with materiality and F/U;
+revenue / EBITDA BvA by month; link to department BvA) · **Bridges** (EBITDA, working-capital and cash waterfalls between
+any two windows of the same basis) · **Working capital** (DSO / DPO / DIO / CCC trend, AR and AP aging stacks by company,
+top-customer share bars, CEI) · **Profitability** (league table with sparklines by company / department / class / job /
+customer; contribution margin) · **Group** (combined and ownership-weighted totals, consolidated with an elimination
+bridge, share of revenue / EBITDA, sortable league, Rule-of-40 scatter, client × metric heat grid) · **Leverage &
+covenants** (debt / EBITDA, DSCR, interest coverage, FCCR trends; covenant headroom gauges with projected breach).
+UI copy never says "portfolio"; it says "clients", "companies" and "group".
+
+**Data model (migration 191).** `public.fpna_dashboards` — one row per dashboard: `scope_kind` (`tenant` = an
+administrator-published default for a role, `user` = a person's own), `role_key` (tenant rows; null = every role),
+`user_id` (Clerk id, user rows), `name`, `pack_key` (`owner` · `cfo` · `construction` · `dealer` · `practice` · `custom`),
+`cards jsonb` (ordered `[{ metric, size }]`, 1–48 cards, keys must be registry metrics), `settings jsonb` (basis,
+comparison, sparkline 12 | 24), `lock_level` (`unlocked` · `add_move` · `locked`, IA M-8), `required_metrics text[]`,
+`publish_mode` (`new_users` · `override`), `version`, `is_current`, `based_on_id`, `published_by/at`, `note`,
+`archived_at`. `public.report_packs.fpna_items jsonb` (dashboards added to a pack). RLS: members read their org's tenant
+rows and only their own user rows; **every write is the service role** after the route's permission + lock check
+(the 171/187 class-C pattern — no member write grants, so lock levels cannot be bypassed through PostgREST); M1 grants;
+`core.apply_projects_only_seat_deny` on the new table; guarded `core.apply_client_scope_rls()`.
+
+**Resolution (pure, `lib/fpna/workspace/dashboard-model.ts`).** Effective dashboard = the user's own current row (when
+the role default is not `locked`, and not superseded by an `override` publish after the user's last save) → the tenant
+default for the user's role → the tenant default for every role → the built-in pack for the role (owner / company admin →
+Owner; CFO / controller / accountant → CFO; tenants with the construction or dealer pack enabled get that pack; a firm
+practice role → Practice). `add_move` keeps every required metric on the user's dashboard; `locked` refuses personal
+saves (409 `DASHBOARD_LOCKED`).
+
+#### Acceptance criteria (Wave 4A)
+- **AC-W1 Catalog.** The card picker lists every registry metric (≥ 120) with name, group, unit, the generated formula
+  string and the definition; search matches name, key, group and formula text; each entry states its requirements
+  (budget, AR sub-ledger, jobs, headcount…). Five default packs (Owner, CFO, Construction, Dealer, Practice) contain only
+  registry keys (guard test).
+- **AC-W2 Card.** Each card shows value, a change chip with the semantic word (improvement / erosion; favourable /
+  unfavourable vs budget; points for percent metrics), a 12- or 24-month sparkline with gaps as gaps and preliminary
+  months flagged, a benchmark status where the registry has bands, and — when it cannot compute — the reason in words
+  ("Not enough history: needs 48 closed months; 29 are on file"), never a 0.
+- **AC-W3 Persistence.** Saving a personal dashboard round-trips cards, order and settings; a second save bumps
+  `version`; publishing a role default creates a new current version and marks the prior one not current (unique index);
+  a `locked` default refuses a personal save (409); an `add_move` default refuses a save that drops a required metric
+  (409); an `override` publish makes the role default win over older personal rows; publishing needs
+  `settings_acct:edit` (403 otherwise) — PGlite + route tests.
+- **AC-W4 Security.** Members cannot insert / update / delete `fpna_dashboards` (any row); a member reads tenant rows and
+  only their own user rows; anon reads nothing; the seat-deny policy is present — PGlite test.
+- **AC-W5 One evaluation per view.** Every tab's request performs exactly one dataset load (`planLoad` over the union of
+  its metric requests) and evaluates all cards and series against it; the result is cached per (org, user, scope,
+  period, basis, comparison, ledger epoch) for 60 s; the epoch changes when a posting, close or release changes the
+  books (unit test with a counting source).
+- **AC-W6 Ties to the engine.** For a seeded org, Dashboard revenue, gross profit, net income, cash and total debt equal
+  the engine's income statement / balance sheet for the same window and companies to the cent; Profitability by
+  department revenue and gross profit equal the engine's department columns; Group consolidated revenue equals the
+  engine's Consolidated column and the elimination bridge's steps sum to it.
+- **AC-W7 Governance.** Every new route runs number governance: for a non-finance reader no figure from an unreleased
+  month is used (metrics via `governDataset`; engine via its hooks; dimension balances and covenants via
+  `governRouteMonths`, cumulative for balance-type figures); responses carry `closedThrough` / footnote and the UI footer
+  says "Books closed through …"; a finance reader sees preview figures labelled preview.
+- **AC-W8 Chart = table.** Every chart's table (View as table / CSV / XLSX) is built from the same arrays the chart draws
+  (test: series values equal table cells for every tab's view model).
+- **AC-W9 Bridges tie.** EBITDA, working-capital and cash bridges: start + Σ steps = end to the cent for any two windows;
+  the cash bridge names its residual "Other balance-sheet movements".
+- **AC-W10 AI commentary is a cited draft.** "Summarize this view" sends only a fact sheet built from the computed view
+  (refs F1…Fn) through `runAiGateway` (feature `FPNA_SUMMARY`); a draft that cites an unknown ref, cites nothing, or
+  quotes any $ / % not in the fact sheet is refused and the deterministic sentences are shown instead; AI down returns
+  "AI summary paused" with the deterministic summary; a draft is logged to `ai_decisions` as PROPOSED and never stored as
+  commentary without a person.
+- **AC-W11 Export & pack.** Export PDF renders on the server from the dashboard id + period (the client sends no
+  figures); Add to pack appends the dashboard (id, scope, settings) to a `report_packs` row and scheduled delivery
+  attaches the dashboard PDF governed as non-finance (released months only).
+- **AC-W12 UI states.** Every tab renders loading / empty (with the next action) / populated / error-with-retry; cards
+  drill to the GL (engine drill, governed); the page is keyboard-operable (tabs rove with arrows, cards reorder with
+  ←/→ in edit mode as well as drag); `/fpna` contains no legacy-theme vocabulary.
+
 ---
 
 ## §5. Report builder & packs
@@ -763,6 +963,8 @@ departments they own and refuses others (403), company-level lines included. Cli
 - AC-B8 Drivers and scenarios live in `fpa.*` tables, not `ai_decisions` (migration moves existing rows).
 - AC-B9 … AC-B20 (department budgets, versions, locks, generators, templates, bridges, department BvA, owner scope,
   import, board, grid) — §4.11 (Wave 4B, migration 189).
+- AC-CF1 … AC-CF11 (cash workspace: receipt timing, schedules, dedupe, intercompany, scenarios, ties, accuracy,
+  minimum cash, security, history, UI) — §4.12 (Wave 4C, migration 192).
 
 **KPI registry & analytics (Wave 3B)** — AC-K1…AC-K8 in §1.15a; guard test `lib/metrics/registry.test.ts` enumerates the
 registry and fails on any entry missing a field, an undefined input, or a cycle.

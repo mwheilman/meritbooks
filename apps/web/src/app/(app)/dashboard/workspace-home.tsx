@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Dash, Evidence, Meter, Pip, Widget, countStrokes } from '@meritbooks/merit-ui';
 import { ShellLine } from '@/components/layout/shell-context';
+import { subledgerDifferenceText } from '@/lib/reports/control-balances';
 import { getRecentActivity, getWorkboard, type CompanyBoard, type RecentActivity } from './actions';
 import { WorkspaceClients } from './workspace-clients';
 import { ago, cents, dayLabel, monthLabel, shortLabel } from './home-format';
@@ -165,11 +166,21 @@ export async function WorkspaceHome() {
           <Evidence
             rows={[
               { label: 'Book cash', value: Math.round(c.cashCents) },
-              { label: 'Open receivables', value: Math.round(c.openARCents) },
-              { label: 'Less open payables', value: -Math.round(c.openAPCents) },
+              { label: 'Receivables (AR control)', value: Math.round(c.openARCents) },
+              { label: 'Less payables (AP control)', value: -Math.round(c.openAPCents) },
             ]}
             total={{ label: 'Cash + receivables − payables' }}
           />
+          {[
+            subledgerDifferenceText('receivables', c.openARCents, c.subledgerARCents, cents),
+            subledgerDifferenceText('payables', c.openAPCents, c.subledgerAPCents, cents),
+          ]
+            .filter((t): t is string => t !== null)
+            .map((t) => (
+              <p key={t} className="t-meta" style={{ marginTop: 6 }}>
+                {t}
+              </p>
+            ))}
         </Widget>
 
         <Widget

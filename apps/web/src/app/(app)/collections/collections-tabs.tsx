@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { clsx } from 'clsx';
-import { LayoutList, Target } from 'lucide-react';
+import { Tabs } from '@meritbooks/merit-ui';
 import { PageHeader } from '@/components/ui';
 import { CollectionsWorkflow } from './collections-workflow';
 import { CollectionsDashboard } from '../invoices/collections/collections-dashboard';
@@ -15,35 +14,10 @@ import { CollectionsDashboard } from '../invoices/collections/collections-dashbo
 
 type TabKey = 'aging' | 'risk';
 
-const TABS: { key: TabKey; label: string; icon: typeof Target }[] = [
-  { key: 'aging', label: 'Aging Buckets', icon: LayoutList },
-  { key: 'risk', label: 'Risk & Cadence', icon: Target },
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'aging', label: 'Aging buckets' },
+  { key: 'risk', label: 'Risk & cadence' },
 ];
-
-function TabBtn({
-  active,
-  onClick,
-  icon,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={clsx(
-        'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
-        active ? 'bg-brand-500 text-white' : 'text-slate-400 hover:text-slate-200'
-      )}
-    >
-      {icon}
-      {children}
-    </button>
-  );
-}
 
 export function CollectionsTabs() {
   const [tab, setTab] = useState<TabKey>('aging');
@@ -63,22 +37,22 @@ export function CollectionsTabs() {
   }, [tab]);
 
   return (
-    <div className="p-6">
+    <div>
       <PageHeader
+        eyebrow={['Receivables', 'Collections']}
         title="Collections"
-        description="Chase overdue AR two ways — by aging bucket and DSO, or by risk score with an escalating dunning cadence and pay-date prediction. AI drafts every notice; you approve each send."
-        actions={
-          <div className="flex items-center gap-1 rounded-lg border border-slate-800 bg-surface-900 p-1">
-            {TABS.map(({ key, label, icon: Icon }) => (
-              <TabBtn key={key} active={tab === key} onClick={() => setTab(key)} icon={<Icon size={14} />}>
-                {label}
-              </TabBtn>
-            ))}
-          </div>
-        }
+        description="Chase overdue receivables two ways: by aging bucket and DSO, or by risk score with an escalating notice cadence and a pay-date forecast. AI drafts every notice; you approve each send."
       />
 
-      <div className="mt-6">
+      <Tabs<TabKey>
+        aria-label="Collections view"
+        className="mb-section-tabs"
+        value={tab}
+        onChange={setTab}
+        items={TABS.map((t) => ({ value: t.key, label: t.label, panelId: `collections-${t.key}` }))}
+      />
+
+      <div id={`collections-${tab}`} role="tabpanel">
         {tab === 'aging' ? <CollectionsDashboard embedded /> : <CollectionsWorkflow embedded />}
       </div>
     </div>

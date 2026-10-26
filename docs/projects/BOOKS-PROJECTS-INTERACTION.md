@@ -72,9 +72,91 @@ Projects is switched on later).
    `UNSUPPORTED_LINE_TYPE`, `MISSING_SOURCE_REF`, `NO_BILLABLE_LINES`, `INVALID_AMOUNT`, `RETAINAGE_TIE`, `GROSS_TIE`,
    `COMPANY_NOT_FOUND`, `NO_CUSTOMER`, `NO_FISCAL_PERIOD`, `PERIOD_CLOSED`, `ACCOUNT_UNRESOLVED`, `PARTIAL_INVOICE`,
    `INVOICE_FAILED`, `GL_POST_FAILED`, `DEPOSIT_FAILED`, `CONSUMER_ERROR`. Projects may read `error_code` directly.
-6. **Event types.** `JOB_COMMITMENT`, `JOB_TIME`, `JOB_MATERIAL`, `JOB_PAYABLE_REQUEST` stay `pending` until Books builds them; any
-   other unknown type from Projects is rejected `UNSUPPORTED_EVENT_TYPE`. `JOB_PROGRESS` v2 is still accepted by the existing
-   consumer (A6 not yet built) — not version-gated in this slice.
+6. **Event types.** `JOB_MATERIAL`, `JOB_PAYABLE_REQUEST` stay `pending` until Books builds them; any other unknown type from
+   Projects is rejected `UNSUPPORTED_EVENT_TYPE`. `JOB_COMMITMENT` v1, `JOB_TIME` v1 and `JOB_PROGRESS` v1/v2 are consumed as of
+   part 2 (migration 194); other versions are rejected `UNSUPPORTED_SCHEMA_VERSION`.
+
+### Part 2 — commitments, labor, A4–A8 (migration 194, 2026-10-26 — built, not yet applied)
+
+Code: `lib/projects-seam/*` (commitments, commitment-match, job-time, labor-allocate, labor-allocation, labor-accrual,
+job-po-block, status), `lib/rev-rec/{method,as-of-inputs}.ts`, `lib/services/{job-progress,rev-rec}.ts`,
+`lib/close/seam-close-signal.ts`, `lib/parties/match.ts`, `lib/scheduler/jobs/projects-seam-jobs.ts`. Screens:
+`/jobs/projects-seam`, `/customers/duplicates`, `/vendors/duplicates`; "Already in Merit" on the new-customer / new-vendor forms.
+
+**Testable criteria** (each is a test in `apps/web/src/test/projects-seam-part2.test.ts` or a pure suite next to the code):
+
+| # | Criterion |
+|---|---|
+| S2-1 | A `JOB_COMMITMENT` snapshot creates one AP match target per Projects commitment (`ap_commitments` + lines + a version row), acked `processed` with `ack_meta {commitment_id, version, bills_held, bills_released}`; no `purchase_orders` row is ever created. |
+| S2-2 | A higher `version` replaces the target; an equal or lower version is acked `superseded: true` and changes nothing (the version guard is in the UPDATE itself). |
+| S2-3 | `CLOSED` / `VOID` retire the target (`active = false`, `retired_at`); existing matches stay, no new auto-match. |
+| S2-4 | A bad snapshot is rejected with an `error_code` (`INVALID_PAYLOAD`, `INVALID_AMOUNT`, `MISSING_SOURCE_REF`, `JOB_NOT_FOUND`, `VENDOR_NOT_FOUND`, `COMPANY_NOT_FOUND`, `UNSUPPORTED_SCHEMA_VERSION`); nothing is written. |
+| S2-5 | A line absent from a newer version is kept (bills may be matched to it) and marked `removed`. |
+| S2-7 | Bill entry: a job line from a vendor with exactly one open commitment line for that job is AUTO-matched (or the one whose cost type matches); otherwise the line is left for a person and the open lines are offered (`GET /api/ap/commitments`). |
+| S2-8 | An explicit pick that is not an open commitment of that vendor + job is refused (422). |
+| S2-9 | With no retainage % given, the bill defaults to the commitment's `retainage_pct` (fraction → percent). |
+| S2-10 | `payment_hold` is honoured like `ON_HOLD`: matched open bills (PENDING / APPROVED / SCHEDULED / PARTIALLY_PAID) go `ON_HOLD` with "Projects commitment {number} is on payment hold: {reason}"; a new bill against it lands `ON_HOLD`; when Projects releases the hold the bills return to their prior status (only bills this commitment held). |
+| S2-11 | 3-way status per matched line: `OVER_COMMITTED` (billed > committed), `BILLED_OVER_RECEIVED` (a PO with receiving in use billed beyond received), `NO_RECEIPT`, else `OK` — re-scored whenever a new version moves amounts / receipts. Warnings, never blocks. |
+| S2-12 | `JOB_COST` from a matched bill line carries the additive keys `commitment_line_id` (the Projects line id), `vendor_id`, `cost_code` / `cost_code_id`; the frozen key set is unchanged when absent. |
+| S2-13 | G14: a job-tagged Books PO line is refused for a Projects org (API 409 `JOB_PO_OWNED_BY_PROJECTS` with a link to Projects; DB trigger `guard_job_po_projects`); non-job POs and Books-only orgs are unaffected. |
+| S2-14 | `JOB_TIME` APPROVED records hours once per `(source_ref, revision)` (re-delivery is a no-op); it never posts. Hours must be > 0 and ≤ 24 per entry (`INVALID_HOURS`). |
+| S2-15 | `UNAPPROVED` withdraws that revision; if payroll already costed it the posted entry stands and the row is surfaced as "withdrawn after payroll". |
+| S2-16 | When a payroll run posts, each employee's ACTUAL cost (gross + employer tax + employer benefits) is allocated to the jobs they worked in the pay period by approved hours: denominator = max(paid hours, job hours); largest-remainder split per component, so jobs + "not on a job" = payroll cost to the cent. One reclass: DR `JOB_LABOR_COST` (5000) per job / CR `WAGES_EXPENSE`, `PAYROLL_TAX_EXPENSE` (+ `HEALTH_INSURANCE_EXPENSE` for employer benefits). |
+| S2-17 | The reclass ties to the payroll JE: wages / tax expense keep exactly the paid time not on a job; `JOB_COST` CLEARED (LABOR, gate TIMESHEET_PAYROLL) goes back per job × cost code; hours with no payroll line are reported as unallocated hours, never costed at a guessed rate. |
+| S2-18 | Idempotent per payroll run (`job_labor_allocations` UNIQUE per run + GL `source_ref payroll_labor:<run>`); a failed allocation is retried by the cron. |
+| S2-19 | Optional standard-rate accrual (per company, off by default): DR `JOB_LABOR_COST` / CR `ACCRUED_EXPENSES` at the JOB_TIME `cost_rate_cents` (else the employee's hourly rate); the payroll that pays those hours reverses exactly what was accrued, so the job ends at actual and accrued expenses at 0; the accrual's `JOB_COST` rows are VOIDED. |
+| S2-20 | A4: rev-rec inputs come from the books as of the date (`public.job_inputs_as_of`): cost = opening + posted job-tagged COGS / OPEX (WIP / rev-rec entries excluded); billed = opening + posted invoice subtotals (deposits, retainage releases excluded); contract / estimate / % = the newest pinned snapshot ≤ as-of. Used by the JOB_PROGRESS path AND the month-end WIP engine (one path). |
+| S2-21 | A6: `JOB_PROGRESS` v2 pins `(job, snapshot_version)` atomically; a re-delivery is a no-op; an older version is history only (never overwrites); each snapshot recognizes its own incremental delta (no "already recognized" rejection). |
+| S2-22 | A negative delta relieves the job's 1180 first, then books 2410; when EAC > contract the anticipated loss is provided (the WIP engine's own math, posted as a `REV_REC_WIP` entry the month-end run adjusts over). |
+| S2-23 | A7: `job_id` (GL lines, bill lines) and `job_id` / `cost_code_id` (job_cost_entries) cannot change once the period is `HARD_CLOSE` (`JOB_TAG_LOCKED`). |
+| S2-24 | A8: close task `projects_seam_settled` (blocking) — Projects → Books messages dated ≤ period end that are pending, or rejected without a later processed message with the same business key, block the hard close for that company; a read error fails closed; Books-only orgs pass. |
+| S2-25 | Projects off → `JOB_COMMITMENT` / `JOB_TIME` are released untouched, bill planning and labor allocation are no-ops. |
+| A5 | One method resolver (`lib/rev-rec/method.ts`): override → revenue type → legacy job-type map → company default, used by billing (`resolveBillingRevRecMethod` delegates), the JOB_PROGRESS path and the WIP engine. |
+| Door | "Already in Merit": the new-customer / new-vendor forms and the CSV import call `core.match_parties` (1111) before create; an EXACT match is offered (Use existing / Create anyway → `create_anyway: true`); the shared duplicate review queue is at `/customers/duplicates` and `/vendors/duplicates`. Works with or without Projects. |
+
+**For the Projects lead**
+
+1. *Ties to Books — commitments and time can stop being `pending`.* Books now records what those checks need, exposed as
+   `security_invoker` views (members read their org):
+   - `public.v_books_commitment_tieout (org_id, location_id, job_id, commitments, committed_cents, matched_bill_cents,
+     matched_bills, bills_on_commitment_hold, latest_version)` — compare `matched_bill_cents` with `Σ pm.commitment_lines.billed_cents`
+     (both are bills against the commitment) and `committed_cents` with Projects' committed value.
+   - `public.v_books_labor_tieout (org_id, location_id, job_id, approved_hours_x100, payroll_hours_x100, labor_cost_cents,
+     accrued_open_cents, entries_awaiting_payroll, withdrawn_after_payroll)` — `approved_hours_x100` is in the same unit as
+     the `time` check's `projects_cents` (approved hours × 100); `payroll_hours_x100` is what payroll has costed.
+   Suggested `pm.v_job_tieout` branches: commitments → `books_cents = matched_bill_cents`, exception when it differs from
+   `billed_to_date_cents`; time → `books_cents = approved_hours_x100`, exception when it differs, `detail` adds
+   `payroll_hours_x100` / `entries_awaiting_payroll`.
+2. *Cron.* Books' `projects.seam` job (per org, only when `entitlements.projects`) drains JOB_COMMITMENT and JOB_TIME, sweeps
+   labor allocation, then calls `pm.run_seam_cycle(org)`.
+3. *Workers must map to Books employees.* JOB_TIME hours with no `employee_id` (or an id Books does not know) cannot be
+   costed; they are recorded and shown as "approved hours with no Books employee".
+4. *Cross-company labor.* An employee paid by company A working a job of company B is not reclassed in this slice (it needs
+   an intercompany pair); those hours show as unallocated on B. Open question for the owner.
+5. `JOB_COST` from payroll labor uses `source_ref = payroll_labor:<run>:<job>:<cost code>` (CLEARED) and, for the standard-rate
+   estimate, `labor_accrual:<hours row>` (CLEARED, then VOIDED at true-up).
+
+### Security review follow-ups for the Projects lead (2026-10-26, Wave 4 — Books side done, not yet applied)
+
+1. **`public.v_books_labor_tieout` is now a DEFINER view (194 §100).** The per-person labor columns it sums
+   (`job_labor_hours.employee_id / standard_rate_cents / allocated_cents / accrued_cents` and every amount + `employee_id`
+   on `job_labor_allocation_lines`) are column-revoked for members (comp field class, 194 §99). The view keeps the same
+   columns (per-job aggregates only) and pins its rows itself: `get_org_id()` + Books client scope
+   (`client_scope_bypass()` / `accessible_location_ids()`) + never a Projects-only seat (when `core.is_projects_only_seat()`
+   exists). `pm.v_job_tieout` (a definer view) can read it unchanged; the end user's JWT still drives the pin. Do not
+   read `job_labor_hours` / `job_labor_allocation_lines` amounts directly from Projects member code — use the view.
+2. **`core.match_parties` (1111) ignores Books client scope.** For a Books seat (`v_books`) it matches org-wide and returns
+   full email / phone (`visible = true`), so a client-scoped bookkeeper could see another client's customer. Books now
+   post-filters in `apps/web/src/lib/parties/match.ts` (`visibleToCaller`: candidate ids re-read through the caller's RLS —
+   163's `client_scope_rls` on `core.customers`; a contact follows its customer; read failure → no candidates) and
+   rate-limits `/api/parties/match` per user. **Ask:** move the same rule into 1111 so Projects callers get it too — in
+   `scoped`, when `v_books`, require `p.location_id is null or (select core.client_scope_bypass()) or p.location_id in
+   (select core.accessible_location_ids())` for customers (and the contact's customer). No Books migration replaces the
+   function (Projects owns 1111).
+3. **Commitment payment hold.** A job line from a vendor whose commitment for that job is on payment hold can no longer be
+   left unmatched (bill create → 422 naming the commitment) nor have its match cleared (`/api/ap/commitments/match` → 422),
+   so the hold can't be sidestepped. Projects' release (`payment_hold = false` in a new JOB_COMMITMENT version) still
+   restores the bills it held.
 
 ## 3. Dealers — Projects replacing the dealer system (c-Systems etc.)
 

@@ -19,11 +19,13 @@ import {
   BASIS_LABELS,
   comparisonOptions,
   presetMeta,
+  presetLabel,
   presetOptions,
   selectionForMonth,
   stepSelection,
   windowOptions,
 } from '@/lib/period/picker-model';
+import { closedThroughText } from '@/lib/period/closed';
 import { MonthGrid } from './month-grid';
 import type { PeriodContextData } from './use-period-context';
 import s from './period-picker.module.css';
@@ -263,7 +265,7 @@ function PickerBody({ value, context, bases, comparisons, narrow, onCommit }: Bo
                 onClick={() => pickPreset(p.id)}
               >
                 <span className={s.presetCheck}>{on && <Icon name="check" />}</span>
-                <span className={s.presetName}>{p.label}</span>
+                <span className={s.presetName}>{presetLabel(p, context)}</span>
                 {p.id !== 'custom' && <span className={s.presetMeta}>{presetMeta(p.id, context)}</span>}
               </li>
             );
@@ -297,7 +299,8 @@ function PickerBody({ value, context, bases, comparisons, narrow, onCommit }: Bo
           <div className={s.legend}>
             <span><i className={s.markClosed} aria-hidden="true" /> Closed</span>
             <span><i className={s.markSoft} aria-hidden="true" /> Soft-closed</span>
-            <span>{context.closedThrough ? `Books closed through ${monthLabel(context.closedThrough)}` : 'No month hard-closed yet'}</span>
+            <span>Unmarked: open</span>
+            <span>{closedThroughText(context.closedThrough, context.openBefore?.length ?? 0)}</span>
           </div>
 
           {cmpOpts.length > 1 && (

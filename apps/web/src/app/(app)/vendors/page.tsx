@@ -2,11 +2,30 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Search, Plus, X, Truck, AlertTriangle, Check, FileText,
-  ChevronDown, ChevronUp, Loader2, ExternalLink, Shield,
-} from 'lucide-react';
-import { VendorDrawer } from './vendor-drawer';
+  Button,
+  Check,
+  Field,
+  InlineNotice,
+  Input,
+  Keyhints,
+  ListPager,
+  Pip,
+  Search,
+  Seg,
+  Select,
+  Tag,
+  Textarea,
+  useListKeynav,
+  type PipKind,
+} from '@meritbooks/merit-ui';
 import { formatMoney } from '@meritbooks/shared';
+import { EmptyState, PageHeader, TableSkeleton } from '@/components/ui';
+import { MatchBeforeCreate } from '@/components/parties/match-before-create';
+import { useHoverPeek, HoverPeekCard } from '@/components/hover-peek';
+import { useShellLine } from '@/components/layout/shell-context';
+import { VendorDrawer } from './vendor-drawer';
+import { VendorPeek } from './vendor-peek';
+import s from './vendors.module.css';
 
 interface Vendor {
   id: string;
@@ -66,19 +85,46 @@ const PAYMENT_TERMS = [
   { value: 'NET_45', label: 'Net 45' },
   { value: 'NET_60', label: 'Net 60' },
   { value: 'NET_90', label: 'Net 90' },
-  { value: 'DUE_ON_RECEIPT', label: 'Due on Receipt' },
+  { value: 'DUE_ON_RECEIPT', label: 'Due on receipt' },
   { value: '2_10_NET_30', label: '2/10 Net 30' },
 ];
 
-function ComplianceBadge({ status }: { status: 'valid' | 'expired' | 'missing' }) {
-  if (status === 'valid') return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-emerald-500/15 text-emerald-400"><Check className="w-3 h-3" /></span>;
-  if (status === 'expired') return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-400"><AlertTriangle className="w-3 h-3" /></span>;
-  return <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-500/15 text-red-400"><X className="w-3 h-3" /></span>;
+/** The list API serves 50 per page (its default); the pager walks the rest. */
+const PER_PAGE = 50;
+
+type DocState = 'valid' | 'expired' | 'missing';
+const DOC_LOOK: Record<DocState, { pip: PipKind; word: string }> = {
+  valid: { pip: 'ready', word: 'Valid' },
+  expired: { pip: 'risk', word: 'Expired' },
+  missing: { pip: 'overdue', word: 'Missing' },
+};
+
+/** One compliance document: pip shape + short label; the state word for screen readers and on hover. */
+function ComplianceDoc({ label, status }: { label: string; status: DocState }) {
+  const look = DOC_LOOK[status];
+  return (
+    <span className={s.doc} title={`${label}: ${look.word}`}>
+      <Pip kind={look.pip} />
+      {label}
+      <span className="sr">{look.word}</span>
+    </span>
+  );
+}
+
+function SortHead({ label, col, sortBy, sortDir, onSort }: { label: string; col: string; sortBy: string; sortDir: 'asc' | 'desc'; onSort: (col: string) => void }) {
+  const on = sortBy === col;
+  return (
+    <button type="button" className={on ? 'th-sort' : 'mb-th-btn'} onClick={() => onSort(col)} aria-label={`Sort by ${label.toLowerCase()}`}>
+      {label}
+      {on ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
+    </button>
+  );
 }
 
 export default function VendorsPage() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -89,31 +135,48 @@ export default function VendorsPage() {
   const [sortBy, setSortBy] = useState('name');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [filter1099, setFilter1099] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // "Already in Merit" (migration 194): the person chose to create despite a possible match.
+  const [createAnyway, setCreateAnyway] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { peek, rowHandlers, cardHandlers, close } = useHoverPeek<Vendor>();
 
   const fetchVendors = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const params = new URLSearchParams({
         search, sort_by: sortBy, sort_dir: sortDir,
+        page: String(page), per_page: String(PER_PAGE),
         ...(filter1099 ? { is_1099: 'true' } : {}),
       });
       const res = await fetch(`/api/vendors?${params}`);
       const data = await res.json();
+      if (!res.ok) {
+        setLoadError(data?.error ?? 'The vendor list did not load.');
+        setVendors([]);
+        return;
+      }
       setVendors(data.vendors ?? []);
       setTotal(data.total ?? 0);
     } catch {
-      setError('Failed to load vendors');
+      setLoadError('Could not reach the server.');
     } finally {
       setLoading(false);
     }
-  }, [search, sortBy, sortDir, filter1099]);
+    // reloadKey re-runs the fetch for "Try again".
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, sortBy, sortDir, filter1099, page, reloadKey]);
 
   useEffect(() => {
     const timer = setTimeout(fetchVendors, 300);
     return () => clearTimeout(timer);
   }, [fetchVendors]);
+
+  // A new search / filter / sort starts from the first page.
+  useEffect(() => { setPage(1); }, [search, filter1099, sortBy, sortDir]);
 
   const handleSort = (col: string) => {
     if (sortBy === col) {
@@ -122,11 +185,6 @@ export default function VendorsPage() {
       setSortBy(col);
       setSortDir('asc');
     }
-  };
-
-  const SortIcon = ({ col }: { col: string }) => {
-    if (sortBy !== col) return null;
-    return sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />;
   };
 
   const handleCreate = async () => {
@@ -139,7 +197,7 @@ export default function VendorsPage() {
       const res = await fetch('/api/vendors', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, create_anyway: createAnyway }),
       });
       const data = await res.json();
 
@@ -215,335 +273,348 @@ export default function VendorsPage() {
     });
   };
 
+  const openCreate = () => { setShowCreate(true); setEditingId(null); setForm(EMPTY_FORM); setError(null); setDuplicateWarning(null); setCreateAnyway(false); };
+  const closeForm = () => { setShowCreate(false); setEditingId(null); setError(null); setDuplicateWarning(null); };
+
   const isFormOpen = showCreate || editingId !== null;
+  // The empty state carries the page's one primary verb; the header button steps down.
+  const listEmpty = !loading && !loadError && vendors.length === 0;
+  const nameMissing = !!error && !form.name.trim();
+
+  // J / K move the cursor, Enter opens the 360, E edits. Off while the drawer owns the keys.
+  const { activeIndex, setActiveIndex, rowProps } = useListKeynav({
+    count: vendors.length,
+    onOpen: (i) => { const v = vendors[i]; if (v) setDetailId(v.id); },
+    onAction: (i) => { const v = vendors[i]; if (v) startEdit(v); },
+    actionKey: 'e',
+    enabled: !detailId && !loading,
+    owner: 'Vendors list',
+  });
+
+  useShellLine(
+    loading && vendors.length === 0
+      ? null
+      : [
+          { label: `${total.toLocaleString()} vendor${total !== 1 ? 's' : ''}`, strong: true },
+          filter1099 ? '1099 vendors only' : 'All vendors',
+          ...(search ? [`Matching “${search}”`] : []),
+        ],
+    `${total}:${filter1099}:${search}:${loading && vendors.length === 0}`,
+  );
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-semibold text-white flex items-center gap-2">
-            <Truck className="w-5 h-5 text-emerald-400" />
-            Vendors
-          </h1>
-          <p className="text-sm text-zinc-400 mt-1">{total} vendor{total !== 1 ? 's' : ''}</p>
-        </div>
-        <button
-          onClick={() => { setShowCreate(true); setEditingId(null); setForm(EMPTY_FORM); setError(null); setDuplicateWarning(null); }}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          New Vendor
-        </button>
-      </div>
+    <div>
+      <PageHeader
+        eyebrow={['Payables', 'Vendors']}
+        title="Vendors"
+        description={`${total.toLocaleString()} vendor${total !== 1 ? 's' : ''} — payee identity, terms, compliance documents and 1099 status.`}
+        actions={
+          <Button variant={isFormOpen || listEmpty ? 'default' : 'primary'} icon="plus" chord="n" bindChord={!isFormOpen} onClick={openCreate}>
+            New vendor
+          </Button>
+        }
+      />
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-          <input
-            type="text"
-            placeholder="Search vendors..."
-            aria-label="Search vendors"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/50"
-          />
-        </div>
-        <button
-          onClick={() => setFilter1099(!filter1099)}
-          className={`px-3 py-2 rounded-lg text-sm border transition-colors ${
-            filter1099 ? 'bg-amber-500/15 border-amber-500/30 text-amber-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-300'
-          }`}
-        >
-          1099 Only
-        </button>
+      <div className={s.toolbar}>
+        <Search
+          className={s.searchBox}
+          aria-label="Search vendors"
+          placeholder="Search name or email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          slashToFocus
+        />
+        <Seg<'all' | '1099'>
+          aria-label="Vendor filter"
+          value={filter1099 ? '1099' : 'all'}
+          onChange={(v) => setFilter1099(v === '1099')}
+          items={[
+            { value: 'all', label: 'All vendors' },
+            { value: '1099', label: '1099 only' },
+          ]}
+        />
+        <span className={s.grow} />
+        <Keyhints
+          hints={[
+            { chord: 'j', label: 'Next' },
+            { chord: 'k', label: 'Previous' },
+            { chord: 'enter', label: 'Open' },
+            { chord: 'e', label: 'Edit' },
+          ]}
+        />
       </div>
 
       {/* Create/Edit Form */}
       {isFormOpen && (
-        <div className="mb-6 bg-zinc-800/50 border border-zinc-700 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-white">
-              {showCreate ? 'New Vendor' : 'Edit Vendor'}
-            </h3>
-            <button onClick={() => { setShowCreate(false); setEditingId(null); setError(null); setDuplicateWarning(null); }} className="text-zinc-500 hover:text-zinc-300">
-              <X className="w-4 h-4" />
-            </button>
+        <section className={s.form} aria-label={showCreate ? 'New vendor' : 'Edit vendor'}>
+          <div className={s.formHead}>
+            <h2 className="t-head">{showCreate ? 'New vendor' : 'Edit vendor'}</h2>
+            <Button variant="quiet" iconOnly icon="x" aria-label="Close the form" onClick={closeForm} />
           </div>
 
-          {error && (
-            <div className="mb-4 px-4 py-2 bg-red-500/10 border border-red-500/20 rounded-lg text-sm text-red-400">
-              {error}
+          {(error || duplicateWarning) && (
+            <div className={s.formNotices}>
+              {error && (
+                <InlineNotice tone="neg" title="Not saved.">
+                  {error}
+                </InlineNotice>
+              )}
+              {duplicateWarning && (
+                <InlineNotice tone="warn" title="This may be a vendor you already have.">
+                  Similar vendor{duplicateWarning.length > 1 ? 's' : ''} already exist: {duplicateWarning.map((d) => d.name).join(', ')}.
+                  Open the existing vendor instead, or change the name.
+                </InlineNotice>
+              )}
             </div>
           )}
 
-          {duplicateWarning && (
-            <div className="mb-4 px-4 py-3 bg-amber-500/10 border border-amber-500/20 rounded-lg">
-              <p className="text-sm text-amber-400 font-medium mb-1">Potential duplicate detected</p>
-              <p className="text-xs text-amber-400/70">
-                Similar vendor{duplicateWarning.length > 1 ? 's' : ''} already exist: {duplicateWarning.map(d => d.name).join(', ')}
-              </p>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Vendor Name *</label>
-              <input
-                type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                placeholder="ABC Supply Co."
+          <div className={s.formGrid}>
+            {showCreate && (
+              <MatchBeforeCreate
+                className={s.span2}
+                kind="vendor"
+                name={form.name}
+                email={form.email}
+                phone={form.phone}
+                address={[form.address_line1, [form.city, form.state, form.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')}
+                onDecision={(d) => setCreateAnyway(d === 'create_anyway')}
+                onUseExisting={(m) => { closeForm(); setForm(EMPTY_FORM); setDetailId(m.id); }}
               />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Display Name</label>
-              <input
+            )}
+            <Field label="Vendor name *" error={nameMissing ? 'Enter the vendor’s name.' : undefined}>
+              <Input
+                type="text" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="ABC Supply Co."
+                autoFocus
+              />
+            </Field>
+            <Field label="Display name">
+              <Input
                 type="text" value={form.display_name} onChange={(e) => setForm({ ...form, display_name: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="ABC Supply"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Payment Terms</label>
-              <select
-                value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
-              >
+            </Field>
+            <Field label="Payment terms">
+              <Select value={form.payment_terms} onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}>
                 {PAYMENT_TERMS.map((t) => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Email</label>
-              <input
+              </Select>
+            </Field>
+            <Field label="Email">
+              <Input
                 type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="ap@vendor.com"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Phone</label>
-              <input
+            </Field>
+            <Field label="Phone">
+              <Input
                 type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="(515) 555-0100"
               />
-            </div>
-            <div>
-              <label className="block text-xs text-zinc-400 mb-1">Website</label>
-              <input
+            </Field>
+            <Field label="Website">
+              <Input
                 type="text" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="https://vendor.com"
               />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs text-zinc-400 mb-1">Address</label>
-              <input
+            </Field>
+            <Field label="Address" className={s.span2}>
+              <Input
                 type="text" value={form.address_line1} onChange={(e) => setForm({ ...form, address_line1: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                 placeholder="123 Main St"
               />
+            </Field>
+            <div className={s.cityRow}>
+              <Field label="City">
+                <Input type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="City" />
+              </Field>
+              <Field label="State">
+                <Input type="text" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="IA" maxLength={2} />
+              </Field>
+              <Field label="ZIP">
+                <Input type="text" value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })} placeholder="ZIP" />
+              </Field>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              <input
-                type="text" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                placeholder="City"
+            <div className={s.checkCell}>
+              <Check
+                label="1099 contractor"
+                checked={form.is_1099}
+                onChange={(e) => setForm({ ...form, is_1099: e.target.checked })}
               />
-              <input
-                type="text" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                placeholder="State"
-                maxLength={2}
-              />
-              <input
-                type="text" value={form.zip} onChange={(e) => setForm({ ...form, zip: e.target.value })}
-                className="px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
-                placeholder="ZIP"
-              />
-            </div>
-            <div className="flex items-center gap-6">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox" checked={form.is_1099} onChange={(e) => setForm({ ...form, is_1099: e.target.checked })}
-                  className="rounded border-zinc-600 text-emerald-500 focus:ring-emerald-500/30 bg-zinc-900"
-                />
-                <span className="text-sm text-zinc-300">1099 Contractor</span>
-              </label>
             </div>
             {form.is_1099 && (
-              <div>
-                <label className="block text-xs text-zinc-400 mb-1">Tax ID (EIN/SSN)</label>
-                <input
+              <Field label="Tax ID (EIN or SSN)" help="Stored encrypted; shown masked after saving.">
+                <Input
                   type="text" value={form.tax_id} onChange={(e) => setForm({ ...form, tax_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50"
                   placeholder="XX-XXXXXXX"
+                  autoComplete="off"
                 />
-              </div>
+              </Field>
             )}
-            <div className="md:col-span-3">
-              <label className="block text-xs text-zinc-400 mb-1">Notes</label>
-              <textarea
+            <Field label="Notes" className={s.span3}>
+              <Textarea
                 value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                className="w-full px-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500/50 min-h-[60px]"
                 rows={2}
               />
-            </div>
+            </Field>
           </div>
 
-          <div className="flex justify-end gap-3 mt-4 pt-4 border-t border-zinc-700">
-            <button
-              onClick={() => { setShowCreate(false); setEditingId(null); }}
-              className="px-4 py-2 text-sm text-zinc-400 hover:text-white transition-colors"
-            >
+          <div className={s.formFoot}>
+            <Button variant="quiet" onClick={() => { setShowCreate(false); setEditingId(null); }}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="primary"
               onClick={showCreate ? handleCreate : handleUpdate}
               disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-600/50 text-white rounded-lg text-sm font-medium transition-colors"
+              aria-busy={saving || undefined}
             >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {showCreate ? 'Create Vendor' : 'Save Changes'}
-            </button>
+              {saving ? 'Saving…' : showCreate ? 'Create vendor' : 'Save changes'}
+            </Button>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Table */}
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+      {loading && vendors.length === 0 ? (
+        <TableSkeleton rows={8} cols={7} />
+      ) : loadError ? (
+        <div className={`wg-state ${s.errorState}`} role="alert">
+          <Tag tone="neg">Not loaded</Tag>
+          <span className="t-head">The vendor list didn’t load.</span>
+          <p className="ink-2">{loadError}</p>
+          <Button onClick={() => setReloadKey((k) => k + 1)}>Try again</Button>
         </div>
       ) : vendors.length === 0 ? (
-        <div className="text-center py-16">
-          <Truck className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
-          <p className="text-zinc-400 text-sm">
-            {search ? 'No vendors match your search' : 'No vendors yet'}
-          </p>
-          {!search && (
-            <button
-              onClick={() => { setShowCreate(true); setForm(EMPTY_FORM); }}
-              className="mt-3 text-emerald-400 hover:text-emerald-300 text-sm"
-            >
-              Create your first vendor
-            </button>
+        <div className={s.state}>
+          {search || filter1099 ? (
+            <EmptyState
+              title="No vendors match."
+              description={search ? `Nothing matches “${search}”${filter1099 ? ' among 1099 vendors' : ''}. Try another name or email.` : 'No vendors are marked 1099 yet.'}
+              action={{ label: 'Clear filters', onClick: () => { setSearch(''); setFilter1099(false); } }}
+            />
+          ) : (
+            <EmptyState
+              title="No vendors yet."
+              description="Add the people and companies you pay. Bills, payments, W-9s and certificates of insurance hang off each vendor."
+              action={{ label: 'Create your first vendor', onClick: () => { setShowCreate(true); setForm(EMPTY_FORM); } }}
+            />
           )}
         </div>
       ) : (
-        <div className="bg-zinc-800/30 border border-zinc-700/50 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[940px]">
-            <thead>
-              <tr className="border-b border-zinc-700/50">
-                <th
-                  onClick={() => handleSort('name')}
-                  className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider cursor-pointer hover:text-zinc-300"
-                >
-                  <span className="flex items-center gap-1">Vendor <SortIcon col="name" /></span>
-                </th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Contact</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Terms</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">YTD Spend</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">
-                  <span className="flex items-center gap-1 justify-center"><Shield className="w-3 h-3" /> Compliance</span>
-                </th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">1099</th>
-                <th className="text-right px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vendors.map((v) => (
-                <tr key={v.id} className="border-b border-zinc-800 hover:bg-zinc-800/50 transition-colors">
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => setDetailId(v.id)}
-                      className="text-sm font-medium text-white hover:text-emerald-400 transition-colors text-left"
-                    >
-                      {v.display_name || v.name}
-                    </button>
-                    {v.display_name && v.display_name !== v.name && (
-                      <div className="text-xs text-zinc-500">{v.name}</div>
-                    )}
-                    {v.city && v.state && (
-                      <div className="text-xs text-zinc-500">{v.city}, {v.state}</div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {v.email && <div className="text-sm text-zinc-300">{v.email}</div>}
-                    {v.phone && <div className="text-xs text-zinc-500">{v.phone}</div>}
-                    {!v.email && !v.phone && <span className="text-xs text-zinc-600">—</span>}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="text-sm text-zinc-300">
-                      {PAYMENT_TERMS.find((t) => t.value === v.payment_terms)?.label || v.payment_terms}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {v.ytd_spend_cents > 0 ? (
-                      <span className="text-sm font-mono tabular-nums text-zinc-200">{formatMoney(v.ytd_spend_cents, { compact: true })}</span>
-                    ) : (
-                      <span className="text-xs text-zinc-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <div className="flex items-center gap-0.5" title="W-9">
-                        <span className="text-[10px] text-zinc-500 mr-0.5">W9</span>
-                        <ComplianceBadge status={v.compliance.w9} />
-                      </div>
-                      <div className="flex items-center gap-0.5" title="GL COI">
-                        <span className="text-[10px] text-zinc-500 mr-0.5">GL</span>
-                        <ComplianceBadge status={v.compliance.glCoi} />
-                      </div>
-                      <div className="flex items-center gap-0.5" title="WC COI">
-                        <span className="text-[10px] text-zinc-500 mr-0.5">WC</span>
-                        <ComplianceBadge status={v.compliance.wcCoi} />
-                      </div>
-                      {v.compliance.hasActiveHold && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/15 text-red-400">HOLD</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {v.is_1099 ? (
-                      v.missing_tin ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-red-500/15 text-red-400" title="1099-eligible but no TIN on file">
-                          <AlertTriangle className="w-3 h-3" /> No TIN
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-amber-500/15 text-amber-400">1099</span>
-                      )
-                    ) : (
-                      <span className="text-xs text-zinc-600">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        onClick={() => setDetailId(v.id)}
-                        className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                      >
-                        View
-                      </button>
-                      <button
-                        onClick={() => startEdit(v)}
-                        className="text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </td>
+        <>
+          <div className={s.tableWrap} aria-busy={loading || undefined}>
+            <table className="tbl tbl-q" aria-label="Vendors">
+              <thead>
+                <tr>
+                  <th scope="col" aria-sort={sortBy === 'name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                    <SortHead label="Vendor" col="name" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  </th>
+                  <th scope="col">Contact</th>
+                  <th scope="col" aria-sort={sortBy === 'payment_terms' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                    <SortHead label="Terms" col="payment_terms" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  </th>
+                  <th scope="col" className="n">YTD spend</th>
+                  <th scope="col">Compliance</th>
+                  <th scope="col" aria-sort={sortBy === 'is_1099' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
+                    <SortHead label="1099" col="is_1099" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+                  </th>
+                  <th scope="col" className="n"><span className="sr">Actions</span></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {vendors.map((v, i) => {
+                  const rp = rowProps(i);
+                  return (
+                    <tr
+                      key={v.id}
+                      ref={rp.ref}
+                      data-active={rp['data-active']}
+                      {...rowHandlers(v)}
+                      className={`q-row${activeIndex === i ? ' is-cursor' : ''}${v.compliance.hasActiveHold ? ' is-attn' : ''}`}
+                      aria-current={activeIndex === i ? 'true' : undefined}
+                      onClick={(e) => {
+                        setActiveIndex(i);
+                        if ((e.target as HTMLElement).closest('a,button,input')) return;
+                        setDetailId(v.id);
+                      }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <button type="button" className="l1 mb-row-link" onClick={() => setDetailId(v.id)}>
+                          {v.display_name || v.name}
+                        </button>
+                        {v.display_name && v.display_name !== v.name ? (
+                          <span className="l2">{v.name}{v.city && v.state ? ` · ${v.city}, ${v.state}` : ''}</span>
+                        ) : v.city && v.state ? (
+                          <span className="l2">{v.city}, {v.state}</span>
+                        ) : null}
+                      </td>
+                      <td>
+                        {v.email && <span className="l1">{v.email}</span>}
+                        {v.phone && <span className="l2">{v.phone}</span>}
+                        {!v.email && !v.phone && <span className="ink-3">—</span>}
+                      </td>
+                      <td>
+                        <span className="ink-2">
+                          {PAYMENT_TERMS.find((t) => t.value === v.payment_terms)?.label || v.payment_terms}
+                        </span>
+                      </td>
+                      <td className="n">
+                        {v.ytd_spend_cents > 0 ? (
+                          <span className="tnum">{formatMoney(v.ytd_spend_cents, { compact: true })}</span>
+                        ) : (
+                          <span className="ink-3">—</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={s.docs}>
+                          <ComplianceDoc label="W-9" status={v.compliance.w9} />
+                          <ComplianceDoc label="GL" status={v.compliance.glCoi} />
+                          <ComplianceDoc label="WC" status={v.compliance.wcCoi} />
+                          {v.compliance.hasActiveHold && <Tag tone="neg">On hold</Tag>}
+                        </span>
+                      </td>
+                      <td>
+                        {v.is_1099 ? (
+                          v.missing_tin ? (
+                            <Tag tone="neg" title="1099-eligible but no TIN on file">No TIN</Tag>
+                          ) : (
+                            <Tag>1099</Tag>
+                          )
+                        ) : (
+                          <span className="ink-3">—</span>
+                        )}
+                      </td>
+                      <td className="n">
+                        <span className="mb-row-acts">
+                          <Button variant="quiet" onClick={() => setDetailId(v.id)}>View</Button>
+                          <Button variant="quiet" onClick={() => startEdit(v)}>Edit</Button>
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </div>
+          <div className={s.foot}>
+            <span className="t-cap">Hover a vendor for a preview · click or press Enter for the full record.</span>
+            <ListPager page={page} perPage={PER_PAGE} total={total} onPage={setPage} noun="vendors" />
+          </div>
+        </>
       )}
+
+      <HoverPeekCard
+        rect={peek?.rect ?? null}
+        visible={!!peek}
+        cardHandlers={cardHandlers}
+        onOpen={peek ? () => { const id = peek.item.id; close(); setDetailId(id); } : undefined}
+      >
+        {peek && <VendorPeek vendorId={peek.item.id} />}
+      </HoverPeekCard>
 
       <VendorDrawer vendorId={detailId} onClose={() => setDetailId(null)} />
     </div>

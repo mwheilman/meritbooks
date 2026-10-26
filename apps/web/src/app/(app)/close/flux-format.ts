@@ -2,10 +2,11 @@
 
 import type { PipKind } from '@meritbooks/merit-ui';
 import type { DriverTag, FluxLineStatus } from '@/lib/close/flux/types';
+import { fluxChangeLabel } from '@/lib/close/flux/change-label';
 
-export function pctText(bps: number | null): string {
-  if (bps === null) return 'new';
-  return `${bps > 0 ? '+' : ''}${(bps / 100).toFixed(1)}%`;
+/** Signed change % for a flux line — see lib/close/flux/change-label.ts. */
+export function pctText(l: { changePctBps: number | null; currentCents: number; comparisonCents: number }): string {
+  return fluxChangeLabel(l.changePctBps, l.currentCents, l.comparisonCents);
 }
 
 export const STATUS: Record<FluxLineStatus, { pip: PipKind; word: string }> = {
