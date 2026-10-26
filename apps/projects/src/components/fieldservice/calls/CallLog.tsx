@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Button, Field, InlineNotice, Input, Select, Status, Tag, Switch, WidgetState, count, pct } from '@meritbooks/merit-ui';
 import { useShell } from '@/components/shell/ShellContext';
 import type { CallLogRow, CallReportRow, PhoneProviderRow } from '@/lib/fieldservice/completion-types';
-import { PROVIDER_LABEL, type VoiceProvider } from '@/lib/fieldservice/telephony';
+import { PROVIDER_LABEL, type VoiceProvider } from '@/lib/fieldservice/telephony-labels';
 import { fmtPhone, fmtWhen, useAction, words } from '../common/useAction';
 
 export interface ProviderState {

@@ -9,8 +9,8 @@
  */
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export type VoiceProvider = 'RINGCENTRAL' | 'DIALPAD' | 'TWILIO_VOICE';
-export const VOICE_PROVIDERS: readonly VoiceProvider[] = ['RINGCENTRAL', 'DIALPAD', 'TWILIO_VOICE'];
+import type { VoiceProvider } from './telephony-labels';
+export { VOICE_PROVIDERS, PROVIDER_LABEL, type VoiceProvider } from './telephony-labels';
 
 export type CallOutcome = 'IN_PROGRESS' | 'ANSWERED' | 'MISSED' | 'VOICEMAIL' | 'ABANDONED' | 'BUSY' | 'FAILED';
 
@@ -56,7 +56,6 @@ export const PROVIDER_ENV: Readonly<Record<VoiceProvider, readonly (keyof VoiceE
   TWILIO_VOICE: ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN'],
 };
 
-export const PROVIDER_LABEL: Readonly<Record<VoiceProvider, string>> = { RINGCENTRAL: 'RingCentral', DIALPAD: 'Dialpad', TWILIO_VOICE: 'Twilio Voice' };
 
 export function providerFromSlug(slug: string | null | undefined): VoiceProvider | null {
   switch ((slug ?? '').toLowerCase()) {

@@ -8,7 +8,7 @@ import { inList, xcall, xrows } from '@/lib/dealer/rpc';
 import { sendCustomerMessage } from '@/lib/notify/emit';
 import { IsoDate, Pct, PosCents, Qty, Req, Text, Uuid, UuidList } from '@/lib/dealer/schemas';
 
-export const COMPONENT_KINDS = ['ITEM', 'FRAME', 'COM_FABRIC', 'WORKROOM', 'FINISH', 'HARDWARE', 'FREIGHT', 'OTHER'] as const;
+const COMPONENT_KINDS = ['ITEM', 'FRAME', 'COM_FABRIC', 'WORKROOM', 'FINISH', 'HARDWARE', 'FREIGHT', 'OTHER'] as const;
 
 /**
  * A design project in one read: items by room (client price masked to contract value), their
